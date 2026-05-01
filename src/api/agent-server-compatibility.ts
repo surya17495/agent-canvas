@@ -11,11 +11,22 @@ const SEMVER_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
 
 export interface AgentServerInfo extends BaseServerInfo {
   available_tools?: string[] | null;
+  usable_tools?: string[] | null;
 }
 
 let cachedAgentServerInfo: AgentServerInfo | null = null;
 
 const getServerVersion = (serverInfo: AgentServerInfo): string => serverInfo.version;
+
+const getAdvertisedTools = (serverInfo: AgentServerInfo | null) => {
+  if (Array.isArray(serverInfo?.usable_tools)) {
+    return serverInfo.usable_tools;
+  }
+  if (Array.isArray(serverInfo?.available_tools)) {
+    return serverInfo.available_tools;
+  }
+  return null;
+};
 
 const parseSemver = (
   version: string | null,
@@ -106,7 +117,7 @@ export function clearCachedAgentServerInfo() {
 }
 
 export function isAgentServerToolAvailable(toolName: string) {
-  const availableTools = cachedAgentServerInfo?.available_tools;
+  const availableTools = getAdvertisedTools(cachedAgentServerInfo);
   if (!Array.isArray(availableTools)) {
     return true;
   }

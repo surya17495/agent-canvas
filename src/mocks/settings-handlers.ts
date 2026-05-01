@@ -348,7 +348,7 @@ export const SETTINGS_HANDLERS = [
       uptime: 0,
       idle_time: 0,
       version: "1.18.1",
-      available_tools: [
+      usable_tools: [
         "terminal",
         "file_editor",
         "task_tracker",
