@@ -121,6 +121,7 @@
     "jsdom": "29.0.2",
     "lint-staged": "16.4.0",
     "msw": "2.13.4",
+    "postcss-prefix-selector": "2.1.1",
     "prettier": "3.8.3",
     "tailwindcss": "4.2.2",
     "typescript": "6.0.3",
@@ -181,6 +182,11 @@
       "types": "./dist/components/terminal/index.d.ts",
       "import": "./dist/components/terminal/index.js",
       "require": "./dist/components/terminal/index.cjs"
+    },
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "import": "./dist/i18n/index.js",
+      "require": "./dist/i18n/index.cjs"
     },
     "./package.json": "./package.json"
   },
