@@ -1,4 +1,6 @@
+/* eslint-disable max-classes-per-file */
 import { HttpError } from "@openhands/typescript-client/client/http-client";
+import { getBundledBackend } from "#/api/backend-registry/bundled";
 import {
   createServerClient,
   type ServerInfo as BaseServerInfo,
@@ -121,10 +123,17 @@ export function isAgentServerToolAvailable(toolName: string) {
 }
 
 export async function ensureCompatibleAgentServer() {
+  // The compatibility check is a *local* agent-server concern — it verifies
+  // that the runtime hosting the GUI is at the right version. It must NEVER
+  // run against the active backend, because cloud SaaS hosts don't expose
+  // /api/server_info and would fail with a CORS error besides.
+  const bundled = getBundledBackend();
   let serverInfo: AgentServerInfo;
 
   try {
     serverInfo = (await createServerClient({
+      host: bundled.host,
+      sessionApiKey: bundled.apiKey || null,
       timeout: AGENT_SERVER_INFO_TIMEOUT_MS,
     }).getServerInfo()) as AgentServerInfo;
   } catch (error) {

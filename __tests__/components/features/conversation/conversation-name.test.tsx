@@ -12,7 +12,25 @@ import {
 import { renderWithProviders } from "test-utils";
 import { ConversationName } from "#/components/features/conversation/conversation-name";
 import { ConversationNameContextMenu } from "#/components/features/conversation/conversation-name-context-menu";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import type { Backend } from "#/api/backend-registry/types";
 import type { Conversation } from "#/api/open-hands.types";
+
+const localBackend: Backend = {
+  id: "bundled",
+  name: "Bundled",
+  host: "http://localhost:3000",
+  apiKey: "",
+  kind: "local",
+};
+
+const cloudBackend: Backend = {
+  id: "prod",
+  name: "Production",
+  host: "https://app.all-hands.dev",
+  apiKey: "bearer-token",
+  kind: "cloud",
+};
 
 // Hoisted mocks for controllable return values
 const {
@@ -20,6 +38,7 @@ const {
   mockDisplaySuccessToast,
   useActiveConversationMock,
   useConfigMock,
+  useActiveBackendMock,
 } = vi.hoisted(() => ({
   mockMutate: vi.fn(),
   mockDisplaySuccessToast: vi.fn(),
@@ -33,6 +52,7 @@ const {
   useConfigMock: vi.fn(() => ({
     data: {},
   })),
+  useActiveBackendMock: vi.fn(),
 }));
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
@@ -49,8 +69,13 @@ vi.mock("#/hooks/mutation/use-update-conversation", () => ({
   }),
 }));
 
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => useActiveBackendMock(),
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: mockDisplaySuccessToast,
+  displayErrorToast: vi.fn(),
 }));
 
 // Mock react-i18next
@@ -69,7 +94,8 @@ vi.mock("react-i18next", async () => {
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Cost",
           COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:
-            "Close Conversation",
+            "Stop Conversation (Runtime)",
+          COMMON$STOP_CONVERSATION: "Stop Conversation",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
           CONVERSATION$SHARE_PUBLICLY: "Share Publicly",
           CONVERSATION$LINK_COPIED: "Link copied to clipboard",
@@ -104,6 +130,13 @@ describe("ConversationName", () => {
       location: {
         origin: "http://localhost:3000",
       },
+    });
+  });
+
+  beforeEach(() => {
+    useActiveBackendMock.mockReturnValue({
+      backend: localBackend,
+      orgId: null,
     });
   });
 
@@ -312,10 +345,14 @@ describe("ConversationName", () => {
     expect(model).toHaveAttribute("title", "openai/gpt-4o");
     expect(model.querySelector("svg")).toBeInTheDocument();
 
-    // Verify truncation structure: text is wrapped in a span with truncate class
-    const textSpan = model.querySelector("span.truncate");
+    // Verify the model name is rendered in full (no truncation)
+    const textSpan = model.querySelector("span");
     expect(textSpan).toBeInTheDocument();
     expect(textSpan).toHaveTextContent("openai/gpt-4o");
+    expect(textSpan).not.toHaveClass("truncate");
+    expect(model).not.toHaveClass("max-w-[150px]");
+    expect(model).not.toHaveClass("overflow-hidden");
+    expect(model).toHaveClass("whitespace-nowrap");
   });
 
   it("should not render the llm model when not available", () => {
@@ -350,6 +387,13 @@ describe("ConversationNameContextMenu", () => {
   const defaultProps = {
     onClose: vi.fn(),
   };
+
+  beforeEach(() => {
+    useActiveBackendMock.mockReturnValue({
+      backend: localBackend,
+      orgId: null,
+    });
+  });
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -541,7 +585,7 @@ describe("ConversationNameContextMenu", () => {
       "Delete Conversation",
     );
     expect(screen.getByTestId("stop-button")).toHaveTextContent(
-      "Close Conversation",
+      "Stop Conversation",
     );
     expect(screen.getByTestId("display-cost-button")).toHaveTextContent(
       "Display Cost",
@@ -577,3 +621,101 @@ describe("ConversationNameContextMenu", () => {
   });
 });
 
+describe("ConversationName public sharing", () => {
+  let updatePublicFlagSpy: ReturnType<typeof vi.spyOn>;
+  let writeTextSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    if (!("clipboard" in navigator)) {
+      Object.defineProperty(globalThis.navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: () => Promise.resolve() },
+      });
+    }
+    writeTextSpy = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        public: false,
+      } as Conversation,
+    });
+    useActiveBackendMock.mockReturnValue({
+      backend: cloudBackend,
+      orgId: null,
+    });
+    updatePublicFlagSpy = vi
+      .spyOn(V1ConversationService, "updateConversationPublicFlag")
+      .mockResolvedValue({ id: "test-conversation-id", public: true } as never);
+  });
+
+  afterEach(() => {
+    updatePublicFlagSpy.mockRestore();
+    writeTextSpy.mockRestore();
+    vi.clearAllMocks();
+  });
+
+  it("renders the Public Share menu item on cloud backends", async () => {
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(screen.getByTestId("share-publicly-button")).toBeInTheDocument();
+  });
+
+  it("hides the Public Share menu item on local backends", async () => {
+    useActiveBackendMock.mockReturnValue({
+      backend: localBackend,
+      orgId: null,
+    });
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(
+      screen.queryByTestId("share-publicly-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("calls the update service with the toggled flag when clicked", async () => {
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+    await user.click(screen.getByTestId("share-publicly-button"));
+
+    expect(updatePublicFlagSpy).toHaveBeenCalledWith(
+      "test-conversation-id",
+      true,
+    );
+  });
+
+  it("uses the cloud environment domain for the share link and clipboard copy", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        public: true,
+      } as Conversation,
+    });
+    const expectedUrl =
+      "https://app.all-hands.dev/shared/conversations/test-conversation-id";
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+    expect(screen.getByTestId("open-share-link-button")).toHaveAttribute(
+      "href",
+      expectedUrl,
+    );
+
+    await user.click(screen.getByTestId("copy-share-link-button"));
+    expect(writeTextSpy).toHaveBeenCalledWith(expectedUrl);
+  });
+});

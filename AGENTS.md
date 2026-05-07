@@ -84,12 +84,22 @@
 
 - README expectation: keep the first section as a concrete, chronological from-scratch quickstart for running this frontend against a real `openhands-agent-server` (clone, install uv, optional `.env`, run `npm run dev`).
 - Keep README user-focused and move contributor/developer-specific workflows (`dev:safe`, mock mode, detailed env vars/build-test notes) into `DEVELOPMENT.md`.
-- `scripts/dev-safe.mjs` uses `uvx` for temporary agent-server installation — no permanent `uv tool install` needed. Environment variables:
-  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.18.0")
+- `scripts/dev-safe.mjs` uses `uvx` for temporary agent-server installation — no permanent `uv tool install` needed. Environment variables (highest precedence first):
+  - `OH_AGENT_SERVER_LOCAL_PATH` — absolute path to a local `software-agent-sdk` checkout. Runs the local checkout via `uvx` with `--with-editable` for `openhands-sdk`/`openhands-tools`/`openhands-workspace` and `--reinstall` for `openhands-agent-server`, so SDK edits are picked up on restart. Highest precedence.
   - `OH_AGENT_SERVER_GIT_REF` — git commit SHA or branch name (takes precedence over version)
+  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.18.0")
   - `OH_SECRET_KEY` — secret key for settings encryption; uses a default value for local dev, override for production
   - Default: latest released version from PyPI
 - `scripts/dev-safe.mjs` should fail fast if `uvx` cannot be spawned (for example missing PATH entries).
+- `npm run dev` now runs the full stack with automation by default (via `dev:automation`). Use `npm run dev:minimal` for agent-server + Vite only.
+- `scripts/dev-with-automation.mjs` runs the full stack: agent-server, automation backend (both via uvx), Vite dev server, and ingress proxy. Uses a standalone ingress proxy (`scripts/ingress.mjs`) to route traffic:
+  - `/api/automation/*` → automation backend (:18001)
+  - `/api/*`, `/sockets`, etc. → agent server (:18000)
+  - `/*` (default) → Vite dev server (:3001)
+  - Environment variables: `PORT` (ingress port, default: 8000), `OH_AUTOMATION_GIT_REF` (default: `main`)
+  - Access points: `http://localhost:8000/` (main UI), `http://localhost:8000/api/automation/docs` (API docs)
+- `scripts/ingress.mjs` is a standalone HTTP reverse proxy that can be used independently to route traffic to multiple backends based on URL path prefix.
+- `scripts/dev-safe.mjs` (now `npm run dev:minimal`) runs just agent-server + Vite without automation.
 - Vite dev mode can black-screen on first load with `504 Outdated Optimize Dep` if core client-entry deps are not prebundled; keep `react`, `react/jsx-runtime`, `react-dom/client`, and `react-router/dom` in `optimizeDeps.include`.
 - Vercel deployment note: React Router builds for this repo must keep `build/client` intact on actual Vercel builds and include `presets: [vercelPreset()]` from `@vercel/react-router/vite`; flattening `build/client` during a Vercel build produces deployments with empty outputs (`routes: null`, no static files) and a production 404.
 
