@@ -539,14 +539,6 @@ async function main() {
   printBanner(config);
 }
 
-main().catch((err) => {
-  logError(`Fatal error: ${err.message}`);
-  if (err.stack) {
-    console.error(c.dim + err.stack + c.reset);
-  }
-  process.exit(1);
-});
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Exports for testing
 // ═══════════════════════════════════════════════════════════════════════════
@@ -559,3 +551,20 @@ export {
   DEFAULT_BACKEND_PORT,
   DEFAULT_AUTOMATION_PORT,
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main entry point (only when run directly, not when imported)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Check if this module is the main entry point
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+
+if (isMainModule) {
+  main().catch((err) => {
+    logError(`Fatal error: ${err.message}`);
+    if (err.stack) {
+      console.error(c.dim + err.stack + c.reset);
+    }
+    process.exit(1);
+  });
+}
