@@ -123,6 +123,12 @@
 - Regression coverage for the CSS isolation work lives in `__tests__/agent-server-ui-providers.test.tsx`, `__tests__/agent-server-ui-style-scope.test.ts`, and the browser-level `tests/css-isolation.spec.ts` Playwright test.
 
 
+- Action grouping in the chat stream:
+  - `src/components/v1/chat/group-events.ts` folds runs of consecutive groupable events (regular `ActionEvent`/`ObservationEvent` cards, but not `FinishAction`, `ThinkAction`, `PlanningFileEditorObservation`, `TaskTrackerObservation`, hooks, errors, or message events) into single `RenderedItem` groups. The threshold lives in `EVENT_GROUP_MIN_SIZE` (currently 3).
+  - `EventGroup` (`src/components/v1/chat/event-message-components/event-group.tsx`) is the collapsible header that wraps each run. Default state is collapsed; the header shows `EVENT_GROUP$ACTIONS_COMPLETED` (with a success check) when the group is done, or `EVENT_GROUP$ACTIONS_PROGRESS` plus the currently-running action's title (from `getEventContent`) while a member `ActionEvent` has not yet been replaced by its observation in the UI events array. Expanding renders the original `EventMessage`s verbatim so each card still expands the way it did before.
+  - `src/components/v1/chat/messages.tsx` is the only consumer; the grouping is transparent to upstream code. Coverage lives in `__tests__/components/v1/chat/group-events.test.ts` (pure logic) and `__tests__/components/v1/chat/event-message-components/event-group.test.tsx` (rendering/interaction).
+
+
 - Library packaging notes:
   - Public npm entrypoints now come from `src/index.ts` → `src/lib/index.ts`, with domain barrels under `src/components/{conversation,terminal,browser,files,settings,sidebar}/index.ts`.
   - `npm run build` remains the standalone app build (`react-router build`), while `npm run build:lib` runs `vite build` in library mode plus `tsc -p tsconfig.lib.json` to emit `.d.ts` files into `dist/`.

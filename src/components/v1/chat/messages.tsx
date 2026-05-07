@@ -4,6 +4,8 @@ import { EventMessage } from "./event-message";
 import { ChatMessage } from "../../features/chat/chat-message";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
+import { groupEvents } from "./group-events";
+import { EventGroup } from "./event-message-components";
 // TODO: Implement microagent functionality for V1 when APIs support V1 event IDs
 // import { AgentState } from "#/types/agent-state";
 // import MemoryIcon from "#/icons/memory_icon.svg?react";
@@ -23,26 +25,39 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // This ensures only one preview per user message "phase"
     const planPreviewEventIds = usePlanPreviewEvents(allEvents);
 
-    // TODO: Implement microagent functionality for V1 if needed
-    // For now, we'll skip microagent features
+    // Fold consecutive action/observation events into collapsible groups so a
+    // long sequence of tool calls doesn't dominate the chat scroll. Items that
+    // can't be grouped (or that fall in a short run) are still rendered one by
+    // one, identically to before.
+    const renderedItems = groupEvents(messages);
+
+    const renderEventMessage = (event: OpenHandsEvent, index: number) => (
+      <EventMessage
+        key={event.id}
+        event={event}
+        messages={allEvents}
+        isLastMessage={messages.length - 1 === index}
+        isInLast10Actions={messages.length - 1 - index < 10}
+        planPreviewEventIds={planPreviewEventIds}
+      />
+    );
 
     return (
       <>
-        {messages.map((message, index) => (
-          <EventMessage
-            key={message.id}
-            event={message}
-            messages={allEvents}
-            isLastMessage={messages.length - 1 === index}
-            isInLast10Actions={messages.length - 1 - index < 10}
-            planPreviewEventIds={planPreviewEventIds}
-            // Microagent props - not implemented yet for V1
-            // microagentStatus={undefined}
-            // microagentConversationId={undefined}
-            // microagentPRUrl={undefined}
-            // actions={undefined}
-          />
-        ))}
+        {renderedItems.map((item) => {
+          if (item.kind === "single") {
+            return renderEventMessage(item.event, item.index);
+          }
+
+          const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
+          return (
+            <EventGroup key={groupKey} events={item.events}>
+              {item.events.map((event, offset) =>
+                renderEventMessage(event, item.startIndex + offset),
+              )}
+            </EventGroup>
+          );
+        })}
 
         {optimisticUserMessage && (
           <ChatMessage type="user" message={optimisticUserMessage} />
