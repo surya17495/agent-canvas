@@ -3,6 +3,7 @@ import axios from "axios";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings, SettingsScope, SettingsValue } from "#/types/settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import {
   pickFirstBoolean,
   pickFirstNumber,
@@ -12,7 +13,7 @@ import { parseMcpConfig } from "#/utils/mcp-config";
 
 export const getErrorStatus = (error: unknown): number | undefined => {
   if (typeof error === "object" && error !== null && "status" in error) {
-    const status = (error as { status?: unknown }).status;
+    const { status } = error as { status?: unknown };
     if (typeof status === "number") {
       return status;
     }
@@ -111,9 +112,6 @@ const normalizeSettingsResponse = (settings: Partial<Settings>): Settings => {
       settings.conversation_settings_schema ??
       DEFAULT_SETTINGS.conversation_settings_schema,
     conversation_settings: conversationSettings,
-    sandbox_grouping_strategy:
-      settings.sandbox_grouping_strategy ??
-      DEFAULT_SETTINGS.sandbox_grouping_strategy,
   };
 };
 
@@ -126,7 +124,7 @@ export const getSettingsQueryFn = async (
 
 export const useSettings = (scope: SettingsScope = "personal") => {
   const query = useQuery({
-    queryKey: ["settings", scope],
+    queryKey: SETTINGS_QUERY_KEYS.byScope(scope),
     queryFn: () => getSettingsQueryFn(scope),
     retry: (_, error) => getErrorStatus(error) !== 404,
     refetchOnWindowFocus: false,

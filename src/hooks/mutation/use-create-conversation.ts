@@ -17,6 +17,7 @@ interface CreateConversationVariables {
   parentConversationId?: string;
   agentType?: "default" | "plan";
   plugins?: PluginSpec[];
+  workingDir?: string;
 }
 
 // Response type for V1 conversations
@@ -39,30 +40,28 @@ export const useCreateConversation = () => {
     ): Promise<CreateConversationResponse> => {
       const {
         query,
-        repository,
-        suggestedTask,
         conversationInstructions,
-        parentConversationId,
-        agentType,
         plugins,
+        repository,
+        workingDir,
       } = variables;
 
       const conversation = await V1ConversationService.createConversation(
-        repository?.name,
-        repository?.gitProvider,
         query,
-        repository?.branch,
         conversationInstructions,
-        suggestedTask,
-        undefined,
-        parentConversationId,
-        agentType,
         plugins,
+        repository
+          ? {
+              selected_repository: repository.name,
+              selected_branch: repository.branch ?? null,
+              git_provider: repository.gitProvider,
+            }
+          : null,
+        workingDir,
       );
 
       return {
-        conversation_id:
-          conversation.app_conversation_id || conversation.id,
+        conversation_id: conversation.app_conversation_id || conversation.id,
         session_api_key: null,
         url: conversation.agent_server_url,
         is_v1: true,

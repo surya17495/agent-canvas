@@ -1,29 +1,15 @@
-import { openHands } from "../open-hands-axios";
 import { GitUser } from "#/types/git";
-import { UserGitOrganizationsResponse } from "#/types/org";
+import { ProviderHandler } from "../git-providers/provider-handler";
 
 /**
- * User Service API - Handles all user-related API endpoints
+ * User Service API - Handles all user-related API endpoints.
+ *
+ * The OSS agent-server runtime does not expose /api/v1/users/git-info, so we
+ * resolve the user directly from the configured git provider in the browser.
  */
 class UserService {
-  /**
-   * Get the current user's Git information
-   * @returns Git user information
-   */
   static async getUser(): Promise<GitUser> {
-    const { data } = await openHands.get<GitUser>("/api/v1/users/git-info");
-    return data;
-  }
-
-  /**
-   * Get the current user's Git organizations
-   * @returns Git organizations for the current user's provider
-   */
-  static async getGitOrganizations(): Promise<UserGitOrganizationsResponse> {
-    const { data } = await openHands.get<UserGitOrganizationsResponse>(
-      "/api/v1/users/git-organizations",
-    );
-    return data;
+    return ProviderHandler.getUserGitInfo();
   }
 }
 

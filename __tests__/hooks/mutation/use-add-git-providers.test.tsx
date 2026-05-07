@@ -23,7 +23,6 @@ const buildProviders = (
   bitbucket_data_center: { token: "", host: null },
   azure_devops: { token: "", host: null },
   forgejo: { token: "", host: null },
-  enterprise_sso: { token: "", host: null },
   ...overrides,
 });
 
@@ -42,7 +41,7 @@ describe("useAddGitProviders", () => {
   });
 
   it("invalidates personal settings queries after saving providers", async () => {
-    vi.spyOn(SecretsService, "addGitProvider").mockResolvedValue(true);
+    vi.spyOn(SecretsService, "addGitProvider").mockResolvedValue(undefined);
 
     const personalSettingsQueryKey = ["settings", "personal"] as const;
     queryClient.setQueryData(personalSettingsQueryKey, {

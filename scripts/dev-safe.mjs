@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -7,35 +8,127 @@ import { pathToFileURL } from "node:url";
 
 const DEFAULT_BACKEND_PORT = 18000;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
+const DEFAULT_AGENT_SERVER_PACKAGE = "openhands-agent-server";
+const AGENT_SERVER_GIT_REPO = "https://github.com/OpenHands/software-agent-sdk";
+// Default secret key for local development (DO NOT use in production)
+const DEFAULT_SECRET_KEY = "openhands-dev-secret-key-change-in-prod";
+// Default to main branch until settings persistence APIs are in a released version.
+// TODO: Once SDK PR #3060 is released, change this to null and let it use PyPI.
+const DEFAULT_GIT_REF = "main";
 
 function isEnoentError(error) {
   return Boolean(
-    (error && typeof error === "object" && "code" in error && error.code === "ENOENT") ||
-      /ENOENT/.test(String(error)),
+    (error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT") ||
+    /ENOENT/.test(String(error)),
   );
 }
 
-export function formatMissingAgentServerGuidance(cwd = process.cwd()) {
+export function formatMissingUvxGuidance(cwd = process.cwd()) {
   const readmePath = path.join(cwd, "README.md");
 
   return [
-    "Failed to start agent-server. Make sure it is installed and on your PATH.",
+    "Failed to start uvx. Make sure uv is installed and on your PATH.",
     "",
     "To fix this:",
-    "1. Install the backend CLI:",
-    "   uv tool install -U --with openhands-tools --with openhands-workspace openhands-agent-server",
-    "2. Make sure the uv tool bin dir is on your PATH:",
+    "1. Install uv:",
+    "   curl -LsSf https://astral.sh/uv/install.sh | sh",
+    "2. Make sure the uv bin dir is on your PATH:",
     '   export PATH="$HOME/.local/bin:$PATH"',
-    "   command -v agent-server",
+    "   command -v uvx",
     "",
     "Need Windows or another install method? https://docs.astral.sh/uv/getting-started/installation/",
     `See the local Quickstart for details: ${readmePath}`,
-    "- README > Quickstart > 2. Install OpenHands Agent Server",
     "",
     "Other options:",
     "- npm run dev:frontend   # use an already running backend",
     "- npm run dev:mock       # run the frontend with mock APIs",
   ].join("\n");
+}
+
+/**
+ * Build the uvx command and arguments for running agent-server.
+ *
+ * Environment variables:
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.18.0")
+ * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name (takes precedence over version)
+ *
+ * If neither is set, defaults to main branch until settings persistence APIs
+ * are released. Set OH_AGENT_SERVER_VERSION to use a released version.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {{ command: string, args: string[], source: string }}
+ */
+export function buildAgentServerCommand(env = process.env) {
+  const gitRef = env.OH_AGENT_SERVER_GIT_REF;
+  const version = env.OH_AGENT_SERVER_VERSION;
+
+  const uvxArgs = [];
+  let source = "";
+
+  if (gitRef) {
+    // Use git ref with subdirectory syntax for uv workspace monorepo
+    // The software-agent-sdk repo has packages in subdirectories:
+    // openhands-agent-server/, openhands-tools/, openhands-workspace/
+    const baseGitUrl = `git+${AGENT_SERVER_GIT_REPO}@${gitRef}`;
+    uvxArgs.push(
+      "--from",
+      `${baseGitUrl}#subdirectory=openhands-agent-server`,
+      "--with",
+      `${baseGitUrl}#subdirectory=openhands-tools`,
+      "--with",
+      `${baseGitUrl}#subdirectory=openhands-workspace`,
+      "agent-server",
+    );
+    source = `git (${gitRef})`;
+  } else if (version) {
+    // Use specific PyPI version: uvx --from openhands-agent-server==version agent-server
+    // The package name differs from the executable name, so we need --from syntax
+    uvxArgs.push(
+      "--from",
+      `${DEFAULT_AGENT_SERVER_PACKAGE}==${version}`,
+      "--with",
+      "openhands-tools",
+      "--with",
+      "openhands-workspace",
+      "agent-server",
+    );
+    source = `PyPI (${version})`;
+  } else if (DEFAULT_GIT_REF) {
+    // Default to git ref when no version specified (until APIs are released)
+    const baseGitUrl = `git+${AGENT_SERVER_GIT_REPO}@${DEFAULT_GIT_REF}`;
+    uvxArgs.push(
+      "--from",
+      `${baseGitUrl}#subdirectory=openhands-agent-server`,
+      "--with",
+      `${baseGitUrl}#subdirectory=openhands-tools`,
+      "--with",
+      `${baseGitUrl}#subdirectory=openhands-workspace`,
+      "agent-server",
+    );
+    source = `git (${DEFAULT_GIT_REF}, default)`;
+  } else {
+    // Use latest released version: uvx --from openhands-agent-server agent-server
+    // The package name differs from the executable name, so we need --from syntax
+    uvxArgs.push(
+      "--from",
+      DEFAULT_AGENT_SERVER_PACKAGE,
+      "--with",
+      "openhands-tools",
+      "--with",
+      "openhands-workspace",
+      "agent-server",
+    );
+    source = "PyPI (latest)";
+  }
+
+  return {
+    command: "uvx",
+    args: uvxArgs,
+    source,
+  };
 }
 
 function parsePort(value, fallback) {
@@ -52,12 +145,23 @@ function parsePort(value, fallback) {
 }
 
 export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
-  const backendPort = parsePort(env.OH_GUI_SAFE_BACKEND_PORT, DEFAULT_BACKEND_PORT);
-  const vscodePort = parsePort(env.OH_GUI_SAFE_VSCODE_PORT, backendPort + 1);
+  const backendPort = parsePort(
+    env.OH_CANVAS_SAFE_BACKEND_PORT,
+    DEFAULT_BACKEND_PORT,
+  );
+  const vscodePort = parsePort(
+    env.OH_CANVAS_SAFE_VSCODE_PORT,
+    backendPort + 1,
+  );
   const stateDir = path.resolve(
     cwd,
-    env.OH_GUI_SAFE_STATE_DIR || path.join(".openhands-dev", `safe-dev-${backendPort}`),
+    env.OH_CANVAS_SAFE_STATE_DIR ||
+      path.join(homedir(), ".openhands", "agent-canvas"),
   );
+  const conversationsPath = path.join(stateDir, "conversations");
+  const workspacesPath = path.join(stateDir, "workspaces");
+  // Use provided secret key or default for local development
+  const secretKey = env.OH_SECRET_KEY || DEFAULT_SECRET_KEY;
 
   return {
     cwd,
@@ -65,11 +169,32 @@ export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
     vscodePort,
     stateDir,
     tmuxTmpDir: path.join(stateDir, "tmux"),
-    conversationsPath: path.join(stateDir, "conversations"),
+    conversationsPath,
+    workspacesPath,
     bashEventsDir: path.join(stateDir, "bash_events"),
     backendBaseUrl: `http://127.0.0.1:${backendPort}`,
     backendHost: `127.0.0.1:${backendPort}`,
-    workingDir: env.VITE_WORKING_DIR || cwd,
+    workingDir: env.VITE_WORKING_DIR || workspacesPath,
+    secretKey,
+  };
+}
+
+/**
+ * Build the environment variables object for spawning the agent-server process.
+ *
+ * This is exported so downstream consumers (e.g., automation service) can use
+ * the same env vars without duplicating the mapping logic.
+ *
+ * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
+ * @returns {Record<string, string>} Environment variables for agent-server
+ */
+export function buildAgentServerEnv(config) {
+  return {
+    TMUX_TMPDIR: config.tmuxTmpDir,
+    OH_CONVERSATIONS_PATH: config.conversationsPath,
+    OH_BASH_EVENTS_DIR: config.bashEventsDir,
+    OH_VSCODE_PORT: String(config.vscodePort),
+    OH_SECRET_KEY: config.secretKey,
   };
 }
 
@@ -122,10 +247,12 @@ function spawnProcess(command, args, options) {
   const child = spawn(command, args, { stdio: "inherit", ...options });
 
   child.once("error", (error) => {
-    if (isEnoentError(error) && command === "agent-server") {
-      console.error(formatMissingAgentServerGuidance(options?.cwd));
+    if (isEnoentError(error) && command === "uvx") {
+      console.error(formatMissingUvxGuidance(options?.cwd));
     } else if (isEnoentError(error)) {
-      console.error(`Failed to start ${command}. Make sure it is installed and on your PATH.`);
+      console.error(
+        `Failed to start ${command}. Make sure it is installed and on your PATH.`,
+      );
     } else {
       console.error(`Failed to start ${command}:`, error);
     }
@@ -141,29 +268,41 @@ async function main() {
     config.stateDir,
     config.tmuxTmpDir,
     config.conversationsPath,
+    config.workspacesPath,
     config.bashEventsDir,
   ]) {
     mkdirSync(dir, { recursive: true });
   }
 
+  const agentServerCmd = buildAgentServerCommand();
+
+  const secretKeySource = process.env.OH_SECRET_KEY
+    ? "custom (from OH_SECRET_KEY)"
+    : "default (for local development)";
+
   console.log("Starting isolated agent-server + frontend dev stack...");
+  console.log(`- agent-server: ${agentServerCmd.source}`);
   console.log(`- backend: ${config.backendBaseUrl}`);
   console.log(`- vscode port: ${config.vscodePort}`);
   console.log(`- working dir: ${config.workingDir}`);
   console.log(`- isolated state dir: ${config.stateDir}`);
+  console.log(`- secret key: ${secretKeySource}`);
   console.log("");
 
   const backend = spawnProcess(
-    "agent-server",
-    ["--host", "127.0.0.1", "--port", String(config.backendPort)],
+    agentServerCmd.command,
+    [
+      ...agentServerCmd.args,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(config.backendPort),
+    ],
     {
       cwd: config.cwd,
       env: {
         ...process.env,
-        TMUX_TMPDIR: config.tmuxTmpDir,
-        OH_CONVERSATIONS_PATH: config.conversationsPath,
-        OH_BASH_EVENTS_DIR: config.bashEventsDir,
-        OH_VSCODE_PORT: String(config.vscodePort),
+        ...buildAgentServerEnv(config),
       },
     },
   );
@@ -235,7 +374,10 @@ async function main() {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

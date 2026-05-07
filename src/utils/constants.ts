@@ -35,8 +35,6 @@ export const DOCUMENTATION_URL = {
   MICROAGENTS: {
     MICROAGENTS_OVERVIEW:
       "https://docs.all-hands.dev/usage/prompting/microagents-overview",
-    ORGANIZATION_AND_USER_MICROAGENTS:
-      "https://docs.all-hands.dev/usage/prompting/microagents-org",
   },
 };
 
@@ -78,15 +76,6 @@ export const BTW_COMMAND = "/btw";
 
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
-  {
-    skill: {
-      name: "new",
-      type: "agentskills",
-      content: "Creates a new conversation using the same runtime",
-      triggers: ["/new"],
-    },
-    command: "/new",
-  },
   {
     skill: {
       name: "btw",

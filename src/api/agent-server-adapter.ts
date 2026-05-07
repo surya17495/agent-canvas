@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from "#/services/settings";
-import { Settings } from "#/types/settings";
+import { Settings, SettingsValue } from "#/types/settings";
 import { V1ExecutionStatus } from "#/types/v1/core";
 import { isAgentServerToolAvailable } from "./agent-server-compatibility";
 import {
@@ -15,11 +15,9 @@ import {
   V1AppConversation,
   V1AppConversationPage,
 } from "./conversation-service/v1-conversation-service.types";
-import {
-  V1SandboxInfo,
-  V1SandboxStatus,
-} from "./sandbox-service/sandbox-service.types";
 import { createHttpClient, createSkillsClient } from "./typescript-client";
+import SettingsService from "./settings-service/settings-service.api";
+import { getStoredConversationMetadata } from "./conversation-metadata-store";
 
 export interface DirectConversationInfo {
   id: string;
@@ -56,39 +54,28 @@ function browserToolsEnabled() {
   return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
 }
 
-export function mapExecutionStatusToSandboxStatus(
-  executionStatus?: string | null,
-): V1SandboxStatus {
-  switch (executionStatus) {
-    case "paused":
-      return "PAUSED";
-    case "error":
-    case "stuck":
-      return "ERROR";
-    case "running":
-    case "waiting_for_confirmation":
-    case "finished":
-    case "idle":
-    default:
-      return "RUNNING";
-  }
-}
-
 export function toConversationUrl(conversationId: string): string {
   return `${getAgentServerBaseUrl()}/api/conversations/${conversationId}`;
+}
+
+// TODO(i18n): extract "Conversation" once we add CONVERSATION$DEFAULT_TITLE
+// with `{{shortId}}` interpolation. Kept as a literal for now to keep the
+// fallback inside this pure adapter rather than fanning out to display sites.
+export function getDefaultConversationTitle(conversationId: string): string {
+  return `Conversation ${conversationId.slice(0, 5)}`;
 }
 
 export function toV1AppConversation(
   info: DirectConversationInfo,
 ): V1AppConversation {
+  const metadata = getStoredConversationMetadata(info.id);
   return {
     id: info.id,
     created_by_user_id: null,
-    sandbox_id: info.id,
-    selected_repository: null,
-    selected_branch: null,
-    git_provider: null,
-    title: info.title ?? null,
+    selected_repository: metadata?.selected_repository ?? null,
+    selected_branch: metadata?.selected_branch ?? null,
+    git_provider: metadata?.git_provider ?? null,
+    title: info.title?.trim() ? info.title : getDefaultConversationTitle(info.id),
     trigger: null,
     pr_number: [],
     llm_model: info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model,
@@ -116,7 +103,6 @@ export function toV1AppConversation(
       : null,
     created_at: info.created_at,
     updated_at: info.updated_at,
-    sandbox_status: mapExecutionStatusToSandboxStatus(info.execution_status),
     execution_status:
       (info.execution_status as V1AppConversation["execution_status"]) ??
       V1ExecutionStatus.IDLE,
@@ -311,8 +297,10 @@ function buildConfiguredConversationSettings(options: {
   query?: string;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
+  workingDir?: string;
 }): SettingsRecord {
-  const { settings, query, conversationInstructions, plugins } = options;
+  const { settings, query, conversationInstructions, plugins, workingDir } =
+    options;
   const conversationSettings = toRecord(settings.conversation_settings);
   const initialMessage = buildInitialMessage(query, conversationInstructions);
 
@@ -324,7 +312,7 @@ function buildConfiguredConversationSettings(options: {
     ...conversationSettings,
     workspace: {
       kind: "LocalWorkspace",
-      working_dir: getAgentServerWorkingDir(),
+      working_dir: workingDir ?? getAgentServerWorkingDir(),
     },
     ...(initialMessage ? { initial_message: initialMessage } : {}),
     ...(plugins?.length
@@ -339,15 +327,70 @@ function buildConfiguredConversationSettings(options: {
   };
 }
 
-export function buildStartConversationRequest(options: {
+/**
+ * A secret looked up from the agent-server at runtime.
+ * This allows secrets configured in Settings > Secrets to be available
+ * to conversations without exposing values to the frontend.
+ */
+interface LookupSecret {
+  kind: "LookupSecret";
+  url: string;
+  headers?: Record<string, string>;
+  description?: string;
+}
+
+export interface StartConversationOptions {
   settings: Settings;
   query?: string;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
-}) {
-  const agentSettings = buildConfiguredAgentSettings(options.settings);
+  conversationId?: string;
+  workingDir?: string;
+  /**
+   * Pre-fetched agent settings with encrypted secrets.
+   * If provided, these will be used instead of settings.agent_settings.
+   */
+  encryptedAgentSettings?: Record<string, SettingsValue>;
+  /**
+   * Pre-fetched conversation settings with encrypted secrets.
+   * If provided, these will be used instead of settings.conversation_settings.
+   */
+  encryptedConversationSettings?: Record<string, SettingsValue>;
+  /**
+   * Whether the secrets in agent/conversation settings are encrypted.
+   * If true, the server will decrypt them before use.
+   */
+  secretsEncrypted?: boolean;
+  /**
+   * Custom secrets to include in the conversation.
+   * Each entry maps a secret name to metadata (description).
+   * The actual values are fetched at runtime via LookupSecret.
+   */
+  customSecrets?: Array<{ name: string; description?: string }>;
+}
+
+export function buildStartConversationRequest(options: StartConversationOptions) {
+  // Use encrypted settings if provided, otherwise fall back to regular settings
+  const sourceAgentSettings = options.encryptedAgentSettings
+    ? { ...options.settings, agent_settings: options.encryptedAgentSettings }
+    : options.settings;
+
+  const agentSettings = buildConfiguredAgentSettings(sourceAgentSettings);
   const agent = createAgentFromSettings(agentSettings);
-  const conversationSettings = buildConfiguredConversationSettings(options);
+
+  // For conversation settings, merge encrypted settings if provided
+  const sourceConversationOptions = options.encryptedConversationSettings
+    ? {
+        ...options,
+        settings: {
+          ...options.settings,
+          conversation_settings: options.encryptedConversationSettings,
+        },
+      }
+    : options;
+
+  const conversationSettings =
+    buildConfiguredConversationSettings(sourceConversationOptions);
 
   const payload: Record<string, unknown> = {
     agent,
@@ -361,6 +404,15 @@ export function buildStartConversationRequest(options: {
     stuck_detection: true,
     autotitle: true,
   };
+
+  // Add secrets_encrypted flag if secrets are encrypted
+  if (options.secretsEncrypted) {
+    payload.secrets_encrypted = true;
+  }
+
+  if (options.conversationId) {
+    payload.conversation_id = options.conversationId;
+  }
 
   const securityAnalyzer =
     getConversationSecurityAnalyzer(conversationSettings);
@@ -388,7 +440,71 @@ export function buildStartConversationRequest(options: {
     payload.agent_definitions = conversationSettings.agent_definitions;
   }
 
+  // Add custom secrets as LookupSecret entries
+  // The agent-server will fetch values at runtime from /api/settings/secrets/{name}
+  if (options.customSecrets && options.customSecrets.length > 0) {
+    const baseUrl = getAgentServerBaseUrl();
+    const sessionApiKey = getAgentServerSessionApiKey();
+
+    const secrets: Record<string, LookupSecret> = {};
+    for (const secret of options.customSecrets) {
+      const lookupSecret: LookupSecret = {
+        kind: "LookupSecret",
+        url: `${baseUrl}/api/settings/secrets/${encodeURIComponent(secret.name)}`,
+        description: secret.description,
+      };
+
+      // Include session API key header if configured
+      if (sessionApiKey) {
+        lookupSecret.headers = {
+          "X-Session-API-Key": sessionApiKey,
+        };
+      }
+
+      secrets[secret.name] = lookupSecret;
+    }
+
+    payload.secrets = secrets;
+  }
+
   return payload;
+}
+
+/**
+ * Build a start conversation request using encrypted settings from the server.
+ * This is the recommended way to start conversations from the frontend,
+ * as it ensures secrets are never exposed in plaintext to the browser.
+ *
+ * Also fetches custom secrets from the settings store and adds them as
+ * LookupSecret entries so they're available to the conversation at runtime.
+ */
+export async function buildStartConversationRequestWithEncryptedSettings(options: {
+  settings: Settings;
+  query?: string;
+  conversationInstructions?: string;
+  plugins?: PluginSpec[];
+  conversationId?: string;
+  workingDir?: string;
+}): Promise<Record<string, unknown>> {
+  // Import SecretsService dynamically to avoid circular dependencies
+  const { SecretsService } = await import("./secrets-service");
+
+  // Fetch settings with encrypted secrets and custom secrets list in parallel
+  const [settingsResult, customSecrets] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+  ]);
+
+  const { agentSettings, conversationSettings, secretsEncrypted } =
+    settingsResult;
+
+  return buildStartConversationRequest({
+    ...options,
+    encryptedAgentSettings: agentSettings,
+    encryptedConversationSettings: conversationSettings,
+    secretsEncrypted,
+    customSecrets,
+  });
 }
 
 export async function downloadTextFile(path: string): Promise<string> {
@@ -401,25 +517,6 @@ export async function downloadTextFile(path: string): Promise<string> {
   );
 
   return new TextDecoder().decode(response.data);
-}
-
-export function createSandboxInfo(
-  conversation: V1AppConversation,
-): V1SandboxInfo {
-  const exposedUrls = getConfiguredWorkerUrls().map((url, index) => ({
-    name: `WORKER_${index + 1}`,
-    url,
-  }));
-
-  return {
-    id: conversation.sandbox_id,
-    created_by_user_id: null,
-    sandbox_spec_id: conversation.sandbox_id,
-    status: conversation.sandbox_status,
-    session_api_key: conversation.session_api_key,
-    exposed_urls: exposedUrls,
-    created_at: conversation.created_at,
-  };
 }
 
 export async function loadSkillsForConversation(

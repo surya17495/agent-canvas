@@ -33,7 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body style={{ margin: 0 }}>
+      <body data-agent-server-ui="" style={{ margin: 0 }}>
         <AgentServerUIRoot contentClassName="min-h-screen">
           {children}
           <Toaster />
@@ -138,7 +138,7 @@ function AgentServerOnboardingLayout({
             <p className="mt-6 max-w-3xl text-sm leading-6 text-gray-400">
               {t("SETTINGS$AGENT_SERVER_SETUP_GUIDE_HINT")}{" "}
               <a
-                href="https://github.com/OpenHands/agent-server-gui"
+                href="https://github.com/OpenHands/agent-canvas"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="underline underline-offset-2 transition-colors hover:text-white"

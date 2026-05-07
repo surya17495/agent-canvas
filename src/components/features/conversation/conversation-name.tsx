@@ -35,9 +35,6 @@ export function ConversationName() {
     handleShowAgentTools,
     handleShowSkills,
     handleShowHooks,
-    handleTogglePublic,
-    handleCopyShareLink,
-    shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -61,8 +58,8 @@ export function ConversationName() {
     shouldShowHooks,
   } = useConversationNameContextMenu({
     conversationId,
-    sandboxStatus: conversation?.sandbox_status,
-    showOptions: true, // Enable all options for conversation name
+    executionStatus: conversation?.execution_status,
+    showOptions: true,
     onContextMenuToggle: setContextMenuOpen,
   });
 
@@ -187,9 +184,6 @@ export function ConversationName() {
                 }
                 onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
                 onShowHooks={shouldShowHooks ? handleShowHooks : undefined}
-                onTogglePublic={handleTogglePublic}
-                shareUrl={shareUrl}
-                onCopyShareLink={handleCopyShareLink}
                 onDownloadConversation={
                   shouldShowDownloadConversation
                     ? handleDownloadConversation
@@ -234,12 +228,10 @@ export function ConversationName() {
         />
       )}
 
-      {/* Confirm Stop Modal */}
       {confirmStopModalVisible && (
         <ConfirmStopModal
           onConfirm={handleConfirmStop}
           onCancel={() => setConfirmStopModalVisible(false)}
-          sandboxId={conversation?.sandbox_id ?? null}
         />
       )}
     </>

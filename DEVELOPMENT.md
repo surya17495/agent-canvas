@@ -1,6 +1,6 @@
 # Development
 
-This document is for contributors working on `agent-server-gui` itself.
+This document is for contributors working on `agent-canvas` itself.
 
 ## Recommended local workflow
 
@@ -12,22 +12,27 @@ npm run dev
 
 This is an alias for `npm run dev:safe`.
 
-It starts a dedicated local `agent-server` for this checkout on `127.0.0.1:18000` and points the frontend at it. It isolates tmux state and conversation persistence by setting separate `TMUX_TMPDIR`, `OH_CONVERSATIONS_PATH`, `OH_BASH_EVENTS_DIR`, and `OH_VSCODE_PORT` values under `.openhands-dev/`, so it does not collide with other local or cloud-backed OpenHands sessions.
+It uses `uvx` to run a temporary `agent-server` installation for this checkout on `127.0.0.1:18000` and points the frontend at it. It isolates tmux state and conversation persistence by setting separate `TMUX_TMPDIR`, `OH_CONVERSATIONS_PATH`, `OH_BASH_EVENTS_DIR`, and `OH_VSCODE_PORT` values under `.openhands-dev/`, so it does not collide with other local or cloud-backed OpenHands sessions.
 
-Useful overrides:
+### Agent server version selection
 
-- `OH_GUI_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
-- `OH_GUI_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
-- `OH_GUI_SAFE_STATE_DIR` — base directory for isolated server state
+By default, the latest released version from PyPI is used. You can override this:
+
+```sh
+# Use a specific PyPI version
+OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
+
+# Use a git branch or commit (takes precedence over version)
+OH_AGENT_SERVER_GIT_REF=main npm run dev
+OH_AGENT_SERVER_GIT_REF=abc1234 npm run dev
+```
+
+### Other useful overrides
+
+- `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
+- `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
-
-## OpenHands Cloud sandbox warning
-
-If you are editing this repo from an OpenHands Cloud sandbox: **do not point this frontend at the sandbox's existing agent-server**.
-
-Current `agent-server` releases share the default `openhands` tmux socket and `workspace/conversations` persistence directory, so a naive second server in the same sandbox can break the OpenHands conversation that is powering your cloud session (for example with errors like `no server running on /tmp/tmux-*/openhands`).
-
-Use `npm run dev` / `npm run dev:safe` so this repo launches its own isolated backend.
 
 ## Alternative development workflows
 
@@ -49,8 +54,6 @@ If you want to run the frontend without a live backend, use:
 
 ```sh
 npm run dev:mock
-# or
-npm run dev:mock:saas
 ```
 
 ## Build and test
@@ -108,7 +111,6 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_WORKER_URLS`          | Optional comma-separated worker/app URLs for the Browser tab                       | -                      |
 | `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to omit `BrowserToolSet` from new conversation payloads             | `true`                 |
 | `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                | `false`                |
-| `VITE_MOCK_SAAS`            | Simulate SaaS mode in development                                                  | `false`                |
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                            | `false`                |
 | `VITE_FRONTEND_PORT`        | Port to run the frontend application                                               | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                     | `false`                |

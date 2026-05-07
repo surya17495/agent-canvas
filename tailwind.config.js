@@ -1,5 +1,4 @@
 /** @type {import('tailwindcss').Config} */
-import { heroui } from "@heroui/react";
 import typography from "@tailwindcss/typography";
 export default {
   darkMode: "class",
@@ -13,7 +12,7 @@ export default {
           secondary: "#737373",
           muted: "#A3A3A3",
         },
-        org: {
+        surface: {
           border: "#171717",
           background: "#262626",
           divider: "#525252",

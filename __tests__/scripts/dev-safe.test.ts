@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -8,7 +9,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildSafeDevConfig,
   buildNpmScriptCommand,
-  formatMissingAgentServerGuidance,
+  buildAgentServerCommand,
+  formatMissingUvxGuidance,
 } from "../../scripts/dev-safe.mjs";
 
 const repoRoot = path.resolve(
@@ -16,19 +18,17 @@ const repoRoot = path.resolve(
   "../..",
 );
 
-
-describe("formatMissingAgentServerGuidance", () => {
+describe("formatMissingUvxGuidance", () => {
   it("includes install, PATH, README, and fallback workflow hints", () => {
-    const guidance = formatMissingAgentServerGuidance(
-      "/workspace/project/agent-server-gui",
+    const guidance = formatMissingUvxGuidance(
+      "/workspace/project/agent-canvas",
     );
 
-    expect(guidance).toContain(
-      "uv tool install -U --with openhands-tools --with openhands-workspace openhands-agent-server",
-    );
+    expect(guidance).toContain("curl -LsSf https://astral.sh/uv/install.sh | sh");
     expect(guidance).toContain('export PATH="$HOME/.local/bin:$PATH"');
+    expect(guidance).toContain("command -v uvx");
     expect(guidance).toContain(
-      path.join("/workspace/project/agent-server-gui", "README.md"),
+      path.join("/workspace/project/agent-canvas", "README.md"),
     );
     expect(guidance).toContain(
       "https://docs.astral.sh/uv/getting-started/installation/",
@@ -38,9 +38,91 @@ describe("formatMissingAgentServerGuidance", () => {
   });
 });
 
+describe("buildAgentServerCommand", () => {
+  it("uses main branch by default (until settings APIs are released)", () => {
+    const cmd = buildAgentServerCommand({});
+
+    expect(cmd.command).toBe("uvx");
+    // Currently defaults to main branch due to unreleased settings persistence APIs
+    expect(cmd.args).toEqual([
+      "--from",
+      "git+https://github.com/OpenHands/software-agent-sdk@main#subdirectory=openhands-agent-server",
+      "--with",
+      "git+https://github.com/OpenHands/software-agent-sdk@main#subdirectory=openhands-tools",
+      "--with",
+      "git+https://github.com/OpenHands/software-agent-sdk@main#subdirectory=openhands-workspace",
+      "agent-server",
+    ]);
+    expect(cmd.source).toBe("git (main, default)");
+  });
+
+  it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set", () => {
+    const cmd = buildAgentServerCommand({ OH_AGENT_SERVER_VERSION: "1.18.0" });
+
+    expect(cmd.command).toBe("uvx");
+    // Uses --from syntax because executable name (agent-server) differs from package name (openhands-agent-server)
+    expect(cmd.args).toEqual([
+      "--from",
+      "openhands-agent-server==1.18.0",
+      "--with",
+      "openhands-tools",
+      "--with",
+      "openhands-workspace",
+      "agent-server",
+    ]);
+    expect(cmd.source).toBe("PyPI (1.18.0)");
+  });
+
+  it("uses git ref with subdirectory syntax for monorepo", () => {
+    const cmd = buildAgentServerCommand({ OH_AGENT_SERVER_GIT_REF: "feature-branch" });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toEqual([
+      "--from",
+      "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
+      "--with",
+      "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-tools",
+      "--with",
+      "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-workspace",
+      "agent-server",
+    ]);
+    expect(cmd.source).toBe("git (feature-branch)");
+  });
+
+  it("uses git ref for commit SHA", () => {
+    const cmd = buildAgentServerCommand({ OH_AGENT_SERVER_GIT_REF: "abc1234" });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toEqual([
+      "--from",
+      "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-agent-server",
+      "--with",
+      "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-tools",
+      "--with",
+      "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-workspace",
+      "agent-server",
+    ]);
+    expect(cmd.source).toBe("git (abc1234)");
+  });
+
+  it("git ref takes precedence over version", () => {
+    const cmd = buildAgentServerCommand({
+      OH_AGENT_SERVER_VERSION: "1.18.0",
+      OH_AGENT_SERVER_GIT_REF: "feature-branch",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain("--from");
+    expect(cmd.args).toContain(
+      "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
+    );
+    expect(cmd.args).not.toContain("openhands-agent-server==1.18.0");
+  });
+});
+
 describe("buildSafeDevConfig", () => {
   it("builds isolated default paths and ports", () => {
-    const cwd = "/workspace/project/agent-server-gui";
+    const cwd = "/workspace/project/agent-canvas";
 
     const config = buildSafeDevConfig(cwd, {});
 
@@ -48,13 +130,16 @@ describe("buildSafeDevConfig", () => {
     expect(config.vscodePort).toBe(18001);
     expect(config.backendBaseUrl).toBe("http://127.0.0.1:18000");
     expect(config.backendHost).toBe("127.0.0.1:18000");
-    expect(config.workingDir).toBe(cwd);
+    expect(config.workingDir).toBe(config.workspacesPath);
     expect(config.stateDir).toBe(
-      path.resolve(cwd, ".openhands-dev", "safe-dev-18000"),
+      path.join(homedir(), ".openhands", "agent-canvas"),
     );
     expect(config.tmuxTmpDir).toBe(path.join(config.stateDir, "tmux"));
     expect(config.conversationsPath).toBe(
       path.join(config.stateDir, "conversations"),
+    );
+    expect(config.workspacesPath).toBe(
+      path.join(config.stateDir, "workspaces"),
     );
     expect(config.bashEventsDir).toBe(
       path.join(config.stateDir, "bash_events"),
@@ -62,12 +147,12 @@ describe("buildSafeDevConfig", () => {
   });
 
   it("honors environment overrides", () => {
-    const cwd = "/workspace/project/agent-server-gui";
+    const cwd = "/workspace/project/agent-canvas";
 
     const config = buildSafeDevConfig(cwd, {
-      OH_GUI_SAFE_BACKEND_PORT: "19000",
-      OH_GUI_SAFE_VSCODE_PORT: "19010",
-      OH_GUI_SAFE_STATE_DIR: ".tmp/dev-safe",
+      OH_CANVAS_SAFE_BACKEND_PORT: "19000",
+      OH_CANVAS_SAFE_VSCODE_PORT: "19010",
+      OH_CANVAS_SAFE_STATE_DIR: ".tmp/dev-safe",
       VITE_WORKING_DIR: "/workspace/custom-repo",
     });
 
@@ -133,12 +218,14 @@ describe("buildNpmScriptCommand", () => {
 });
 
 describe("dev-safe CLI startup", () => {
-  it("exits promptly when agent-server is missing", async () => {
+  it("exits promptly when uvx is missing", async () => {
+    // Skip this test if uvx is globally installed via /usr/local/bin symlink
+    // that may still be accessible even with a stripped PATH
     const child = spawn(process.execPath, ["scripts/dev-safe.mjs"], {
       cwd: repoRoot,
       env: {
-        ...process.env,
-        PATH: "/usr/bin:/bin",
+        // Use empty PATH to ensure uvx is not found
+        PATH: "",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -166,15 +253,13 @@ describe("dev-safe CLI startup", () => {
 
     expect(exitResult.timedOut).toBe(false);
     expect(exitResult.code).toBe(1);
-    expect(output).toContain("Failed to start agent-server");
-    expect(output).toContain(
-      "uv tool install -U --with openhands-tools --with openhands-workspace openhands-agent-server",
-    );
+    expect(output).toContain("Failed to start uvx");
+    expect(output).toContain("curl -LsSf https://astral.sh/uv/install.sh | sh");
     expect(output).toContain(
       "https://docs.astral.sh/uv/getting-started/installation/",
     );
     expect(output).toContain("README.md");
     expect(output).toContain("npm run dev:mock");
-    expect(output).toContain("spawn agent-server ENOENT");
+    expect(output).toContain("spawn uvx ENOENT");
   });
 });

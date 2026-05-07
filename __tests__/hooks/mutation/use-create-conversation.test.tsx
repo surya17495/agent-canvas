@@ -21,10 +21,8 @@ describe("useCreateConversation", () => {
         status: "READY",
         detail: null,
         app_conversation_id: null,
-        sandbox_id: null,
         agent_server_url: "http://agent-server.local",
         request: {
-          sandbox_id: null,
           initial_message: {
             role: "user",
             content: [{ type: "text", text: "Please address the comments" }],
@@ -74,16 +72,15 @@ describe("useCreateConversation", () => {
 
     await waitFor(() => {
       expect(createConversationSpy).toHaveBeenCalledWith(
-        "owner/repo",
-        "github",
         "Please address the comments",
-        "main",
         "Focus on review comments",
-        suggestedTask,
         undefined,
+        {
+          selected_repository: "owner/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        },
         undefined,
-        undefined,
-        undefined, // plugins
       );
     });
   });

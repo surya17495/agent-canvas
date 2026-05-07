@@ -1,9 +1,7 @@
-# agent-server-gui
+# agent-canvas
 
 > [!WARNING]
-> This project is in the **Sandbox** phase. It may be vibecoded, untested, or out of date. OpenHands takes no responsibility for the code or its support. [Learn more](https://github.com/OpenHands/incubator-program).
-
-[![Project Status: Sandbox](https://img.shields.io/badge/status-sandbox-yellow)](https://github.com/OpenHands/incubator-program)
+> This project is in an early incubator phase. It may be vibecoded, untested, or out of date. OpenHands takes no responsibility for the code or its support. [Learn more](https://github.com/OpenHands/incubator-program).
 
 ## Quickstart
 
@@ -13,19 +11,19 @@ This repository is a near-direct port of the OpenHands frontend adapted to talk 
 
 - Node.js 22.12.x or later
 - `npm`
-- OpenHands Agent Server (`agent-server`) installed and available on your `PATH`
+- `uv` (for running the agent server via `uvx`)
 
 ### 1. Clone and install the frontend
 
 ```sh
-git clone https://github.com/OpenHands/agent-server-gui.git
-cd agent-server-gui
+git clone https://github.com/OpenHands/agent-canvas.git
+cd agent-canvas
 npm install
 ```
 
-### 2. Install OpenHands Agent Server
+### 2. Install uv
 
-If you do not already have the backend installed, install `uv` first (OpenHands SDK recommends `uv` 0.8.13+):
+If you do not already have `uv` installed, install it first (OpenHands SDK recommends `uv` 0.8.13+):
 
 ```sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -33,23 +31,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 Need Windows or another install method? See the official uv installation guide: <https://docs.astral.sh/uv/getting-started/installation/>
 
-Then install or upgrade the agent server package together with the tool/workspace dependencies it needs:
-
-```sh
-uv tool install -U \
-  --with openhands-tools \
-  --with openhands-workspace \
-  openhands-agent-server
-```
-
-`uv tool install` exposes the server as the `agent-server` CLI. If `~/.local/bin` is not already on your `PATH`, add it before continuing:
+If `~/.local/bin` is not already on your `PATH`, add it:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
-command -v agent-server
+command -v uvx
 ```
 
-If you prefer installing from source or want the full SDK setup flow, see the OpenHands SDK docs: <https://docs.openhands.dev/sdk/getting-started>
+The `npm run dev` command uses `uvx` to automatically download and run the agent server, so no separate installation step is needed.
 
 ### 3. Optional: create a `.env` file
 
@@ -80,4 +69,4 @@ After the page opens:
 
 ## More documentation
 
-For contributor and developer workflows, including OpenHands Cloud sandbox debugging, frontend-only mode, mock mode, environment variables, and build/test commands, see [DEVELOPMENT.md](./DEVELOPMENT.md).
+For contributor and developer workflows, including frontend-only mode, mock mode, environment variables, and build/test commands, see [DEVELOPMENT.md](./DEVELOPMENT.md).
