@@ -67,6 +67,7 @@ export interface V1AppConversationStartRequest {
 
 export type V1AppConversationStartTaskStatus =
   | "WORKING"
+  | "WAITING_FOR_SANDBOX"
   | "PREPARING_REPOSITORY"
   | "RUNNING_SETUP_SCRIPT"
   | "SETTING_UP_GIT_HOOKS"
