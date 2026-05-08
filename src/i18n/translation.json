@@ -11301,6 +11301,15 @@
     "uk": "Розмови",
     "ca": "Converses"
   },
+  "SIDEBAR$SKILLS": {
+    "en": "Skills"
+  },
+  "SIDEBAR$INTEGRATIONS": {
+    "en": "Integrations"
+  },
+  "SIDEBAR$NEW_CONVERSATION": {
+    "en": "New"
+  },
   "STATUS$CONNECTING_TO_RUNTIME": {
     "en": "Connecting to runtime...",
     "zh-CN": "正在连接到运行时...",
