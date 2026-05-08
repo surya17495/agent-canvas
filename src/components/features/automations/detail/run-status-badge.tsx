@@ -35,11 +35,23 @@ const statusConfig: Record<
 function StatusIcon({ status }: { status: AutomationRunStatus }) {
   switch (status) {
     case AutomationRunStatus.COMPLETED:
-      return <CheckCircleIcon className="size-3.5" />;
+      return (
+        <CheckCircleIcon
+          data-testid="run-status-icon-completed"
+          className="size-3.5"
+        />
+      );
     case AutomationRunStatus.FAILED:
-      return <XCircleIcon className="size-3.5" />;
+      return (
+        <XCircleIcon
+          data-testid="run-status-icon-failed"
+          className="size-3.5"
+        />
+      );
     default:
-      return <ClockIcon className="size-3.5" />;
+      return (
+        <ClockIcon data-testid="run-status-icon-pending" className="size-3.5" />
+      );
   }
 }
 

@@ -55,7 +55,9 @@ export function KebabMenu({ items }: KebabMenuProps) {
                 setOpen(false);
               }}
               className={`flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-border ${
-                item.variant === "danger" ? "text-red-400" : "text-white"
+                item.variant === "danger"
+                  ? "text-status-fail-text"
+                  : "text-white"
               }`}
             >
               {item.icon}

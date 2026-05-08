@@ -10,6 +10,9 @@ export function ActiveStatusBadge({ active }: ActiveStatusBadgeProps) {
 
   return (
     <span
+      data-testid={
+        active ? "active-status-badge-active" : "active-status-badge-inactive"
+      }
       className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
         active
           ? "bg-status-success-badge-bg text-status-success-text"

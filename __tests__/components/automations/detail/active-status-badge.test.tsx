@@ -5,11 +5,19 @@ import { I18nKey } from "#/i18n/declaration";
 
 describe("ActiveStatusBadge", () => {
   it.each([
-    [true, I18nKey.AUTOMATIONS$DETAIL$ACTIVE],
-    [false, I18nKey.AUTOMATIONS$DETAIL$INACTIVE],
-  ])("renders the matching label when active=%s", (active, labelKey) => {
-    render(<ActiveStatusBadge active={active} />);
+    [true, I18nKey.AUTOMATIONS$DETAIL$ACTIVE, "active-status-badge-active"],
+    [
+      false,
+      I18nKey.AUTOMATIONS$DETAIL$INACTIVE,
+      "active-status-badge-inactive",
+    ],
+  ])(
+    "renders the matching label and testid when active=%s",
+    (active, labelKey, testId) => {
+      render(<ActiveStatusBadge active={active} />);
 
-    expect(screen.getByText(labelKey)).toBeInTheDocument();
-  });
+      expect(screen.getByText(labelKey)).toBeInTheDocument();
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    },
+  );
 });

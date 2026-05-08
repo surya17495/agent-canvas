@@ -11,7 +11,7 @@ export function ErrorState({ onRetry }: ErrorStateProps) {
 
   return (
     <div className="flex flex-col items-center justify-center py-20">
-      <ExclamationCircleIcon className="size-12 text-red-400" />
+      <ExclamationCircleIcon className="size-12 text-status-fail-text" />
       <p className="mt-4 text-sm text-content-muted">
         {t(I18nKey.AUTOMATIONS$ERROR_TITLE)}
       </p>

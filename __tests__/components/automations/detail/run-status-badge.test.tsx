@@ -15,4 +15,18 @@ describe("RunStatusBadge", () => {
 
     expect(screen.getByText(labelKey)).toBeInTheDocument();
   });
+
+  it.each([
+    [AutomationRunStatus.COMPLETED, "run-status-icon-completed"],
+    [AutomationRunStatus.FAILED, "run-status-icon-failed"],
+    [AutomationRunStatus.PENDING, "run-status-icon-pending"],
+    [AutomationRunStatus.RUNNING, "run-status-icon-pending"],
+  ])(
+    "renders the %s icon variant for the matching status",
+    (status, testId) => {
+      render(<RunStatusBadge status={status} />);
+
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    },
+  );
 });
