@@ -53,8 +53,14 @@ function makeStartTask(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
-function renderForm(initialWorkspaces: LocalWorkspace[] = []) {
-  useWorkspacesStore.setState({ workspaces: initialWorkspaces });
+function renderForm(
+  initialWorkspaces: LocalWorkspace[] = [],
+  initialParents: { id: string; name: string; path: string }[] = [],
+) {
+  useWorkspacesStore.setState({
+    workspaces: initialWorkspaces,
+    workspaceParents: initialParents,
+  });
   return render(<WorkspaceSelectionForm />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
@@ -78,7 +84,7 @@ describe("WorkspaceSelectionForm", () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     mockUseIsCreatingConversation.mockReturnValue(false);
-    useWorkspacesStore.setState({ workspaces: [] });
+    useWorkspacesStore.setState({ workspaces: [], workspaceParents: [] });
   });
 
   it("Add Workspace adds only the chosen folder (not its subfolders) and dedupes on repeat", async () => {
@@ -239,5 +245,97 @@ describe("WorkspaceSelectionForm", () => {
     await user.click(await screen.findByText("repo1"));
 
     expect(launchButton).toBeEnabled();
+  });
+
+  it("Add all subdirectories saves a workspace parent and lists its children dynamically", async () => {
+    vi.spyOn(FilesService, "getHome").mockResolvedValue({ home: "/Users/me" });
+    const searchSpy = vi
+      .spyOn(FilesService, "searchSubdirs")
+      .mockImplementation(async (path: string) => {
+        if (path === "/Users/me") {
+          return {
+            items: [{ name: "dev", path: "/Users/me/dev" }],
+            next_page_id: null,
+          };
+        }
+        if (path === "/Users/me/dev") {
+          return {
+            items: [
+              { name: "repo1", path: "/Users/me/dev/repo1" },
+              { name: "repo2", path: "/Users/me/dev/repo2" },
+            ],
+            next_page_id: null,
+          };
+        }
+        throw new Error(`unexpected path ${path}`);
+      });
+
+    renderForm();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("workspace-dropdown"));
+    await user.click(await screen.findByTestId("add-workspaces-button"));
+
+    await screen.findByTestId("folder-browser-modal");
+    await user.click(await screen.findByTestId("folder-browser-entry-dev"));
+    await screen.findByTestId("folder-browser-entry-repo1");
+
+    // Click the "Add all subdirectories" button.
+    await user.click(screen.getByTestId("folder-browser-add-all-subdirs"));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("folder-browser-modal"),
+      ).not.toBeInTheDocument(),
+    );
+
+    // The directory itself becomes a workspace parent, not a workspace.
+    expect(useWorkspacesStore.getState().workspaces).toEqual([]);
+    expect(
+      useWorkspacesStore.getState().workspaceParents.map((p) => p.path),
+    ).toEqual(["/Users/me/dev"]);
+
+    // ...and its subdirectories surface as workspaces dynamically.
+    await user.click(screen.getByTestId("workspace-dropdown"));
+    await screen.findByText("repo1");
+    await screen.findByText("repo2");
+
+    expect(searchSpy).toHaveBeenCalledWith("/Users/me/dev");
+  });
+
+  it("Removing a workspace parent stops listing its children", async () => {
+    const searchSpy = vi
+      .spyOn(FilesService, "searchSubdirs")
+      .mockResolvedValue({
+        items: [
+          { name: "repoA", path: "/Users/me/dev/repoA" },
+          { name: "repoB", path: "/Users/me/dev/repoB" },
+        ],
+        next_page_id: null,
+      });
+
+    renderForm(
+      [],
+      [{ id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" }],
+    );
+
+    const user = userEvent.setup();
+
+    // Children should appear in the dropdown.
+    await user.click(screen.getByTestId("workspace-dropdown"));
+    await screen.findByText("repoA");
+    await screen.findByText("repoB");
+
+    // Manage modal should expose a remove button for the parent.
+    await user.click(screen.getByTestId("manage-workspaces-button"));
+    await screen.findByTestId("manage-workspaces-modal");
+    expect(
+      screen.getByTestId("manage-workspaces-parent-row-dev"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("manage-workspaces-remove-parent-dev"));
+
+    expect(useWorkspacesStore.getState().workspaceParents).toEqual([]);
+    expect(searchSpy).toHaveBeenCalledWith("/Users/me/dev");
   });
 });

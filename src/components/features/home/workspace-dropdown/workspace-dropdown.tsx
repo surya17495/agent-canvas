@@ -19,6 +19,13 @@ export interface WorkspaceDropdownProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /**
+   * Whether to surface the "Manage Workspaces" entry in the sticky footer.
+   * Defaults to `workspaces.length > 0` when omitted; pass an explicit value
+   * if there are workspace parents (whose children may not have loaded yet)
+   * that should also count as "manageable".
+   */
+  showManage?: boolean;
   onChange: (workspace: LocalWorkspace | null) => void;
   onAddClick: () => void;
   onManageClick: () => void;
@@ -30,6 +37,7 @@ export function WorkspaceDropdown({
   placeholder,
   className,
   disabled = false,
+  showManage,
   onChange,
   onAddClick,
   onManageClick,
@@ -134,7 +142,7 @@ export function WorkspaceDropdown({
         >
           {t(I18nKey.HOME$ADD_WORKSPACES)}
         </button>
-        {workspaces.length > 0 && (
+        {(showManage ?? workspaces.length > 0) && (
           <button
             type="button"
             data-testid="manage-workspaces-button"
@@ -155,7 +163,7 @@ export function WorkspaceDropdown({
         )}
       </div>
     ),
-    [onAddClick, onManageClick, t, closeMenu, workspaces.length],
+    [onAddClick, onManageClick, t, closeMenu, workspaces.length, showManage],
   );
 
   return (

@@ -5,6 +5,7 @@ import { useCreateConversation } from "#/hooks/mutation/use-create-conversation"
 import { useNavigation } from "#/context/navigation-context";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { useWorkspacesStore } from "#/stores/workspaces-store";
+import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
 import FolderIcon from "#/icons/folder.svg?react";
@@ -24,7 +25,14 @@ export function WorkspaceSelectionForm({
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
 
-  const { workspaces, addWorkspaces, removeWorkspace } = useWorkspacesStore();
+  const {
+    workspaceParents,
+    addWorkspaces,
+    removeWorkspace,
+    addWorkspaceParents,
+    removeWorkspaceParent,
+  } = useWorkspacesStore();
+  const { workspaces } = useResolvedWorkspaces();
   const [selectedWorkspace, setSelectedWorkspace] =
     React.useState<LocalWorkspace | null>(null);
   const [isBrowserOpen, setIsBrowserOpen] = React.useState(false);
@@ -63,6 +71,7 @@ export function WorkspaceSelectionForm({
           workspaces={workspaces}
           value={selectedWorkspace}
           disabled={isLoadingSettings}
+          showManage={workspaces.length > 0 || workspaceParents.length > 0}
           onChange={setSelectedWorkspace}
           onAddClick={() => setIsBrowserOpen(true)}
           onManageClick={() => setIsManageOpen(true)}
@@ -88,17 +97,25 @@ export function WorkspaceSelectionForm({
         isOpen={isBrowserOpen}
         onClose={() => setIsBrowserOpen(false)}
         onAdd={(items) => addWorkspaces(items)}
+        onAddParent={(items) => addWorkspaceParents(items)}
       />
 
       <ManageWorkspacesModal
         isOpen={isManageOpen}
         workspaces={workspaces}
+        workspaceParents={workspaceParents}
         onClose={() => setIsManageOpen(false)}
         onRemove={(path) => {
           if (selectedWorkspace?.path === path) {
             setSelectedWorkspace(null);
           }
           removeWorkspace(path);
+        }}
+        onRemoveParent={(path) => {
+          if (selectedWorkspace?.parentPath === path) {
+            setSelectedWorkspace(null);
+          }
+          removeWorkspaceParent(path);
         }}
       />
     </div>
