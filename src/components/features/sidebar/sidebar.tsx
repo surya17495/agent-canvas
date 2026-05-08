@@ -13,6 +13,7 @@ import { ENABLE_AUTOMATIONS } from "#/utils/feature-flags";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
+import { SidebarConversationList } from "./sidebar-conversation-list";
 
 const SETTINGS_NAV_ICON_BY_PATH = new Map(
   OSS_NAV_ITEMS.map((item) => [item.to, item.icon] as const),
@@ -80,7 +81,7 @@ export function Sidebar() {
         className={cn(
           "bg-base flex flex-col gap-3",
           // Mobile: top bar; Desktop: vertical column
-          "h-[54px] md:h-full md:w-[220px] md:min-w-[220px]",
+          "h-[54px] md:h-full md:w-[300px] md:min-w-[300px]",
           "px-3 py-2 md:px-3 md:pt-4 md:pb-3",
           "flex-row md:flex-col",
         )}
@@ -89,7 +90,11 @@ export function Sidebar() {
           <OpenHandsLogoButton />
         </div>
 
-        <nav className="flex flex-row md:flex-col md:flex-1 gap-1 md:gap-0.5 items-center md:items-stretch md:overflow-y-auto custom-scrollbar w-full">
+        <div className="hidden md:flex md:flex-col md:items-stretch">
+          <BackendSelector />
+        </div>
+
+        <nav className="flex flex-row md:flex-col gap-1 md:gap-0.5 items-center md:items-stretch w-full md:shrink-0">
           <SidebarNavLink
             to="/conversations"
             label={t(I18nKey.SIDEBAR$CONVERSATIONS)}
@@ -192,9 +197,7 @@ export function Sidebar() {
           </div>
         </nav>
 
-        <div className="hidden md:flex md:flex-col md:items-stretch md:pt-2">
-          <BackendSelector openUpward />
-        </div>
+        <SidebarConversationList />
       </aside>
 
       {settingsModalIsOpen && (

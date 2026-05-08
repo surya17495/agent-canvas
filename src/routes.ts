@@ -8,10 +8,8 @@ import {
 export default [
   layout("routes/root-layout.tsx", [
     index("routes/index-redirect.tsx"),
-    layout("routes/conversations-layout.tsx", [
-      route("conversations", "routes/home.tsx"),
-      route("conversations/:conversationId", "routes/conversation.tsx"),
-    ]),
+    route("conversations", "routes/home.tsx"),
+    route("conversations/:conversationId", "routes/conversation.tsx"),
     route("launch", "routes/launch.tsx"),
     route("skills", "routes/skills-settings.tsx"),
     route("integrations", "routes/git-settings.tsx"),
