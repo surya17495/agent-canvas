@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { XIcon } from "#/components/shared/icons";
 
 interface ClearButtonProps {
   onClear: () => void;
@@ -13,7 +13,7 @@ export function ClearButton({ onClear }: ClearButtonProps) {
       aria-label="Clear selection"
       className="text-white hover:text-gray-300"
     >
-      <X size={14} />
+      <XIcon size={14} />
     </button>
   );
 }

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
+import { RefreshCwIcon } from "#/components/shared/icons";
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "../settings/brand-button";
@@ -32,7 +32,7 @@ export function HooksModalHeader({
             onClick={onRefresh}
             isDisabled={isLoading || isRefetching}
           >
-            <RefreshCw
+            <RefreshCwIcon
               size={16}
               className={`${isRefetching ? "animate-spin" : ""}`}
             />

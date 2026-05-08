@@ -1,5 +1,5 @@
-import { FaPencil, FaTrash } from "react-icons/fa6";
 import { useTranslation } from "react-i18next";
+import { PencilIcon, TrashIcon } from "#/components/shared/icons";
 import { I18nKey } from "#/i18n/declaration";
 
 interface MCPServerConfig {
@@ -94,7 +94,7 @@ export function MCPServerListItem({
           aria-label={`Edit ${serverName}`}
           className="cursor-pointer hover:text-content-1 transition-colors"
         >
-          <FaPencil size={16} />
+          <PencilIcon size={16} />
         </button>
         <button
           data-testid="delete-mcp-server-button"
@@ -103,7 +103,7 @@ export function MCPServerListItem({
           aria-label={`Delete ${serverName}`}
           className="cursor-pointer hover:text-content-1 transition-colors"
         >
-          <FaTrash size={16} />
+          <TrashIcon size={16} />
         </button>
       </td>
     </tr>

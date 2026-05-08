@@ -120,8 +120,6 @@ export default defineConfig(({ mode }) => {
         "react-i18next",
         "axios",
         "@uidotdev/usehooks",
-        "react-icons/fa6",
-        "react-icons/fa",
         "clsx",
         "tailwind-merge",
         // CJS dependencies used by react-transition-group. Without pre-bundling,
@@ -129,7 +127,6 @@ export default defineConfig(({ mode }) => {
         "prop-types",
         "react-is",
         "@heroui/react",
-        "lucide-react",
         "@microlink/react-json-view",
         "socket.io-client",
         // These are discovered when launching conversations:

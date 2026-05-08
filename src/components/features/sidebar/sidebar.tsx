@@ -6,15 +6,24 @@ import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-
 import { NewProjectButton } from "#/components/shared/buttons/new-project-button";
 import { ConversationPanelButton } from "#/components/shared/buttons/conversation-panel-button";
 import { AutomationsButton } from "#/components/shared/buttons/automations-button";
-import { SettingsModal } from "#/components/shared/modals/settings/settings-modal";
 import { getErrorStatus, useSettings } from "#/hooks/query/use-settings";
-import { ConversationPanel } from "../conversation-panel/conversation-panel";
-import { ConversationPanelWrapper } from "../conversation-panel/conversation-panel-wrapper";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { cn } from "#/utils/utils";
+
+const LazySettingsModal = React.lazy(() =>
+  import("#/components/shared/modals/settings/settings-modal").then(
+    (module) => ({
+      default: module.SettingsModal,
+    }),
+  ),
+);
+
+const LazyConversationPanelOverlay = React.lazy(
+  () => import("./conversation-panel-overlay"),
+);
 
 export function Sidebar() {
   const { t } = useTranslation("openhands");
@@ -87,9 +96,7 @@ export function Sidebar() {
               }
               disabled={settings?.email_verified === false}
             />
-            <AutomationsButton
-              disabled={settings?.email_verified === false}
-            />
+            <AutomationsButton disabled={settings?.email_verified === false} />
           </div>
 
           <div className="flex flex-row md:flex-col md:items-center gap-[26px]">
@@ -102,21 +109,24 @@ export function Sidebar() {
           </div>
         </nav>
 
-        {conversationPanelIsOpen && (
-          <ConversationPanelWrapper isOpen={conversationPanelIsOpen}>
-            <ConversationPanel
+        {conversationPanelIsOpen ? (
+          <React.Suspense fallback={null}>
+            <LazyConversationPanelOverlay
+              isOpen={conversationPanelIsOpen}
               onClose={() => setConversationPanelIsOpen(false)}
             />
-          </ConversationPanelWrapper>
-        )}
+          </React.Suspense>
+        ) : null}
       </aside>
 
-      {settingsModalIsOpen && (
-        <SettingsModal
-          settings={settings}
-          onClose={() => setSettingsModalIsOpen(false)}
-        />
-      )}
+      {settingsModalIsOpen ? (
+        <React.Suspense fallback={null}>
+          <LazySettingsModal
+            settings={settings}
+            onClose={() => setSettingsModalIsOpen(false)}
+          />
+        </React.Suspense>
+      ) : null}
     </>
   );
 }

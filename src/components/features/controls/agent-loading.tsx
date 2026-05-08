@@ -1,9 +1,9 @@
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircleIcon } from "#/components/shared/icons";
 
 export function AgentLoading() {
   return (
     <div data-testid="agent-loading-spinner">
-      <LoaderCircle className="animate-spin w-4 h-4" color="white" />
+      <LoaderCircleIcon className="animate-spin w-4 h-4" color="white" />
     </div>
   );
 }

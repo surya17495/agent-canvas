@@ -1,5 +1,5 @@
-import { FaClock } from "react-icons/fa";
 import CheckCircle from "#/icons/check-circle-solid.svg?react";
+import { ClockIcon } from "#/components/shared/icons";
 import { ObservationResultStatus } from "#/components/conversation-events/chat/event-content-helpers/get-observation-result";
 
 interface SuccessIndicatorProps {
@@ -17,9 +17,9 @@ export function SuccessIndicator({ status }: SuccessIndicatorProps) {
       )}
 
       {status === "timeout" && (
-        <FaClock
+        <ClockIcon
           data-testid="status-icon"
-          className="h-4 w-4 ml-2 inline fill-yellow-500"
+          className="h-4 w-4 ml-2 inline text-yellow-500"
         />
       )}
     </span>

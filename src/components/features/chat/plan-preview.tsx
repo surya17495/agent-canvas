@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRightIcon } from "#/components/shared/icons";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
@@ -84,7 +84,7 @@ export function PlanPreview({
           <Typography.Text className="font-medium text-[11px] text-white tracking-[0.11px] leading-4">
             {t(I18nKey.COMMON$VIEW)}
           </Typography.Text>
-          <ArrowUpRight className="text-white" size={18} />
+          <ArrowUpRightIcon className="text-white" size={18} />
         </button>
       </div>
 

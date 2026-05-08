@@ -1,7 +1,10 @@
 import React from "react";
-import { FaArrowRotateRight } from "react-icons/fa6";
-import { FaExternalLinkAlt, FaHome } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
+import {
+  ArrowRotateRightIcon,
+  ExternalLinkIcon,
+  HomeIcon,
+} from "#/components/shared/icons";
 import { useUnifiedActiveHost } from "#/hooks/query/use-unified-active-host";
 import { PathForm } from "#/components/features/served-host/path-form";
 import { I18nKey } from "#/i18n/declaration";
@@ -67,7 +70,7 @@ function ServedApp() {
           className="text-sm"
           aria-label={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
         >
-          <FaExternalLinkAlt className="w-4 h-4" />
+          <ExternalLinkIcon className="w-4 h-4" />
         </button>
         <button
           type="button"
@@ -75,7 +78,7 @@ function ServedApp() {
           className="text-sm"
           aria-label={t(I18nKey.BUTTON$REFRESH)}
         >
-          <FaArrowRotateRight className="w-4 h-4" />
+          <ArrowRotateRightIcon className="w-4 h-4" />
         </button>
 
         <button
@@ -84,7 +87,7 @@ function ServedApp() {
           className="text-sm"
           aria-label={t(I18nKey.BUTTON$HOME)}
         >
-          <FaHome className="w-4 h-4" />
+          <HomeIcon className="w-4 h-4" />
         </button>
         <div className="w-full flex">
           <PathForm

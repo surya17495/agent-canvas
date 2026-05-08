@@ -1,6 +1,6 @@
 import React from "react";
-import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { RefreshCwIcon } from "#/components/shared/icons";
 import {
   getAgentServerFormDefaults,
   saveAgentServerConfig,
@@ -117,7 +117,7 @@ export function AgentServerConnectionForm({
           variant="secondary"
           type="button"
           onClick={reconnect}
-          startContent={<RefreshCw className="size-4" />}
+          startContent={<RefreshCwIcon className="size-4" />}
         >
           {t("SETTINGS$AGENT_SERVER_RETRY_CONNECTION")}
         </BrandButton>

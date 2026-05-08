@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon } from "#/components/shared/icons";
 import { Typography } from "#/ui/typography";
 import { SkillTriggers } from "./skill-triggers";
 import { SkillContent } from "./skill-content";
@@ -38,9 +38,9 @@ export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
           </Typography.Text>
           <Typography.Text className="text-gray-300">
             {isExpanded ? (
-              <ChevronDown size={18} />
+              <ChevronDownIcon size={18} />
             ) : (
-              <ChevronRight size={18} />
+              <ChevronRightIcon size={18} />
             )}
           </Typography.Text>
         </div>

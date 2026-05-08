@@ -59,26 +59,26 @@ afterEach(() => {
 });
 
 describe("RepoConnector", () => {
-  it("shows the workspace launcher for local backends", () => {
+  it("shows the workspace launcher for local backends", async () => {
     renderRepoConnector();
 
-    expect(screen.getByTestId("stub-workspace-form")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("stub-workspace-form"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("stub-repo-form")).not.toBeInTheDocument();
   });
 
-  it("shows the repository launcher for cloud backends with providers", () => {
+  it("shows the repository launcher for cloud backends with providers", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
     renderRepoConnector();
 
-    expect(screen.getByTestId("stub-repo-form")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("stub-workspace-form"),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByTestId("stub-repo-form")).toBeInTheDocument();
+    expect(screen.queryByTestId("stub-workspace-form")).not.toBeInTheDocument();
   });
 
-  it("shows the connect-provider message for cloud backends without providers", () => {
+  it("shows the connect-provider message for cloud backends without providers", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
     mockUseUserProviders.mockReturnValue({
@@ -88,10 +88,10 @@ describe("RepoConnector", () => {
 
     renderRepoConnector();
 
-    expect(screen.getByTestId("stub-connect-message")).toBeInTheDocument();
-    expect(screen.queryByTestId("stub-repo-form")).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("stub-workspace-form"),
-    ).not.toBeInTheDocument();
+      await screen.findByTestId("stub-connect-message"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("stub-repo-form")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stub-workspace-form")).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { FaPencil, FaTrash } from "react-icons/fa6";
+import { PencilIcon, TrashIcon } from "#/components/shared/icons";
 
 export function SecretListItemSkeleton() {
   return (
@@ -51,7 +51,7 @@ export function SecretListItem({
             aria-label={`Edit ${title}`}
             className="cursor-pointer"
           >
-            <FaPencil size={16} />
+            <PencilIcon size={16} />
           </button>
           <button
             data-testid="delete-secret-button"
@@ -60,7 +60,7 @@ export function SecretListItem({
             aria-label={`Delete ${title}`}
             className="cursor-pointer"
           >
-            <FaTrash size={16} />
+            <TrashIcon size={16} />
           </button>
         </div>
       </td>

@@ -1,5 +1,5 @@
 import React from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircleIcon } from "#/components/shared/icons";
 import { RemoveFileButton } from "./remove-file-button";
 
 interface UploadedImageProps {
@@ -30,7 +30,7 @@ export function UploadedImage({
     <div className="group min-w-[51px] min-h-[49px] w-[51px] h-[49px] rounded-lg bg-[#525252] relative flex items-center justify-center">
       <RemoveFileButton onClick={onRemove} />
       {isLoading ? (
-        <LoaderCircle className="animate-spin w-5 h-5" color="white" />
+        <LoaderCircleIcon className="animate-spin w-5 h-5" color="white" />
       ) : (
         imageUrl && (
           <img

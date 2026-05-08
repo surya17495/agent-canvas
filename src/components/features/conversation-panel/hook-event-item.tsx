@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon } from "#/components/shared/icons";
 import { Typography } from "#/ui/typography";
 import { HookEvent } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { HookMatcherContent } from "./hook-matcher-content";
@@ -52,9 +52,9 @@ export function HookEventItem({
           </Typography.Text>
           <Typography.Text className="text-gray-300">
             {isExpanded ? (
-              <ChevronDown size={18} />
+              <ChevronDownIcon size={18} />
             ) : (
-              <ChevronRight size={18} />
+              <ChevronRightIcon size={18} />
             )}
           </Typography.Text>
         </div>

@@ -1,5 +1,5 @@
 /* eslint-disable react/jsx-props-no-spreading */
-import { ChevronDown } from "lucide-react";
+import { ChevronDownIcon } from "#/components/shared/icons";
 import { cn } from "#/utils/utils";
 
 interface ToggleButtonProps {
@@ -22,7 +22,7 @@ export function ToggleButton({
         className: cn("text-white", isDisabled && "cursor-not-allowed"),
       })}
     >
-      <ChevronDown
+      <ChevronDownIcon
         size={16}
         className={cn("transition-transform", isOpen && "rotate-180")}
       />

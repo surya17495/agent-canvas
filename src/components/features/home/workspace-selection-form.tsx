@@ -12,8 +12,18 @@ import FolderIcon from "#/icons/folder.svg?react";
 
 import { BrandButton } from "../settings/brand-button";
 import { WorkspaceDropdown } from "./workspace-dropdown/workspace-dropdown";
-import { FolderBrowserModal } from "./workspace-dropdown/folder-browser-modal";
-import { ManageWorkspacesModal } from "./workspace-dropdown/manage-workspaces-modal";
+
+const LazyFolderBrowserModal = React.lazy(() =>
+  import("./workspace-dropdown/folder-browser-modal").then((module) => ({
+    default: module.FolderBrowserModal,
+  })),
+);
+
+const LazyManageWorkspacesModal = React.lazy(() =>
+  import("./workspace-dropdown/manage-workspaces-modal").then((module) => ({
+    default: module.ManageWorkspacesModal,
+  })),
+);
 
 interface WorkspaceSelectionFormProps {
   isLoadingSettings?: boolean;
@@ -117,31 +127,39 @@ export function WorkspaceSelectionForm({
         {isCreatingConversation && t(I18nKey.HOME$LOADING)}
       </BrandButton>
 
-      <FolderBrowserModal
-        isOpen={isBrowserOpen}
-        onClose={() => setIsBrowserOpen(false)}
-        onAdd={(items) => addWorkspaces(items)}
-        onAddParent={(items) => addWorkspaceParents(items)}
-      />
+      {isBrowserOpen ? (
+        <React.Suspense fallback={null}>
+          <LazyFolderBrowserModal
+            isOpen={isBrowserOpen}
+            onClose={() => setIsBrowserOpen(false)}
+            onAdd={(items) => addWorkspaces(items)}
+            onAddParent={(items) => addWorkspaceParents(items)}
+          />
+        </React.Suspense>
+      ) : null}
 
-      <ManageWorkspacesModal
-        isOpen={isManageOpen}
-        workspaces={workspaces}
-        workspaceParents={workspaceParents}
-        onClose={() => setIsManageOpen(false)}
-        onRemove={(path) => {
-          if (selectedWorkspace?.path === path) {
-            setSelectedWorkspace(null);
-          }
-          removeWorkspace(path);
-        }}
-        onRemoveParent={(path) => {
-          if (selectedWorkspace?.parentPath === path) {
-            setSelectedWorkspace(null);
-          }
-          removeWorkspaceParent(path);
-        }}
-      />
+      {isManageOpen ? (
+        <React.Suspense fallback={null}>
+          <LazyManageWorkspacesModal
+            isOpen={isManageOpen}
+            workspaces={workspaces}
+            workspaceParents={workspaceParents}
+            onClose={() => setIsManageOpen(false)}
+            onRemove={(path) => {
+              if (selectedWorkspace?.path === path) {
+                setSelectedWorkspace(null);
+              }
+              removeWorkspace(path);
+            }}
+            onRemoveParent={(path) => {
+              if (selectedWorkspace?.parentPath === path) {
+                setSelectedWorkspace(null);
+              }
+              removeWorkspaceParent(path);
+            }}
+          />
+        </React.Suspense>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import { FaBitbucket, FaGithub, FaGitlab } from "react-icons/fa6";
 import { TaskCard } from "./task-card";
 import { TaskItemTitle } from "./task-item-title";
+import { GitProviderIcon } from "#/components/shared/git-provider-icon";
 import { SuggestedTask } from "#/utils/types";
 
 interface TaskGroupProps {
@@ -14,9 +14,9 @@ export function TaskGroup({ title, tasks }: TaskGroupProps) {
   return (
     <div className="text-content-2 px-[14px]">
       <div className="flex items-center gap-2 border-b-1 border-[#717888] mb-2">
-        {gitProvider === "github" && <FaGithub size={14} />}
-        {gitProvider === "gitlab" && <FaGitlab />}
-        {gitProvider === "bitbucket" && <FaBitbucket />}
+        {gitProvider ? (
+          <GitProviderIcon gitProvider={gitProvider} className="text-current" />
+        ) : null}
         <TaskItemTitle>{title}</TaskItemTitle>
       </div>
 

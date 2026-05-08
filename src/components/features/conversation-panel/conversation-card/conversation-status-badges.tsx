@@ -1,5 +1,5 @@
-import { FaArchive } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
+import { ArchiveIcon } from "#/components/shared/icons";
 import { ConversationStatus } from "#/types/conversation-status";
 import { I18nKey } from "#/i18n/declaration";
 import CircleErrorIcon from "#/icons/circle-error.svg?react";
@@ -16,7 +16,7 @@ export function ConversationStatusBadges({
   if (conversationStatus === "ARCHIVED") {
     return (
       <span className="flex items-center gap-1 px-1.5 py-0.5 bg-[#868E96] text-white text-xs font-medium rounded-full opacity-60">
-        <FaArchive size={10} className="text-white" />
+        <ArchiveIcon size={10} className="text-white" />
         <span>{t(I18nKey.COMMON$ARCHIVED)}</span>
       </span>
     );

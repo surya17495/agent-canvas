@@ -1,8 +1,18 @@
 import React from "react";
 import { UserAvatar } from "./user-avatar";
-import { UserContextMenu } from "../user/user-context-menu";
-import { AddBackendModal } from "../backends/add-backend-modal";
 import { cn } from "#/utils/utils";
+
+const LazyUserContextMenu = React.lazy(() =>
+  import("../user/user-context-menu").then((module) => ({
+    default: module.UserContextMenu,
+  })),
+);
+
+const LazyAddBackendModal = React.lazy(() =>
+  import("../backends/add-backend-modal").then((module) => ({
+    default: module.AddBackendModal,
+  })),
+);
 
 interface UserActionsProps {
   user?: { avatar_url: string };
@@ -81,15 +91,21 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
             "opacity-100 pointer-events-auto",
         )}
       >
-        <UserContextMenu
-          key={menuResetCount}
-          onClose={closeAccountMenu}
-          onOpenAddBackend={openAddBackendModal}
-        />
+        {accountContextMenuIsVisible ? (
+          <React.Suspense fallback={null}>
+            <LazyUserContextMenu
+              key={menuResetCount}
+              onClose={closeAccountMenu}
+              onOpenAddBackend={openAddBackendModal}
+            />
+          </React.Suspense>
+        ) : null}
       </div>
 
       {addBackendModalOpen ? (
-        <AddBackendModal onClose={() => setAddBackendModalOpen(false)} />
+        <React.Suspense fallback={null}>
+          <LazyAddBackendModal onClose={() => setAddBackendModalOpen(false)} />
+        </React.Suspense>
       ) : null}
     </div>
   );

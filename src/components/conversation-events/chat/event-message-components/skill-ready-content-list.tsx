@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon } from "#/components/shared/icons";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import { SkillReadyItem } from "../event-content-helpers/create-skill-ready-event";
@@ -40,9 +40,9 @@ export function SkillReadyContentList({ items }: SkillReadyContentListProps) {
             >
               <Typography.Text className="text-neutral-300">
                 {isExpanded ? (
-                  <ChevronDown size={14} />
+                  <ChevronDownIcon size={14} />
                 ) : (
-                  <ChevronRight size={14} />
+                  <ChevronRightIcon size={14} />
                 )}
               </Typography.Text>
               <Typography.Text className="font-semibold text-neutral-200 text-sm">

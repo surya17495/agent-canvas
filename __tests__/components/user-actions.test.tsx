@@ -35,9 +35,11 @@ describe("UserActions", () => {
 
     await user.hover(screen.getByTestId("user-actions"));
 
-    expect(screen.getByTestId("user-context-menu")).toBeVisible();
-    expect(screen.getByTestId("backend-selector")).toBeInTheDocument();
-    expect(screen.getByTestId("add-backend-menu-item")).toBeInTheDocument();
+    expect(await screen.findByTestId("user-context-menu")).toBeVisible();
+    expect(await screen.findByTestId("backend-selector")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("add-backend-menu-item"),
+    ).toBeInTheDocument();
     expect(screen.getByText("SETTINGS$NAV_LLM")).toBeInTheDocument();
     expect(screen.getByText("SETTINGS$NAV_APPLICATION")).toBeInTheDocument();
     expect(screen.getByText("SIDEBAR$DOCS")).toBeInTheDocument();
@@ -52,9 +54,9 @@ describe("UserActions", () => {
     renderUserActions();
 
     await user.hover(screen.getByTestId("user-actions"));
-    await user.click(screen.getByTestId("add-backend-menu-item"));
+    await user.click(await screen.findByTestId("add-backend-menu-item"));
 
-    expect(screen.getByTestId("add-backend-modal")).toBeInTheDocument();
+    expect(await screen.findByTestId("add-backend-modal")).toBeInTheDocument();
 
     // While the modal is open, the menu wrapper must lose BOTH the
     // explicit visibility classes AND the `group-hover:*` classes — the

@@ -1,4 +1,4 @@
-import { FaFile } from "react-icons/fa";
+import { FileIcon } from "#/components/shared/icons";
 import { RemoveButton } from "#/components/shared/buttons/remove-button";
 
 interface FileItemProps {
@@ -12,7 +12,7 @@ export function FileItem({ filename, onRemove }: FileItemProps) {
       data-testid="file-item"
       className="flex flex-row gap-x-1 items-center justify-start py-1"
     >
-      <FaFile className="h-4 w-4" />
+      <FileIcon className="h-4 w-4" />
       <code className="text-sm flex-1 text-white truncate">{filename}</code>
       {onRemove && <RemoveButton onClick={onRemove} />}
     </div>

@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import { useLocalStorage } from "@uidotdev/usehooks";
-import { FaTriangleExclamation } from "react-icons/fa6";
 import CloseIcon from "#/icons/close.svg?react";
 import { useNavigation } from "#/context/navigation-context";
+import { TriangleExclamationIcon } from "#/components/shared/icons";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
@@ -123,7 +123,10 @@ export function AlertBanner({
     >
       <div className="flex items-center">
         <div className="flex-shrink-0">
-          <FaTriangleExclamation className="text-primary align-middle" />
+          <TriangleExclamationIcon
+            size={16}
+            className="text-primary align-middle"
+          />
         </div>
         <div className="ml-3 flex flex-col gap-1">{renderMessages()}</div>
       </div>
