@@ -24,7 +24,7 @@ interface ConversationCardProps {
   conversationId?: string;
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
-  llmModel?: string | null;
+  isActive?: boolean;
 }
 
 export function ConversationCard({
@@ -43,7 +43,7 @@ export function ConversationCard({
   executionStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
-  llmModel,
+  isActive = false,
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -121,10 +121,12 @@ export function ConversationCard({
     <div
       data-testid="conversation-card"
       data-context-menu-open={contextMenuOpen.toString()}
+      data-active={isActive ? "true" : "false"}
       onClick={onClick}
       className={cn(
         "relative h-auto w-full px-3 py-2 border-b border-[#1f2228] cursor-pointer",
         "data-[context-menu-open=false]:hover:bg-[#1f2228]",
+        "data-[active=true]:bg-[#25272D]",
       )}
     >
       <div className="flex items-center justify-between w-full">
@@ -158,7 +160,6 @@ export function ConversationCard({
         lastUpdatedAt={lastUpdatedAt}
         createdAt={createdAt}
         executionStatus={executionStatus}
-        llmModel={llmModel}
       />
     </div>
   );

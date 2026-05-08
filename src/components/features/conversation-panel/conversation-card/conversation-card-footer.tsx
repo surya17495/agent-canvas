@@ -7,14 +7,12 @@ import { V1ExecutionStatus } from "#/types/v1/core/base/common";
 import { isExecutionPaused } from "#/utils/status";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
-import CircuitIcon from "#/icons/u-circuit.svg?react";
 
 interface ConversationCardFooterProps {
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string;
   createdAt?: string;
   executionStatus?: V1ExecutionStatus | null;
-  llmModel?: string | null;
 }
 
 export function ConversationCardFooter({
@@ -22,7 +20,6 @@ export function ConversationCardFooter({
   lastUpdatedAt,
   createdAt,
   executionStatus,
-  llmModel,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
 
@@ -41,16 +38,6 @@ export function ConversationCardFooter({
         <NoRepository />
       )}
       <div className="flex items-center gap-2 flex-1 justify-end">
-        {llmModel && (
-          <span
-            className="text-xs text-[#A3A3A3] max-w-[120px] flex items-center gap-1 overflow-hidden"
-            title={llmModel}
-            data-testid="conversation-card-llm-model"
-          >
-            <CircuitIcon width={12} height={12} className="shrink-0" />
-            <span className="truncate">{llmModel}</span>
-          </span>
-        )}
         {(createdAt ?? lastUpdatedAt) && (
           <p className="text-xs text-[#A3A3A3] text-right">
             <time>
