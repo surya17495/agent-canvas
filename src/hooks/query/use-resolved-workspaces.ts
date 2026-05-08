@@ -45,14 +45,20 @@ export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
 
   const merged = useMemo(() => {
     const byPath = new Map<string, LocalWorkspace>();
+    const resultsByParent = new Map(
+      workspaceParents.map((parent, index) => [
+        parent.path,
+        parentQueries[index],
+      ]),
+    );
 
-    workspaceParents.forEach((parent, index) => {
-      const result = parentQueries[index];
+    workspaceParents.forEach((parent) => {
+      const result = resultsByParent.get(parent.path);
       const items = result?.data?.items ?? [];
       items.forEach((entry) => {
         if (byPath.has(entry.path)) return;
         byPath.set(entry.path, {
-          id: `${parent.path}::${entry.path}`,
+          id: entry.path,
           name: entry.name,
           path: entry.path,
           parentPath: parent.path,

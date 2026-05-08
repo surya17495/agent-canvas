@@ -32,7 +32,11 @@ export function WorkspaceSelectionForm({
     addWorkspaceParents,
     removeWorkspaceParent,
   } = useWorkspacesStore();
-  const { workspaces } = useResolvedWorkspaces();
+  const {
+    workspaces,
+    isLoading: isLoadingWorkspaces,
+    isError: hasWorkspaceError,
+  } = useResolvedWorkspaces();
   const [selectedWorkspace, setSelectedWorkspace] =
     React.useState<LocalWorkspace | null>(null);
   const [isBrowserOpen, setIsBrowserOpen] = React.useState(false);
@@ -46,6 +50,16 @@ export function WorkspaceSelectionForm({
   const isCreatingConversationElsewhere = useIsCreatingConversation();
   const isCreatingConversation =
     isPending || isSuccess || isCreatingConversationElsewhere;
+
+  const showWorkspaceStatus = workspaceParents.length > 0;
+  let workspaceStatusText: string | null = null;
+  if (isLoadingWorkspaces) {
+    workspaceStatusText = t(I18nKey.HOME$LOADING);
+  } else if (hasWorkspaceError) {
+    workspaceStatusText = t(I18nKey.HOME$WORKSPACE_SCAN_ERROR);
+  }
+  const isDropdownDisabled =
+    isLoadingSettings || (isLoadingWorkspaces && workspaces.length === 0);
 
   const handleLaunch = () => {
     if (!selectedWorkspace) return;
@@ -70,13 +84,23 @@ export function WorkspaceSelectionForm({
         <WorkspaceDropdown
           workspaces={workspaces}
           value={selectedWorkspace}
-          disabled={isLoadingSettings}
+          placeholder={isDropdownDisabled ? t(I18nKey.HOME$LOADING) : undefined}
+          disabled={isDropdownDisabled}
           showManage={workspaces.length > 0 || workspaceParents.length > 0}
           onChange={setSelectedWorkspace}
           onAddClick={() => setIsBrowserOpen(true)}
           onManageClick={() => setIsManageOpen(true)}
           className="max-w-auto"
         />
+
+        {showWorkspaceStatus && workspaceStatusText && (
+          <p
+            className="px-1 text-xs text-[#B7BDC2]"
+            data-testid="workspace-status-message"
+          >
+            {workspaceStatusText}
+          </p>
+        )}
       </div>
 
       <BrandButton

@@ -13,6 +13,8 @@ interface WorkspacesActions {
   clearWorkspaces: () => void;
   addWorkspaceParents: (items: LocalWorkspaceParent[]) => void;
   removeWorkspaceParent: (path: string) => void;
+  clearWorkspaceParents: () => void;
+  clearAll: () => void;
 }
 
 type WorkspacesStore = WorkspacesState & WorkspacesActions;
@@ -40,8 +42,7 @@ export const useWorkspacesStore = create<WorkspacesStore>()(
           workspaces: state.workspaces.filter((w) => w.path !== path),
         })),
 
-      clearWorkspaces: () =>
-        set(() => ({ workspaces: [], workspaceParents: [] })),
+      clearWorkspaces: () => set(() => ({ workspaces: [] })),
 
       addWorkspaceParents: (items: LocalWorkspaceParent[]) =>
         set((state) => {
@@ -61,6 +62,10 @@ export const useWorkspacesStore = create<WorkspacesStore>()(
             (p) => p.path !== path,
           ),
         })),
+
+      clearWorkspaceParents: () => set(() => ({ workspaceParents: [] })),
+
+      clearAll: () => set(() => ({ workspaces: [], workspaceParents: [] })),
     }),
     {
       name: "workspaces-store",

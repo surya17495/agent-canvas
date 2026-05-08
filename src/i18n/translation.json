@@ -22710,5 +22710,14 @@
     "ca": "Confirma les preferències",
     "tr": "Tercihleri onayla",
     "uk": "Підтвердити налаштування"
+  },
+  "HOME$REMOVE_WORKSPACE_CONFIRMATION": {
+    "en": "Remove \"{{name}}\" from your saved workspaces?"
+  },
+  "HOME$REMOVE_WORKSPACE_PARENT_CONFIRMATION": {
+    "en": "Remove \"{{name}}\" and its {{count}} child workspaces?"
+  },
+  "HOME$WORKSPACE_SCAN_ERROR": {
+    "en": "Some workspace folders could not be loaded."
   }
 }

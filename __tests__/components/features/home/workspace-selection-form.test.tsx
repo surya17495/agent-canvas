@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, vi, beforeEach, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -112,9 +112,7 @@ describe("WorkspaceSelectionForm", () => {
       });
 
     // Pre-seed one workspace to verify dedup
-    renderForm([
-      { id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" },
-    ]);
+    renderForm([{ id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" }]);
     const user = userEvent.setup();
 
     // First pass: navigate into "dev" then click "Use this folder"
@@ -139,7 +137,10 @@ describe("WorkspaceSelectionForm", () => {
     // The same /Users/me/dev folder should be deduped, not duplicated, and
     // its children should NOT have been imported as workspaces.
     expect(
-      useWorkspacesStore.getState().workspaces.map((w) => w.path).sort(),
+      useWorkspacesStore
+        .getState()
+        .workspaces.map((w) => w.path)
+        .sort(),
     ).toEqual(["/Users/me/dev"]);
 
     // Second pass: pick a child folder; it should be added as a single
@@ -158,18 +159,27 @@ describe("WorkspaceSelectionForm", () => {
     );
 
     expect(
-      useWorkspacesStore.getState().workspaces.map((w) => w.path).sort(),
+      useWorkspacesStore
+        .getState()
+        .workspaces.map((w) => w.path)
+        .sort(),
     ).toEqual(["/Users/me/dev", "/Users/me/dev/repo1"]);
     expect(searchSpy).toHaveBeenCalledWith("/Users/me/dev");
   });
 
-  it("Manage Workspaces lets you remove individual workspaces", async () => {
+  it("Manage Workspaces lets you remove individual workspaces and clears the current selection", async () => {
     const workspaces: LocalWorkspace[] = [
       { id: "/Users/me/dev/repo1", name: "repo1", path: "/Users/me/dev/repo1" },
       { id: "/Users/me/dev/repo2", name: "repo2", path: "/Users/me/dev/repo2" },
     ];
     renderForm(workspaces);
     const user = userEvent.setup();
+    const launchButton = screen.getByTestId("workspace-launch-button");
+
+    await user.click(screen.getByTestId("workspace-dropdown"));
+    const dropdownMenu = await screen.findByTestId("workspace-dropdown-menu");
+    await user.click(within(dropdownMenu).getByText("repo1"));
+    expect(launchButton).toBeEnabled();
 
     await user.click(screen.getByTestId("workspace-dropdown"));
     await user.click(await screen.findByTestId("manage-workspaces-button"));
@@ -177,9 +187,17 @@ describe("WorkspaceSelectionForm", () => {
     await screen.findByTestId("manage-workspaces-modal");
     await user.click(screen.getByTestId("manage-workspaces-remove-repo1"));
 
-    expect(
-      useWorkspacesStore.getState().workspaces.map((w) => w.path),
-    ).toEqual(["/Users/me/dev/repo2"]);
+    expect(useWorkspacesStore.getState().workspaces.map((w) => w.path)).toEqual(
+      ["/Users/me/dev/repo1", "/Users/me/dev/repo2"],
+    );
+
+    await screen.findByTestId("confirmation-modal");
+    await user.click(screen.getByTestId("confirm-button"));
+
+    expect(useWorkspacesStore.getState().workspaces.map((w) => w.path)).toEqual(
+      ["/Users/me/dev/repo2"],
+    );
+    expect(launchButton).toBeDisabled();
 
     await user.click(screen.getByTestId("manage-workspaces-done"));
     await waitFor(() =>
@@ -247,6 +265,22 @@ describe("WorkspaceSelectionForm", () => {
     expect(launchButton).toBeEnabled();
   });
 
+  it("disables the workspace dropdown while parent workspaces are loading", async () => {
+    vi.spyOn(FilesService, "searchSubdirs").mockReturnValue(
+      new Promise(() => {}) as never,
+    );
+
+    renderForm(
+      [],
+      [{ id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" }],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-dropdown")).toBeDisabled();
+    });
+    expect(screen.getByTestId("workspace-status-message")).toBeInTheDocument();
+  });
+
   it("Add all subdirectories saves a workspace parent and lists its children dynamically", async () => {
     vi.spyOn(FilesService, "getHome").mockResolvedValue({ home: "/Users/me" });
     const searchSpy = vi
@@ -297,8 +331,11 @@ describe("WorkspaceSelectionForm", () => {
 
     // ...and its subdirectories surface as workspaces dynamically.
     await user.click(screen.getByTestId("workspace-dropdown"));
-    await screen.findByText("repo1");
-    await screen.findByText("repo2");
+    const dynamicDropdown = await screen.findByTestId(
+      "workspace-dropdown-menu",
+    );
+    await within(dynamicDropdown).findByText("repo1");
+    await within(dynamicDropdown).findByText("repo2");
 
     expect(searchSpy).toHaveBeenCalledWith("/Users/me/dev");
   });
@@ -323,8 +360,9 @@ describe("WorkspaceSelectionForm", () => {
 
     // Children should appear in the dropdown.
     await user.click(screen.getByTestId("workspace-dropdown"));
-    await screen.findByText("repoA");
-    await screen.findByText("repoB");
+    const dropdownMenu = await screen.findByTestId("workspace-dropdown-menu");
+    await within(dropdownMenu).findByText("repoA");
+    await within(dropdownMenu).findByText("repoB");
 
     // Manage modal should expose a remove button for the parent.
     await user.click(screen.getByTestId("manage-workspaces-button"));
@@ -335,7 +373,32 @@ describe("WorkspaceSelectionForm", () => {
 
     await user.click(screen.getByTestId("manage-workspaces-remove-parent-dev"));
 
+    expect(useWorkspacesStore.getState().workspaceParents).toEqual([
+      { id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" },
+    ]);
+
+    await screen.findByTestId("confirmation-modal");
+    await user.click(screen.getByTestId("confirm-button"));
+
     expect(useWorkspacesStore.getState().workspaceParents).toEqual([]);
     expect(searchSpy).toHaveBeenCalledWith("/Users/me/dev");
+
+    await user.click(screen.getByTestId("manage-workspaces-done"));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("manage-workspaces-modal"),
+      ).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("workspace-dropdown"));
+    const refreshedDropdown = await screen.findByTestId(
+      "workspace-dropdown-menu",
+    );
+    expect(
+      within(refreshedDropdown).queryByText("repoA"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(refreshedDropdown).queryByText("repoB"),
+    ).not.toBeInTheDocument();
   });
 });
