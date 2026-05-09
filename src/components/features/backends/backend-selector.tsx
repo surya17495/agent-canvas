@@ -2,7 +2,7 @@ import React from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { useMatch, useNavigate } from "react-router";
-import { Plus, Settings } from "lucide-react";
+import { Plus, ServerCog, Settings } from "lucide-react";
 import { Dropdown } from "#/ui/dropdown/dropdown";
 import { DropdownOption } from "#/ui/dropdown/types";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
@@ -16,8 +16,10 @@ import {
   ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS,
   triggerEnvironmentSwitch,
 } from "#/components/features/backends/environment-switch-overlay";
+import { useBackendServerInfo } from "#/hooks/query/use-backend-server-info";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { useRunApplicationPrompt } from "#/prompts/hooks/use-run-application-prompt";
 import { AddBackendModal } from "./add-backend-modal";
 import { ManageBackendsModal } from "./manage-backends-modal";
 
@@ -40,24 +42,46 @@ function buildOptions(
   registered: Backend[],
   bundledLabel: string,
   personalWorkspaceLabel: string,
+  backendServerInfo: ReturnType<typeof useBackendServerInfo>,
+  formatVersionLabel: (version: string) => string,
   cloudOrgs: ReturnType<typeof useAllCloudOrganizations>,
   currentUserIds: ReturnType<typeof useCloudCurrentUserId>,
 ): DropdownOption[] {
+  const makeBackendMetadata = (backend: Backend) => {
+    const version = backendServerInfo[backend.id]?.version;
+    return {
+      description: backend.host,
+      ...(version ? { rightLabel: formatVersionLabel(version) } : {}),
+    };
+  };
+
   const options: DropdownOption[] = [
-    { value: makeOptionValue(bundled.id, null), label: bundledLabel },
+    {
+      value: makeOptionValue(bundled.id, null),
+      label: bundledLabel,
+      ...makeBackendMetadata(bundled),
+    },
   ];
 
   const locals = registered.filter((b) => b.kind === "local");
   const clouds = registered.filter((b) => b.kind === "cloud");
 
   for (const b of locals) {
-    options.push({ value: makeOptionValue(b.id, null), label: b.name });
+    options.push({
+      value: makeOptionValue(b.id, null),
+      label: b.name,
+      ...makeBackendMetadata(b),
+    });
   }
 
   for (const b of clouds) {
     const entry = cloudOrgs[b.id];
     if (!entry || entry.orgs.length === 0) {
-      options.push({ value: makeOptionValue(b.id, null), label: b.name });
+      options.push({
+        value: makeOptionValue(b.id, null),
+        label: b.name,
+        description: b.host,
+      });
     } else {
       // Personal-workspace rule (per the SaaS contract): the org whose
       // id matches the calling user's id is the user's personal
@@ -71,6 +95,7 @@ function buildOptions(
         options.push({
           value: makeOptionValue(b.id, org.id),
           label: `${b.name} – ${orgLabel}`,
+          description: b.host,
         });
       }
     }
@@ -95,6 +120,8 @@ export function BackendSelector({
   const { mutateAsync: switchOrg, isPending: isSwitching } =
     useSwitchCloudOrganization();
   const navigate = useNavigate();
+  const { runApplicationPrompt, isPending: isRunningApplicationPrompt } =
+    useRunApplicationPrompt();
   const conversationMatch = useMatch("/conversations/:conversationId");
   const automationDetailMatch = useMatch("/automations/:automationId");
   const [addBackendModalOpen, setAddBackendModalOpen] = React.useState(false);
@@ -103,6 +130,15 @@ export function BackendSelector({
 
   const bundledLabel = t(I18nKey.BACKEND$LOCAL_ROW);
   const personalWorkspaceLabel = t(I18nKey.BACKEND$PERSONAL_WORKSPACE);
+  const selectableBackends = React.useMemo(
+    () => [bundledBackend, ...backends],
+    [bundledBackend, backends],
+  );
+  const backendServerInfo = useBackendServerInfo(selectableBackends);
+  const formatVersionLabel = React.useCallback(
+    (version: string) => t(I18nKey.BACKEND$VERSION_LABEL, { version }),
+    [t],
+  );
 
   const options = React.useMemo(
     () =>
@@ -111,6 +147,8 @@ export function BackendSelector({
         backends,
         bundledLabel,
         personalWorkspaceLabel,
+        backendServerInfo,
+        formatVersionLabel,
         cloudOrgs,
         currentUserIds,
       ),
@@ -119,6 +157,8 @@ export function BackendSelector({
       backends,
       bundledLabel,
       personalWorkspaceLabel,
+      backendServerInfo,
+      formatVersionLabel,
       cloudOrgs,
       currentUserIds,
     ],
@@ -211,6 +251,24 @@ export function BackendSelector({
       >
         <Plus width={16} height={16} className="text-white shrink-0" />
         {t(I18nKey.BACKEND$ADD)}
+      </button>
+      <button
+        type="button"
+        data-testid="add-backend-with-agent-menu-item"
+        disabled={isRunningApplicationPrompt}
+        onMouseDown={preventDropdownMenuClose}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void runApplicationPrompt({
+            promptId: "configure-remote-vm-agent",
+            mode: "new-conversation-initial-message",
+          });
+        }}
+        className="flex w-full items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer text-white hover:bg-[#5C5D62] disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        <ServerCog width={16} height={16} className="text-white shrink-0" />
+        {t(I18nKey.BACKEND$ADD_WITH_AGENT)}
       </button>
       <button
         type="button"

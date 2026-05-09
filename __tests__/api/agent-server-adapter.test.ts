@@ -6,6 +6,7 @@ import {
   toAppConversation,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
+import { renderApplicationPrompt } from "#/prompts/registry";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 
 const { mockGetAgentServerWorkingDir, mockIsAgentServerToolAvailable } =
@@ -31,7 +32,6 @@ vi.mock("#/api/agent-server-compatibility", () => ({
 beforeEach(() => {
   mockIsAgentServerToolAvailable.mockReturnValue(true);
 });
-
 
 describe("buildStartConversationRequest", () => {
   it("uses nested settings as the source of truth and keeps SDK tool names", () => {
@@ -101,6 +101,26 @@ describe("buildStartConversationRequest", () => {
     expect(payload.initial_message.content[0]?.text).toBe("hello");
   });
 
+  it("starts backend-agent setup conversations with the current LLM profile model", () => {
+    const setupPrompt = renderApplicationPrompt("configure-remote-vm-agent");
+
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          llm: { model: "current-profile-model" },
+        },
+      },
+      query: setupPrompt,
+    }) as {
+      agent: { llm: { model: string } };
+      initial_message: { content: Array<{ text: string }> };
+    };
+
+    expect(payload.agent.llm.model).toBe("current-profile-model");
+    expect(payload.initial_message.content[0]?.text).toBe(setupPrompt);
+  });
 
   it("omits browser_tool_set when the server does not advertise browser support", () => {
     mockIsAgentServerToolAvailable.mockReturnValue(false);

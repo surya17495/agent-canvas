@@ -45,24 +45,49 @@ export function DropdownMenu({
           </li>
         )}
         {isOpen &&
-          filteredOptions.map((option, index) => (
-            <li
-              key={option.value}
-              {...getItemProps({
-                item: option,
-                index,
-                className: cn(
-                  "px-2 py-2 cursor-pointer text-sm rounded-md",
-                  "text-white focus:outline-none font-normal",
-                  selectedItem?.value === option.value
-                    ? "bg-[#C9B974] text-black"
-                    : "hover:bg-[#5C5D62]",
-                ),
-              })}
-            >
-              {option.label}
-            </li>
-          ))}
+          filteredOptions.map((option, index) => {
+            const isSelected = selectedItem?.value === option.value;
+            return (
+              <li
+                key={option.value}
+                {...getItemProps({
+                  item: option,
+                  index,
+                  className: cn(
+                    "px-2 py-2 cursor-pointer text-sm rounded-md",
+                    "flex items-center gap-3 focus:outline-none font-normal",
+                    isSelected
+                      ? "bg-[#C9B974] text-black"
+                      : "text-white hover:bg-[#5C5D62]",
+                  ),
+                })}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate">{option.label}</span>
+                  {option.description ? (
+                    <span
+                      className={cn(
+                        "truncate text-xs",
+                        isSelected ? "text-black/70" : "text-[#A3A3A3]",
+                      )}
+                    >
+                      {option.description}
+                    </span>
+                  ) : null}
+                </div>
+                {option.rightLabel ? (
+                  <span
+                    className={cn(
+                      "shrink-0 text-xs",
+                      isSelected ? "text-black/70" : "text-[#A3A3A3]",
+                    )}
+                  >
+                    {option.rightLabel}
+                  </span>
+                ) : null}
+              </li>
+            );
+          })}
       </ul>
       {isOpen && footer ? (
         <div className="border-t border-[#242424] p-1">{footer}</div>

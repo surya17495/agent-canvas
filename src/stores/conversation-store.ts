@@ -87,8 +87,22 @@ const parseStoredBoolean = (value: string | null): boolean | null => {
   }
 };
 
-const getInitialRightPanelState = (): boolean => {
+const getBrowserLocalStorage = (): Storage | null => {
   if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storage = window.localStorage;
+  if (!storage || typeof storage.getItem !== "function") {
+    return null;
+  }
+
+  return storage;
+};
+
+const getInitialRightPanelState = (): boolean => {
+  const storage = getBrowserLocalStorage();
+  if (!storage) {
     return true;
   }
 
@@ -101,7 +115,7 @@ const getInitialRightPanelState = (): boolean => {
   keysToCheck.push("conversation-right-panel-shown");
 
   for (const key of keysToCheck) {
-    const parsed = parseStoredBoolean(localStorage.getItem(key));
+    const parsed = parseStoredBoolean(storage.getItem(key));
     if (parsed !== null) {
       return parsed;
     }

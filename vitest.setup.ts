@@ -19,6 +19,41 @@ const windowStub =
 vi.stubGlobal("window", windowStub);
 windowStub.scrollTo = vi.fn();
 
+const createMemoryStorage = (): Storage => {
+  const store = new Map<string, string>();
+
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(key) ?? null,
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string) => store.delete(key),
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+  };
+};
+
+const hasUsableStorage = (storage: Storage | undefined): storage is Storage =>
+  !!storage &&
+  typeof storage.getItem === "function" &&
+  typeof storage.setItem === "function" &&
+  typeof storage.removeItem === "function" &&
+  typeof storage.clear === "function";
+
+if (!hasUsableStorage(windowStub.localStorage)) {
+  Object.defineProperty(windowStub, "localStorage", {
+    value: createMemoryStorage(),
+    configurable: true,
+  });
+}
+
+if (!hasUsableStorage(globalThis.localStorage)) {
+  vi.stubGlobal("localStorage", windowStub.localStorage);
+}
+
 if (typeof requestAnimationFrame === "undefined") {
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
     setTimeout(() => callback(0), 0),

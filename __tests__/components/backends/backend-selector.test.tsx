@@ -12,15 +12,22 @@ import { createRoutesStub, MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAxiosError } from "test-utils";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   ActiveBackendProvider,
   useActiveBackendContext,
 } from "#/contexts/active-backend-context";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import {
   __resetEnvironmentSwitchOverlayForTests,
   EnvironmentSwitchOverlay,
 } from "#/components/features/backends/environment-switch-overlay";
+import { renderApplicationPrompt } from "#/prompts/registry";
+import { useConversationStore } from "#/stores/conversation-store";
 
 import {
   getCloudOrganizations,
@@ -29,6 +36,16 @@ import {
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+
+const { createServerClientMock, getServerInfoMock } = vi.hoisted(() => {
+  const getServerInfoMock = vi.fn();
+  return {
+    getServerInfoMock,
+    createServerClientMock: vi.fn((options: unknown) => ({
+      getServerInfo: () => getServerInfoMock(options),
+    })),
+  };
+});
 
 vi.mock("#/api/cloud/organization-service.api", () => ({
   getCloudOrganizations: vi.fn(),
@@ -41,14 +58,56 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
-function renderWithProviders(ui: React.ReactElement) {
+vi.mock("react-i18next", async () => {
+  const actual = await vi.importActual("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, unknown>) =>
+        key === "BACKEND$VERSION_LABEL"
+          ? `v${String(options?.version ?? "")}`
+          : key,
+      i18n: { language: "en" },
+    }),
+  };
+});
+
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackConversationCreated: vi.fn(),
+  }),
+}));
+
+vi.mock("#/api/typescript-client", async () => {
+  const actual = await vi.importActual<
+    typeof import("#/api/typescript-client")
+  >("#/api/typescript-client");
+  return {
+    ...actual,
+    createServerClient: (...args: unknown[]) => createServerClientMock(args[0]),
+  };
+});
+
+function renderWithProviders(
+  ui: React.ReactElement,
+  navigation: Partial<NavigationContextValue> = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const navigationValue: NavigationContextValue = {
+    currentPath: "/",
+    conversationId: null,
+    isNavigating: false,
+    navigate: vi.fn(),
+    ...navigation,
+  };
   return render(
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
-        <ActiveBackendProvider>{ui}</ActiveBackendProvider>
+        <NavigationProvider value={navigationValue}>
+          <ActiveBackendProvider>{ui}</ActiveBackendProvider>
+        </NavigationProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -76,9 +135,38 @@ async function openDropdown() {
   return user;
 }
 
+const makeStartTask = (conversationId: string) => ({
+  id: "task-id",
+  created_by_user_id: null,
+  status: "READY" as const,
+  detail: null,
+  app_conversation_id: conversationId,
+  agent_server_url: "http://agent-server.local",
+  request: {
+    initial_message: null,
+    processors: [],
+    llm_model: null,
+    selected_repository: null,
+    selected_branch: null,
+    git_provider: "github" as const,
+    suggested_task: null,
+    title: null,
+    trigger: null,
+    pr_number: [],
+    parent_conversation_id: null,
+    agent_type: "default" as const,
+  },
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
 beforeEach(() => {
   window.localStorage.clear();
+  useConversationStore.setState({ messageToSend: null });
   __resetActiveStoreForTests();
+  createServerClientMock.mockClear();
+  getServerInfoMock.mockReset();
+  getServerInfoMock.mockResolvedValue({ version: "1.0.0" });
   vi.mocked(getCloudOrganizations).mockReset();
   vi.mocked(switchCloudOrganization).mockReset();
   vi.mocked(switchCloudOrganization).mockResolvedValue(undefined);
@@ -99,7 +187,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   window.localStorage.clear();
+  useConversationStore.setState({ messageToSend: null });
   __resetActiveStoreForTests();
   __resetEnvironmentSwitchOverlayForTests();
 });
@@ -139,6 +229,36 @@ describe("BackendSelector", () => {
     expect(screen.getByText("BACKEND$LOCAL_ROW")).toBeInTheDocument();
     expect(screen.getByText("Local 1")).toBeInTheDocument();
     expect(screen.getByText("Production")).toBeInTheDocument();
+  });
+
+  it("shows backend host and agent-server version in dropdown rows", async () => {
+    getServerInfoMock.mockImplementation(
+      async (options: { host?: string }) => ({
+        version:
+          options.host === "http://remote.example:8000" ? "2.3.4" : "1.0.0",
+      }),
+    );
+
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "Remote Mac",
+            host: "http://remote.example:8000",
+            apiKey: "k",
+            kind: "local",
+          });
+        }}
+      >
+        <BackendSelector />
+      </TestSeed>,
+    );
+
+    await openDropdown();
+
+    expect(screen.getByText("Remote Mac")).toBeInTheDocument();
+    expect(screen.getByText("http://remote.example:8000")).toBeInTheDocument();
+    expect(await screen.findByText("v2.3.4")).toBeInTheDocument();
   });
 
   it("expands a cloud backend into one row per org and fires switch-org on select", async () => {
@@ -441,6 +561,11 @@ describe("BackendSelector", () => {
   });
 
   it("does not open backend modals on mouse down alone", async () => {
+    const createSpy = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+
     renderWithProviders(<BackendSelector />);
 
     await openDropdown();
@@ -452,6 +577,9 @@ describe("BackendSelector", () => {
     expect(
       screen.queryByTestId("manage-backends-modal"),
     ).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByTestId("add-backend-with-agent-menu-item"));
+    expect(createSpy).not.toHaveBeenCalled();
   });
 
   it("shows an error toast, dismisses the overlay, and does not switch to the failing cloud backend", async () => {
@@ -599,6 +727,9 @@ describe("BackendSelector", () => {
 
     const user = await openDropdown();
     expect(screen.getByTestId("add-backend-menu-item")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("add-backend-with-agent-menu-item"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("manage-backends-menu-item")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("add-backend-menu-item"));
@@ -607,6 +738,35 @@ describe("BackendSelector", () => {
     await user.click(screen.getByTestId("add-backend-cancel"));
     await waitFor(() => {
       expect(screen.queryByTestId("add-backend-modal")).not.toBeInTheDocument();
+    });
+  });
+
+  it("starts a conversation with the backend-agent setup prompt", async () => {
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeStartTask("conv-remote"));
+    const prompt = renderApplicationPrompt("configure-remote-vm-agent");
+    const navigate = vi.fn();
+
+    renderWithProviders(<BackendSelector />, { navigate });
+
+    const user = await openDropdown();
+    await user.click(screen.getByTestId("add-backend-with-agent-menu-item"));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        prompt,
+        undefined,
+        undefined,
+        null,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+    expect(useConversationStore.getState().messageToSend).toBeNull();
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith("/conversations/conv-remote");
     });
   });
 

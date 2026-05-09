@@ -141,9 +141,10 @@ describe("NewConversationButton", () => {
         path: "/workspace/project/repo1",
       },
     ]);
-    vi.spyOn(AgentServerConversationService, "createConversation").mockImplementation(
-      () => new Promise(() => {}),
-    );
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockImplementation(() => new Promise(() => {}));
 
     const user = userEvent.setup();
     renderWithProviders(<NewConversationButton />);

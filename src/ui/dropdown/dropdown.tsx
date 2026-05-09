@@ -41,7 +41,9 @@ export function Dropdown({
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredOptions = options.filter((option) =>
-    option.label.toLowerCase().includes(searchTerm.toLowerCase()),
+    [option.label, option.description, option.rightLabel]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => value.toLowerCase().includes(searchTerm.toLowerCase())),
   );
 
   const {

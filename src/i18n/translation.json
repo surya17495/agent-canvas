@@ -22189,6 +22189,11 @@
     "uk": "Додати бекенд",
     "ca": "Afegir backend"
   },
+  "BACKEND$ADD_WITH_AGENT": {
+    "en": "Add Backend with Agent",
+    "zh-CN": "用 Agent 添加后端",
+    "zh-TW": "用 Agent 新增後端"
+  },
   "BACKEND$MANAGE": {
     "en": "Manage Backends",
     "ja": "バックエンドを管理",
