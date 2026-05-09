@@ -57,7 +57,7 @@ describe("LlmSettingsScreen", () => {
         },
       }),
     );
-    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({ profiles: [] });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({ profiles: [], active_profile: null });
 
     renderLlmSettingsScreen();
 
@@ -86,7 +86,7 @@ describe("LlmSettingsScreen", () => {
         },
       }),
     );
-    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({ profiles: [] });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({ profiles: [], active_profile: null });
 
     renderLlmSettingsScreen();
 
@@ -113,6 +113,7 @@ describe("LlmSettingsScreen", () => {
         { name: "my_profile", model: "openai/gpt-4o", base_url: null, api_key_set: true },
         { name: "other_profile", model: "anthropic/claude-3", base_url: null, api_key_set: true },
       ],
+      active_profile: "my_profile",
     });
 
     renderLlmSettingsScreen();

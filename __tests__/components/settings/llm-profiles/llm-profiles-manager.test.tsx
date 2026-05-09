@@ -85,7 +85,7 @@ describe("LlmProfilesManager", () => {
 
   it("displays the section title", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
+      profiles: mockProfiles, active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -95,7 +95,7 @@ describe("LlmProfilesManager", () => {
 
   it("shows Add LLM Profile button when onAddProfile is provided", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [],
+      profiles: [], active_profile: null,
     });
 
     renderManager({ onAddProfile: vi.fn() });
@@ -106,7 +106,7 @@ describe("LlmProfilesManager", () => {
 
   it("does not show Add LLM Profile button when onAddProfile is not provided", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [],
+      profiles: [], active_profile: null,
     });
 
     renderManager();
@@ -118,7 +118,7 @@ describe("LlmProfilesManager", () => {
     const user = userEvent.setup();
     const handleAddProfile = vi.fn();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [],
+      profiles: [], active_profile: null,
     });
 
     renderManager({ onAddProfile: handleAddProfile });
@@ -130,7 +130,7 @@ describe("LlmProfilesManager", () => {
 
   it("displays profiles when they exist", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
+      profiles: mockProfiles, active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -141,7 +141,7 @@ describe("LlmProfilesManager", () => {
 
   it("shows empty state when no profiles exist", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [],
+      profiles: [], active_profile: null,
     });
 
     renderManager();
@@ -174,7 +174,7 @@ describe("LlmProfilesManager", () => {
     const user = userEvent.setup();
     const handleEditProfile = vi.fn();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
+      profiles: mockProfiles, active_profile: "gpt-4-profile",
     });
 
     renderManager({ onEditProfile: handleEditProfile });
@@ -195,7 +195,7 @@ describe("LlmProfilesManager", () => {
   it("opens rename modal when Rename is clicked from profile menu", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
+      profiles: mockProfiles, active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -215,7 +215,7 @@ describe("LlmProfilesManager", () => {
   it("opens delete modal when Delete is clicked from profile menu", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
+      profiles: mockProfiles, active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -235,7 +235,7 @@ describe("LlmProfilesManager", () => {
   it("closes rename modal when onClose is called", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
+      profiles: mockProfiles, active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -259,7 +259,7 @@ describe("LlmProfilesManager", () => {
   it("closes delete modal when onClose is called", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
+      profiles: mockProfiles, active_profile: "gpt-4-profile",
     });
 
     renderManager();

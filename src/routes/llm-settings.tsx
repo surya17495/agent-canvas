@@ -30,7 +30,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { LlmProfilesListView } from "#/components/features/settings/llm-profiles/llm-profiles-list-view";
 
 const LLM_EXCLUDED_KEYS = new Set(["llm.model", "llm.api_key", "llm.base_url"]);
@@ -117,7 +116,6 @@ export function LlmSettingsScreen({
   const { data: schema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
-  const { data: profilesData } = useLlmProfiles();
 
   const saveProfile = useSaveLlmProfile();
 
@@ -125,9 +123,6 @@ export function LlmSettingsScreen({
   const [editMode, setEditMode] = React.useState<EditMode>("none");
   const [profileName, setProfileName] = React.useState("");
   const lastSavedModelRef = React.useRef<string | null>(null);
-
-  // Current model from settings - used to determine which profile is "active"
-  const currentModel = settings?.llm_model ?? "";
 
   const defaultModel = String(
     (DEFAULT_SETTINGS.agent_settings?.llm as Record<string, unknown>)?.model ??
@@ -352,20 +347,11 @@ export function LlmSettingsScreen({
     setEditMode("edit");
   }, []);
 
-  // Handler for editing current settings (not a saved profile)
-  const handleEditCurrentSettings = React.useCallback(() => {
-    setProfileName("");
-    setEditMode("edit");
-  }, []);
-
   // Handler for cancel button in form
   const handleCancel = React.useCallback(() => {
     setProfileName("");
     setEditMode("none");
   }, []);
-
-  // Check if API key is set
-  const hasApiKey = settings?.llm_api_key_set ?? false;
 
   // If we're in form mode, show the settings form
   if (editMode !== "none") {
@@ -407,12 +393,8 @@ export function LlmSettingsScreen({
   return (
     <div data-testid="llm-settings-screen" className="flex flex-col gap-4">
       <LlmProfilesListView
-        profiles={profilesData?.profiles ?? []}
-        currentModel={currentModel}
-        hasApiKey={hasApiKey}
         onAddProfile={handleAddProfile}
         onEditProfile={handleEditProfile}
-        onEditCurrentSettings={handleEditCurrentSettings}
       />
     </div>
   );

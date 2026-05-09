@@ -9,6 +9,8 @@ export interface LlmProfileSummary {
 
 export interface ProfileListResponse {
   profiles: LlmProfileSummary[];
+  /** Name of the currently active profile, or null if none is active. */
+  active_profile: string | null;
 }
 
 export interface ProfileDetailResponse {
@@ -33,6 +35,12 @@ export interface SaveLlmProfileRequest {
 export interface ProfileMutationResponse {
   name: string;
   message: string;
+}
+
+export interface ActivateProfileResponse {
+  name: string;
+  message: string;
+  model: string | null;
 }
 
 class ProfilesService {
@@ -73,6 +81,13 @@ class ProfilesService {
     const { data } = await openHands.post<ProfileMutationResponse>(
       `/api/profiles/${encodeURIComponent(name)}/rename`,
       { new_name: newName },
+    );
+    return data;
+  }
+
+  static async activateProfile(name: string): Promise<ActivateProfileResponse> {
+    const { data } = await openHands.post<ActivateProfileResponse>(
+      `/api/profiles/${encodeURIComponent(name)}/activate`,
     );
     return data;
   }

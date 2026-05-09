@@ -8,4 +8,3 @@ export { ProfileNameInput } from "./profile-name-input";
 export { LlmProfilesListView } from "./llm-profiles-list-view";
 export { ProfileListRow } from "./profile-list-row";
 export { ProfileListActionsMenu } from "./profile-list-actions-menu";
-export { CurrentSettingsRow } from "./current-settings-row";

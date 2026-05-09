@@ -38,6 +38,7 @@ describe("useLlmProfiles", () => {
         { name: "profile-1", model: "openai/gpt-4", base_url: null, api_key_set: true },
         { name: "profile-2", model: "anthropic/claude-3", base_url: null, api_key_set: false },
       ],
+      active_profile: "profile-1",
     };
 
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue(mockProfiles);
@@ -54,7 +55,7 @@ describe("useLlmProfiles", () => {
   });
 
   it("uses the correct query key", async () => {
-    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [] });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [], active_profile: null });
 
     const { result } = renderHook(() => useLlmProfiles(), { wrapper });
 
@@ -69,7 +70,7 @@ describe("useLlmProfiles", () => {
   });
 
   it("has staleTime of 5 minutes", async () => {
-    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [] });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [], active_profile: null });
 
     const { result } = renderHook(() => useLlmProfiles(), { wrapper });
 
@@ -87,7 +88,7 @@ describe("useLlmProfiles", () => {
   });
 
   it("has gcTime of 15 minutes", async () => {
-    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [] });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [], active_profile: null });
 
     const { result } = renderHook(() => useLlmProfiles(), { wrapper });
 
@@ -103,7 +104,7 @@ describe("useLlmProfiles", () => {
   });
 
   it("disables toast notifications via meta", async () => {
-    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [] });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({ profiles: [], active_profile: null });
 
     const { result } = renderHook(() => useLlmProfiles(), { wrapper });
 

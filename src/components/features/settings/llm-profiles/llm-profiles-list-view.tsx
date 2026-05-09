@@ -7,74 +7,47 @@ import { LlmProfileSummary } from "#/api/profiles-service/profiles-service.api";
 import { I18nKey } from "#/i18n/declaration";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { ProfileListRow } from "./profile-list-row";
-import { CurrentSettingsRow } from "./current-settings-row";
-import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
-import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 
 interface LlmProfilesListViewProps {
-  profiles: LlmProfileSummary[];
-  currentModel: string;
-  hasApiKey: boolean;
   onAddProfile: () => void;
   onEditProfile: (profile: LlmProfileSummary) => void;
-  onEditCurrentSettings: () => void;
 }
 
 export function LlmProfilesListView({
-  profiles,
-  currentModel,
-  hasApiKey,
   onAddProfile,
   onEditProfile,
-  onEditCurrentSettings,
 }: LlmProfilesListViewProps) {
   const { t } = useTranslation("openhands");
-  const { isLoading, error, refetch } = useLlmProfiles();
-  const { mutateAsync: saveSettings } = useSaveSettings("personal");
+  const { data, isLoading, error } = useLlmProfiles();
+  const activateProfile = useActivateLlmProfile();
   const [profileToRename, setProfileToRename] =
     useState<LlmProfileSummary | null>(null);
   const [profileToDelete, setProfileToDelete] =
     useState<LlmProfileSummary | null>(null);
-  const [activatingProfile, setActivatingProfile] = useState<string | null>(
-    null,
-  );
+
+  const profiles = data?.profiles ?? [];
+  const activeProfile = data?.active_profile ?? null;
 
   const handleActivate = async (profile: LlmProfileSummary) => {
-    setActivatingProfile(profile.name);
     try {
-      // Load the full profile config
-      const profileDetail = await ProfilesService.getProfile(profile.name);
-      const config = profileDetail.config as Record<string, unknown>;
-
-      // Apply the profile's LLM settings
-      await saveSettings({
-        agent_settings_diff: {
-          llm: config,
-        },
-      });
-
+      await activateProfile.mutateAsync(profile.name);
       displaySuccessToast(
         t(I18nKey.SETTINGS$PROFILE_ACTIVATED, { name: profile.name }),
       );
-      refetch();
     } catch {
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
-    } finally {
-      setActivatingProfile(null);
     }
   };
 
   const handleEdit = (profile: LlmProfileSummary) => {
     onEditProfile(profile);
   };
-
-  // Check if current settings should be shown (has a model configured)
-  const hasCurrentSettings = Boolean(currentModel);
 
   // Header with Add button
   const renderHeader = () => (
@@ -117,36 +90,26 @@ export function LlmProfilesListView({
     );
   }
 
-  // Check if there are any profiles OR current settings to display
-  const hasAnyContent = profiles.length > 0 || hasCurrentSettings;
-
   return (
     <>
       <div className="flex flex-col gap-6">
         {renderHeader()}
 
-        {!hasAnyContent ? (
+        {profiles.length === 0 ? (
           <p className="text-sm text-gray-400 italic">
             {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
           </p>
         ) : (
           <div className="border border-tertiary rounded-md divide-y divide-tertiary">
-            {/* Current settings row - always shown first if configured */}
-            {hasCurrentSettings && (
-              <CurrentSettingsRow
-                model={currentModel}
-                hasApiKey={hasApiKey}
-                onEdit={onEditCurrentSettings}
-              />
-            )}
-
-            {/* Saved profiles */}
             {profiles.map((profile) => (
               <ProfileListRow
                 key={profile.name}
                 profile={profile}
-                isActive={profile.model === currentModel}
-                isActivating={activatingProfile === profile.name}
+                isActive={profile.name === activeProfile}
+                isActivating={
+                  activateProfile.isPending &&
+                  activateProfile.variables === profile.name
+                }
                 onActivate={() => handleActivate(profile)}
                 onEdit={() => handleEdit(profile)}
                 onRename={() => setProfileToRename(profile)}

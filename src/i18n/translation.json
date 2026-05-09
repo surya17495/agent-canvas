@@ -24087,22 +24087,5 @@
     "de": "Löschen",
     "uk": "Видалити",
     "ca": "Suprimeix"
-  },
-  "SETTINGS$CURRENT_CONFIGURATION": {
-    "en": "Current Configuration",
-    "ja": "現在の設定",
-    "zh-CN": "当前配置",
-    "zh-TW": "目前配置",
-    "ko-KR": "현재 구성",
-    "no": "Gjeldende konfigurasjon",
-    "it": "Configurazione corrente",
-    "pt": "Configuração atual",
-    "es": "Configuración actual",
-    "ar": "التكوين الحالي",
-    "fr": "Configuration actuelle",
-    "tr": "Mevcut Yapılandırma",
-    "de": "Aktuelle Konfiguration",
-    "uk": "Поточна конфігурація",
-    "ca": "Configuració actual"
   }
 }
