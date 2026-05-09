@@ -72,6 +72,9 @@ const initializeI18n = (instance: I18nInstance) => {
         backend: {
           loadPath: "/locales/{{lng}}/{{ns}}.json",
         },
+        interpolation: {
+          escapeValue: false,
+        },
       });
 
     initializationPromises.set(instance, initPromise);

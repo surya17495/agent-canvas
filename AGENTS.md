@@ -157,3 +157,5 @@
   - `npm run build` remains the standalone app build (`react-router build`), while `npm run build:lib` runs `vite build` in library mode plus `tsc -p tsconfig.lib.json` to emit `.d.ts` files into `dist/`.
   - The library build relies on `vite.config.ts` with `BUILD_LIB=true`, preserved modules in `dist/`, and package `exports` entries that map root/subpaths to `dist/**/*.js` plus matching declaration files.
   - Declaration emit needs `src/library-env.d.ts` and the narrowed `tsconfig.lib.json`; broad `src/**/*.tsx` declaration builds pulled in route-only files and missed `?react`/window globals.
+
+- i18next runtime init in `src/i18n/index.ts` must set `interpolation: { escapeValue: false }`. Without it, interpolated values inside `Trans` (e.g. conversation titles in `CONVERSATION$DELETE_WARNING_WITH_TITLE`) get HTML-escaped, so characters like `/` render as `&#x2F;`. React already escapes JSX text, and there is no `dangerouslySetInnerHTML` on translated strings, so disabling i18next's escape is the correct config (matches the existing `test-utils.tsx` setup).
