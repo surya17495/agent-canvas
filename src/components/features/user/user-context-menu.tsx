@@ -5,6 +5,7 @@ import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import DocumentIcon from "#/icons/document.svg?react";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import { AddBackendMenuItem } from "#/components/features/backends/add-backend-menu-item";
+import { ManageBackendsMenuItem } from "#/components/features/backends/manage-backends-menu-item";
 import { ContextMenuContainer } from "../context-menu/context-menu-container";
 import { ContextMenuNavLink } from "../context-menu/context-menu-nav-link";
 import { SettingsNavHeader } from "../settings/settings-nav-header";
@@ -18,11 +19,13 @@ const contextMenuListItemClassName = cn(
 interface UserContextMenuProps {
   onClose: () => void;
   onOpenAddBackend: () => void;
+  onOpenManageBackends: () => void;
 }
 
 export function UserContextMenu({
   onClose,
   onOpenAddBackend,
+  onOpenManageBackends,
 }: UserContextMenuProps) {
   const { t } = useTranslation("openhands");
   const settingsNavItems = useSettingsNavItems();
@@ -38,6 +41,7 @@ export function UserContextMenu({
 
         <div className="flex flex-col items-start gap-0 w-full">
           <AddBackendMenuItem onOpen={onOpenAddBackend} />
+          <ManageBackendsMenuItem onOpen={onOpenManageBackends} />
 
           <SettingsNavDivider className="my-1.5" />
 
