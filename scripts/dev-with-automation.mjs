@@ -694,7 +694,7 @@ async function main() {
   // Setup phase
   checkPrerequisites();
 
-  // Build config with dynamic port allocation (must be after prereq check)
+  // Build config with dynamic port allocation
   const config = await buildConfig(args);
   ensureDirectories(config);
 

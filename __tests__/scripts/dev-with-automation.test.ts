@@ -1,10 +1,11 @@
+import net from "node:net";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { homedir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import {
   buildAutomationCommand,
   buildConfig,
@@ -112,35 +113,100 @@ describe("buildAutomationCommand", () => {
 });
 
 describe("buildConfig", () => {
+  const servers: net.Server[] = [];
+
+  afterEach(() => {
+    for (const server of servers) {
+      server.close();
+    }
+    servers.length = 0;
+  });
+
   it("builds default config with correct ports", async () => {
     const config = await buildConfig({}, {});
 
     // Ports should be allocated (either defaults if free, or alternatives)
     expect(typeof config.ingressPort).toBe("number");
+    expect(config.ingressPort).toBeGreaterThan(0);
     expect(typeof config.agentServerPort).toBe("number");
+    expect(config.agentServerPort).toBeGreaterThan(0);
     expect(typeof config.autoBackendPort).toBe("number");
+    expect(config.autoBackendPort).toBeGreaterThan(0);
     expect(typeof config.vitePort).toBe("number");
+    expect(config.vitePort).toBeGreaterThan(0);
     expect(config.vscodePort).toBe(config.agentServerPort + 1000);
+
+    // All four main ports should be unique
+    const ports = new Set([
+      config.ingressPort,
+      config.agentServerPort,
+      config.autoBackendPort,
+      config.vitePort,
+    ]);
+    expect(ports.size).toBe(4);
   });
 
   it("respects preferred port from args when available", async () => {
-    // Port 9000 should be free for testing
-    const config = await buildConfig({ port: 9000 }, {});
+    // Use a high port unlikely to be busy
+    const preferredPort = 19500;
+    const config = await buildConfig({ port: preferredPort }, {});
 
-    expect(config.ingressPort).toBe(9000);
+    expect(config.ingressPort).toBe(preferredPort);
+  });
+
+  it("falls back to alternative port when ingress port is busy", async () => {
+    const busyPort = 8100;
+
+    // Block port 8100
+    const server = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.listen(busyPort, "127.0.0.1", () => {
+        servers.push(server);
+        resolve();
+      });
+      server.on("error", reject);
+    });
+
+    // Request the busy port
+    const config = await buildConfig({ port: busyPort }, {});
+
+    // Should get a different port since busyPort is taken
+    expect(config.ingressPort).not.toBe(busyPort);
+    expect(config.ingressPort).toBeGreaterThan(0);
+  });
+
+  it("allocates valid ports for all services", async () => {
+    const config = await buildConfig({}, {});
+
+    // All service ports should be valid
+    expect(config.agentServerPort).toBeGreaterThan(0);
+    expect(config.autoBackendPort).toBeGreaterThan(0);
+    expect(config.vitePort).toBeGreaterThan(0);
+    expect(config.vscodePort).toBeGreaterThan(0);
+
+    // All service ports should be different from each other
+    const servicePorts = [
+      config.agentServerPort,
+      config.autoBackendPort,
+      config.vitePort,
+      config.ingressPort,
+    ];
+    expect(new Set(servicePorts).size).toBe(servicePorts.length);
   });
 
   it("respects preferred PORT from env when available", async () => {
-    // Port 9001 should be free for testing
-    const config = await buildConfig({}, { PORT: "9001" });
+    // Use a high port unlikely to be busy
+    const preferredPort = "19501";
+    const config = await buildConfig({}, { PORT: preferredPort });
 
-    expect(config.ingressPort).toBe(9001);
+    expect(config.ingressPort).toBe(19501);
   });
 
   it("args.port takes precedence over env.PORT", async () => {
-    const config = await buildConfig({ port: 9002 }, { PORT: "9999" });
+    // Use high ports unlikely to be busy
+    const config = await buildConfig({ port: 19502 }, { PORT: "19599" });
 
-    expect(config.ingressPort).toBe(9002);
+    expect(config.ingressPort).toBe(19502);
   });
 
   it("applies automationGitRef from args to env", async () => {

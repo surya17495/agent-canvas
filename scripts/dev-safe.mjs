@@ -62,15 +62,24 @@ function isEnoentError(error) {
  * the OS assign any available port. This preserves predictable defaults
  * while gracefully handling port conflicts.
  *
+ * **Note on race conditions:** There is a small window between when this
+ * function checks port availability and when the calling service actually
+ * binds to the port. During this window, another process could theoretically
+ * grab the port. This is an accepted limitation of the "check-then-use"
+ * approach. Callers (like agent-server) should handle EADDRINUSE gracefully.
+ * For Vite, `strictPort: true` ensures a fast failure if this occurs.
+ *
  * @param {number} preferredPort - The port to try first
  * @param {string} host - The host to bind to (default: "127.0.0.1")
  * @returns {Promise<number>} The actual port that was acquired
  */
 export async function findFreePort(preferredPort, host = "127.0.0.1") {
-  // Try the preferred port first
-  const preferredAvailable = await tryPort(preferredPort, host);
-  if (preferredAvailable) {
-    return preferredPort;
+  // If preferredPort is 0, skip the check and go straight to OS assignment
+  if (preferredPort > 0) {
+    const preferredAvailable = await tryPort(preferredPort, host);
+    if (preferredAvailable) {
+      return preferredPort;
+    }
   }
 
   // Fall back to OS-assigned port
@@ -116,7 +125,8 @@ export async function findFreePorts(portConfigs, host = "127.0.0.1") {
 
   for (const { name, preferred } of portConfigs) {
     // Try preferred if not already taken by a previous allocation
-    if (!usedPorts.has(preferred)) {
+    // Skip if preferred is 0 (means "any port") or already used
+    if (preferred > 0 && !usedPorts.has(preferred)) {
       const available = await tryPort(preferred, host);
       if (available) {
         result[name] = preferred;
@@ -127,8 +137,15 @@ export async function findFreePorts(portConfigs, host = "127.0.0.1") {
 
     // Fall back to OS-assigned port, retrying if we get a collision
     let port;
+    let attempts = 0;
+    const maxAttempts = 100;
     do {
       port = await findFreePort(0, host);
+      if (++attempts > maxAttempts) {
+        throw new Error(
+          `Could not allocate unique port for "${name}" after ${maxAttempts} attempts`,
+        );
+      }
     } while (usedPorts.has(port));
 
     result[name] = port;
@@ -273,8 +290,14 @@ function parsePort(value, fallback) {
 /**
  * Build safe dev configuration (synchronous version).
  *
- * Uses the port values from environment variables or defaults.
- * For dynamic port allocation with fallback, use buildSafeDevConfigAsync instead.
+ * Uses the port values from environment variables or defaults WITHOUT checking
+ * port availability. Use this when:
+ * - You need synchronous config (e.g., for test setup, config inspection)
+ * - Ports are already known to be available (e.g., specified via env vars)
+ * - You're building config objects for downstream use, not starting services
+ *
+ * For scripts that actually start services (dev-safe.mjs main, dev-with-automation.mjs),
+ * use {@link buildSafeDevConfigAsync} instead to handle port conflicts gracefully.
  *
  * @param {string} cwd - Current working directory
  * @param {Record<string, string | undefined>} env - Environment variables
