@@ -74,16 +74,6 @@ Access the UI at [http://localhost:8000](http://localhost:8000)
 
 By default, the dev script automatically passes the generated session API key to the browser frontend for local convenience. To require each browser to enter the key instead, start it with `OH_REQUIRE_BROWSER_SESSION_KEY=1 npm run dev:dangerously-dockerless`; users can enter the key from `~/.openhands/agent-canvas/session-api-key.txt` (or your `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` value) in the onboarding backend connection step.
 
-### Remote VM / internet access
-
-To serve Agent Canvas from a VM, use the static remote stack:
-
-```sh
-npm run dev:remote -- --port 8000
-```
-
-Expose only the ingress port (default `8000`) through your firewall or reverse proxy. The agent-server, automation backend, and static-file server bind to `127.0.0.1`; the public ingress forwards `/api`, `/sockets`, and the UI. The frontend build intentionally does **not** bundle `VITE_SESSION_API_KEY`. When you open the UI in a browser, enter the session API key from `~/.openhands/agent-canvas/session-api-key.txt` (or your `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` value) in the onboarding backend connection step.
-
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.

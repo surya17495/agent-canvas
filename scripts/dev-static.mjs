@@ -28,7 +28,6 @@
  *   npm run dev:static -- --port 12000
  *   npm run dev:static -- --skip-build      # reuse an existing build/
  *   npm run dev:static -- --automation-ref feat/my-branch
- *   npm run dev:remote                      # internet-facing ingress; browser enters API key
  *
  * Environment variables (all optional, same as dev:automation):
  *   - PORT: Ingress port (default: 8000)
@@ -105,7 +104,6 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     automationGitRef: null,
     automationRepo: null,
     skipBuild: false,
-    remote: false,
     requireBrowserSessionKey: shouldRequireBrowserSessionKey(env),
     verbose: false,
   };
@@ -124,10 +122,6 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         break;
       case "--skip-build":
         config.skipBuild = true;
-        break;
-      case "--remote":
-        config.remote = true;
-        config.requireBrowserSessionKey = true;
         break;
       case "--require-browser-session-key":
         config.requireBrowserSessionKey = true;
@@ -162,8 +156,6 @@ OPTIONS:
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
-  --remote                    Bind internal services to localhost and require
-                              browser entry of the session API key
   --require-browser-session-key
                               Do not bake VITE_SESSION_API_KEY into the
                               frontend build; users enter it in the browser
@@ -263,7 +255,7 @@ function buildFrontend(config, args) {
   if (config.requireBrowserSessionKey) {
     // Vite also reads .env files directly. Setting this to an empty string in
     // the process environment takes precedence over any VITE_SESSION_API_KEY in
-    // .env, so remote builds do not embed the secret in static assets.
+    // .env, so browser-key builds do not embed the secret in static assets.
     frontendEnv.VITE_SESSION_API_KEY = "";
   }
 
@@ -589,11 +581,6 @@ function printBanner(config) {
       );
     }
   }
-  if (config.remote) {
-    console.log(
-      `${c.dim}Remote mode: only the ingress port is intended to be exposed; internal services bind to 127.0.0.1.${c.reset}`,
-    );
-  }
   console.log(
     `${c.dim}Frontend served from: ${join(config.canvasPath, "build")}${c.reset}`,
   );
@@ -612,10 +599,9 @@ async function main() {
   const args = parseArgs();
   const config = {
     ...(await buildConfig(args)),
-    remote: args.remote,
     requireBrowserSessionKey: args.requireBrowserSessionKey,
-    internalHost: args.remote ? "127.0.0.1" : "0.0.0.0",
-    staticHost: args.remote ? "127.0.0.1" : "0.0.0.0",
+    internalHost: "0.0.0.0",
+    staticHost: "0.0.0.0",
   };
 
   console.log("");
