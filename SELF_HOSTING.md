@@ -285,9 +285,9 @@ and restart the app so both sides regenerate from the same value.
 
 If you do not want the frontend to receive that key automatically, start the
 recommended Docker or non-Docker stack with `OH_REQUIRE_BROWSER_SESSION_KEY=1`.
-The agent server still uses the generated/pinned key, but the browser shows the
-Agent Server connection screen and each user must enter the session key manually
-before API requests can succeed.
+The agent server still uses the generated/pinned key, but each browser must
+enter the session key manually in the onboarding backend connection step before
+API requests can succeed.
 
 ## 5. (Optional) Connect your local Agent Canvas to the remote machine
 

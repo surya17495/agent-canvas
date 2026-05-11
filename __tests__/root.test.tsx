@@ -70,7 +70,7 @@ const renderApp = (initialEntries: string[] = ["/"]) =>
     ),
   });
 
-describe("App root agent-server availability guard", () => {
+describe("App root agent-server bootstrap", () => {
   beforeEach(() => {
     window.localStorage.clear();
     __resetActiveStoreForTests();
@@ -108,7 +108,7 @@ describe("App root agent-server availability guard", () => {
     });
   });
 
-  it("shows the agent-server connection form when the backend is unreachable", async () => {
+  it("renders the routed page when the backend is unreachable", async () => {
     let serverInfoRequests = 0;
 
     server.use(
@@ -121,21 +121,16 @@ describe("App root agent-server availability guard", () => {
     renderApp(["/"]);
 
     await waitFor(() => {
-      expect(
-        screen.getByTestId("agent-server-onboarding-screen"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
     });
 
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("agent-server-connection-form"),
-      ).toBeInTheDocument();
-    });
     expect(serverInfoRequests).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-server-onboarding-screen"),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows the agent-server connection form when the backend requires a session API key", async () => {
+  it("renders the routed page when the backend requires a session API key", async () => {
     server.use(
       http.get("/server_info", () =>
         HttpResponse.json({ detail: "Unauthorized" }, { status: 401 }),
@@ -145,15 +140,12 @@ describe("App root agent-server availability guard", () => {
     renderApp(["/"]);
 
     await waitFor(() => {
-      expect(
-        screen.getByTestId("agent-server-onboarding-screen"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
     });
+
     expect(
-      screen.getByTestId("agent-server-connection-form"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("agent-server-api-key-input")).toHaveValue("");
-    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+      screen.queryByTestId("agent-server-onboarding-screen"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the routed page when the agent server is reachable", async () => {
