@@ -15,3 +15,4 @@ dist/
 .react-router/
 ralph/
 .vercel
+*.tgz
