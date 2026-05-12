@@ -105,9 +105,9 @@ import { AgentServerUIProviders } from '@openhands/agent-canvas';
 
 // Individual component packages
 import { BrowserPanel } from '@openhands/agent-canvas/browser';
-import { ChatInterface } from '@openhands/agent-canvas/conversation';
+import { ChatPanel } from '@openhands/agent-canvas/conversation';
 import { FileExplorer } from '@openhands/agent-canvas/files';
-import { Terminal } from '@openhands/agent-canvas/terminal';
+import { TerminalPanel } from '@openhands/agent-canvas/terminal';
 ```
 
 ### Available Subpath Exports

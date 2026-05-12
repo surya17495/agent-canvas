@@ -77,12 +77,20 @@ this is a packaging error. If running from source:
 }
 
 // Import dev-docker's dependencies and run with static mode
-const { main, c, logError } = await import("../scripts/dev-with-automation.mjs");
-const {
-  checkDockerPrereqs,
-  startAgentServerDocker,
-  CONTAINER_WORKSPACES_DIR,
-} = await import("../scripts/dev-docker.mjs");
+let main, checkDockerPrereqs, startAgentServerDocker, CONTAINER_WORKSPACES_DIR;
+try {
+  ({ main } = await import("../scripts/dev-with-automation.mjs"));
+  ({
+    checkDockerPrereqs,
+    startAgentServerDocker,
+    CONTAINER_WORKSPACES_DIR,
+  } = await import("../scripts/dev-docker.mjs"));
+} catch (err) {
+  console.error("Failed to load required scripts. Try reinstalling:");
+  console.error("  npm install -g @openhands/agent-canvas@latest");
+  console.error(`\nError: ${err.message}`);
+  process.exit(1);
+}
 
 main({
   bannerTitle: "Agent Canvas",
@@ -92,9 +100,9 @@ main({
   staticMode: true,
   staticDir: BUILD_DIR,
 }).catch((err) => {
-  logError(`Fatal error: ${err.message}`);
+  console.error(`Fatal error: ${err.message}`);
   if (err.stack) {
-    console.error(c.dim + err.stack + c.reset);
+    console.error(err.stack);
   }
   process.exit(1);
 });

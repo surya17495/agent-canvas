@@ -20,12 +20,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Trusted publishing requires Node 22.14.0+ and npm 11.5.1+
       # See: https://docs.npmjs.com/trusted-publishers/
       - name: Set up Node.js for npm trusted publishing
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
@@ -35,7 +35,14 @@ jobs:
         run: |
           echo "Node version: $(node --version)"
           echo "npm version: $(npm --version)"
-          # npm 11.5.1+ required for trusted publishing
+          NPM_VERSION=$(npm --version)
+          NPM_MAJOR=$(echo $NPM_VERSION | cut -d. -f1)
+          NPM_MINOR=$(echo $NPM_VERSION | cut -d. -f2)
+          if [ "$NPM_MAJOR" -lt 11 ] || ([ "$NPM_MAJOR" -eq 11 ] && [ "$NPM_MINOR" -lt 5 ]); then
+            echo "Error: npm 11.5.1+ required for trusted publishing, got $NPM_VERSION"
+            exit 1
+          fi
+          echo "✓ npm $NPM_VERSION meets trusted publishing requirements"
 
       - name: Install dependencies
         run: npm ci
@@ -51,6 +58,18 @@ jobs:
 
       - name: Verify package contents
         run: npm pack --dry-run
+
+      - name: Validate package version matches release tag
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          echo "Package version: $PACKAGE_VERSION"
+          echo "Release tag version: $TAG_VERSION"
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: package.json version ($PACKAGE_VERSION) doesn't match release tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✓ Version $PACKAGE_VERSION matches release tag"
 
       - name: Publish to npm with provenance
         run: npm publish --access public --provenance
