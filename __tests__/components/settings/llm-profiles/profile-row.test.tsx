@@ -208,7 +208,7 @@ describe("ProfileRow", () => {
     expect(handleDelete).toHaveBeenCalledWith(mockProfile);
   });
 
-  it("has accessible menu trigger button", () => {
+  it("has accessible menu trigger button with profile name", () => {
     render(
       <ProfileRow
         profile={mockProfile}
@@ -219,6 +219,10 @@ describe("ProfileRow", () => {
     );
 
     const menuTrigger = screen.getByTestId("profile-menu-trigger");
-    expect(menuTrigger).toHaveAttribute("aria-label", "Profile menu");
+    // aria-label should include the profile name for screen reader context
+    expect(menuTrigger).toHaveAttribute(
+      "aria-label",
+      `Profile menu for ${mockProfile.name}`,
+    );
   });
 });
