@@ -11,14 +11,18 @@ export function useActivateLlmProfile() {
 
   return useMutation({
     mutationFn: (name: string) => ProfilesService.activateProfile(name),
-    onSuccess: () => {
-      // Invalidate profiles list to refresh active_profile
-      queryClient.invalidateQueries({ queryKey: LLM_PROFILES_QUERY_KEYS.all });
-      // Also invalidate settings since activating a profile changes agent_settings.llm
-      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+    onSuccess: async () => {
       // Invalidate the SettingsService internal cache so getSettingsForConversation
       // fetches fresh settings with the newly activated profile's LLM config
       SettingsService.invalidateCache();
+      // Invalidate profiles list to refresh active_profile
+      await queryClient.invalidateQueries({
+        queryKey: LLM_PROFILES_QUERY_KEYS.all,
+      });
+      // Also invalidate settings since activating a profile changes agent_settings.llm
+      await queryClient.invalidateQueries({
+        queryKey: SETTINGS_QUERY_KEYS.all,
+      });
     },
   });
 }

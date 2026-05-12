@@ -13,13 +13,17 @@ export function useDeleteLlmProfile() {
     mutationFn: async (name: string) => {
       await ProfilesService.deleteProfile(name);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: LLM_PROFILES_QUERY_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+    onSuccess: async () => {
       // Invalidate the SettingsService internal cache so getSettingsForConversation
       // fetches fresh settings after the profile is deleted (backend may have
       // deactivated it or reset agent_settings.llm)
       SettingsService.invalidateCache();
+      await queryClient.invalidateQueries({
+        queryKey: LLM_PROFILES_QUERY_KEYS.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: SETTINGS_QUERY_KEYS.all,
+      });
     },
   });
 }

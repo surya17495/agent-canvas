@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 
 interface ProfileActionsMenuProps {
+  /** Unique ID for the menu, used for aria-controls */
+  menuId: string;
+  /** Ref to the trigger button for focus restoration */
+  triggerRef?: React.RefObject<HTMLButtonElement | null>;
   onEdit: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -10,6 +14,8 @@ interface ProfileActionsMenuProps {
 }
 
 export function ProfileActionsMenu({
+  menuId,
+  triggerRef,
   onEdit,
   onRename,
   onDelete,
@@ -27,12 +33,16 @@ export function ProfileActionsMenu({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        // Restore focus to trigger button when closing
+        triggerRef?.current?.focus();
         onClose();
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        // Restore focus to trigger button when closing via Escape
+        triggerRef?.current?.focus();
         onClose();
       }
     };
@@ -44,16 +54,19 @@ export function ProfileActionsMenu({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   const handleAction = (action: () => void) => {
     action();
+    // Restore focus to trigger button after action
+    triggerRef?.current?.focus();
     onClose();
   };
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent, currentIndex: number) => {
-      const itemCount = 3;
+      // Use dynamic item count based on actual menu items
+      const itemCount = menuItemsRef.current.filter(Boolean).length;
       if (e.key === "ArrowDown") {
         e.preventDefault();
         const nextIndex = (currentIndex + 1) % itemCount;
@@ -70,6 +83,7 @@ export function ProfileActionsMenu({
   return (
     <div
       ref={menuRef}
+      id={menuId}
       className="absolute right-0 top-full mt-1 z-10 bg-base-secondary border border-tertiary rounded-md shadow-lg py-1 min-w-[140px]"
       role="menu"
       aria-orientation="vertical"

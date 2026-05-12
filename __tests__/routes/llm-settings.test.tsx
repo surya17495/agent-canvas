@@ -273,6 +273,76 @@ describe("LlmSettingsScreen", () => {
     expect(profileNameInput).toHaveValue("my_profile");
   });
 
+  it("fetches existing profile with encrypted mode when entering edit mode", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_api_key_set: true,
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "openai/gpt-4o",
+            api_key: null,
+            base_url: "",
+          },
+        },
+      }),
+    );
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          name: "my_profile",
+          model: "openai/gpt-4o",
+          base_url: null,
+          api_key_set: true, // Profile has an API key set
+        },
+      ],
+      active_profile: "my_profile",
+    });
+
+    const getProfileSpy = vi.spyOn(ProfilesService, "getProfile");
+    getProfileSpy.mockResolvedValue({
+      name: "my_profile",
+      config: {
+        model: "openai/gpt-4o",
+        base_url: "",
+      },
+      api_key_set: true,
+    });
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+
+    // Wait for profiles to load
+    await waitFor(() => {
+      expect(screen.getByTestId("profile-list-row")).toBeInTheDocument();
+    });
+
+    // Click the menu button on the profile row
+    const profileRow = screen.getByTestId("profile-list-row");
+    const menuButton = within(profileRow).getByTestId("profile-menu-trigger");
+    await user.click(menuButton);
+
+    // Click Edit in the menu
+    const editButton = await screen.findByTestId("profile-action-edit");
+    await user.click(editButton);
+
+    // Wait for form to appear with profile data loaded
+    await waitFor(() => {
+      expect(screen.getByTestId("llm-profile-form")).toBeInTheDocument();
+    });
+
+    // Verify getProfile was called for form population
+    expect(getProfileSpy).toHaveBeenCalledWith("my_profile");
+
+    // API key field should show empty (the encrypted key is not displayed to users)
+    const apiKeyInput = screen.getByTestId("llm-api-key-input");
+    expect(apiKeyInput).toHaveValue("");
+  });
+
   it("returns to profiles list when cancel is clicked", async () => {
     const user = userEvent.setup();
     

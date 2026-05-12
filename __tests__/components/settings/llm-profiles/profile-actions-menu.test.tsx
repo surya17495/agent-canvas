@@ -20,6 +20,7 @@ describe("ProfileActionsMenu", () => {
   it("renders Edit, Rename, and Delete buttons", () => {
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
@@ -39,6 +40,7 @@ describe("ProfileActionsMenu", () => {
 
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={handleEdit}
         onRename={vi.fn()}
         onDelete={vi.fn()}
@@ -59,6 +61,7 @@ describe("ProfileActionsMenu", () => {
 
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={handleRename}
         onDelete={vi.fn()}
@@ -79,6 +82,7 @@ describe("ProfileActionsMenu", () => {
 
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={vi.fn()}
         onDelete={handleDelete}
@@ -99,6 +103,7 @@ describe("ProfileActionsMenu", () => {
       <div>
         <div data-testid="outside">Outside</div>
         <ProfileActionsMenu
+        menuId="test-menu-id"
           onEdit={vi.fn()}
           onRename={vi.fn()}
           onDelete={vi.fn()}
@@ -117,6 +122,7 @@ describe("ProfileActionsMenu", () => {
 
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
@@ -134,6 +140,7 @@ describe("ProfileActionsMenu", () => {
 
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
@@ -151,6 +158,7 @@ describe("ProfileActionsMenu", () => {
   it("has correct accessibility attributes", () => {
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
@@ -168,6 +176,7 @@ describe("ProfileActionsMenu", () => {
   it("Delete button has red text styling", () => {
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
@@ -184,6 +193,7 @@ describe("ProfileActionsMenu", () => {
 
     render(
       <ProfileActionsMenu
+        menuId="test-menu-id"
         onEdit={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}

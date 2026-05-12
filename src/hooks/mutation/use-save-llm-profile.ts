@@ -20,12 +20,16 @@ export function useSaveLlmProfile() {
     mutationFn: async ({ name, request }: SaveLlmProfileVariables) => {
       await ProfilesService.saveProfile(name, request);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       // Invalidate SettingsService internal cache to ensure fresh settings
       // for new conversations (especially if saving the active profile)
       SettingsService.invalidateCache();
-      queryClient.invalidateQueries({ queryKey: LLM_PROFILES_QUERY_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+      await queryClient.invalidateQueries({
+        queryKey: LLM_PROFILES_QUERY_KEYS.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: SETTINGS_QUERY_KEYS.all,
+      });
     },
   });
 }

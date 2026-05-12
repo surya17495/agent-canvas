@@ -4,9 +4,11 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useDeleteLlmProfile } from "#/hooks/mutation/use-delete-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { LLM_PROFILES_QUERY_KEYS, SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 vi.mock("#/api/profiles-service/profiles-service.api");
+vi.mock("#/api/settings-service/settings-service.api");
 
 describe("useDeleteLlmProfile", () => {
   let queryClient: QueryClient;
@@ -103,5 +105,22 @@ describe("useDeleteLlmProfile", () => {
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
+  });
+
+  it("invalidates SettingsService cache on success", async () => {
+    vi.mocked(ProfilesService.deleteProfile).mockResolvedValue({
+      name: "test-profile",
+      message: "Profile deleted",
+    });
+
+    const invalidateCacheSpy = vi.spyOn(SettingsService, "invalidateCache");
+
+    const { result } = renderHook(() => useDeleteLlmProfile(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync("test-profile");
+    });
+
+    expect(invalidateCacheSpy).toHaveBeenCalled();
   });
 });
