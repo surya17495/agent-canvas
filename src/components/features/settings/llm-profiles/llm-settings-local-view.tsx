@@ -266,9 +266,7 @@ export function LlmSettingsLocalView() {
           <ArrowLeft size={20} />
         </button>
         <h2 className="text-base font-semibold text-white">
-          {viewMode === "create"
-            ? t(I18nKey.SETTINGS$CREATE_PROFILE)
-            : t(I18nKey.SETTINGS$EDIT_PROFILE)}
+          {t(I18nKey.SETTINGS$BACK_TO_LLM_PROFILES_LIST)}
         </h2>
       </div>
 

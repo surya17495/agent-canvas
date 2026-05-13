@@ -25431,6 +25431,23 @@
     "uk": "Редагувати профіль",
     "ca": "Edita el perfil"
   },
+  "SETTINGS$BACK_TO_LLM_PROFILES_LIST": {
+    "en": "Back to LLM profiles list",
+    "ja": "LLMプロファイル一覧に戻る",
+    "zh-CN": "返回LLM配置文件列表",
+    "zh-TW": "返回LLM設定檔列表",
+    "ko-KR": "LLM 프로필 목록으로 돌아가기",
+    "no": "Tilbake til LLM-profillisten",
+    "it": "Torna all'elenco dei profili LLM",
+    "pt": "Voltar para a lista de perfis LLM",
+    "es": "Volver a la lista de perfiles LLM",
+    "ar": "العودة إلى قائمة ملفات تعريف LLM",
+    "fr": "Retour à la liste des profils LLM",
+    "tr": "LLM profilleri listesine dön",
+    "de": "Zurück zur LLM-Profilliste",
+    "uk": "Повернутися до списку профілів LLM",
+    "ca": "Torna a la llista de perfils LLM"
+  },
   "SETTINGS$PROFILE_CREATED": {
     "en": "Profile \"{{name}}\" created",
     "ja": "プロファイル「{{name}}」が作成されました",
