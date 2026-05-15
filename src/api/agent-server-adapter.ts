@@ -232,6 +232,8 @@ function shouldIncludeTool(name: string) {
 }
 
 function getAgentTools(configuredTools: unknown): AgentToolSpec[] {
+  // Defaults are always present; schema-provided tools may override them by
+  // name or add new tools, but they cannot remove local runtime defaults.
   const tools = new Map<string, AgentToolSpec>();
 
   for (const name of DEFAULT_TOOL_NAMES) {
@@ -279,7 +281,9 @@ function buildInitialMessage(
   };
 }
 
-function buildConfiguredAgentSettings(settings: Settings): AgentSettingsPayload {
+function buildConfiguredAgentSettings(
+  settings: Settings,
+): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = toRecord(agentSettings.llm);
 
@@ -305,6 +309,8 @@ function buildConfiguredAgentSettings(settings: Settings): AgentSettingsPayload 
     delete agentSettings.mcp_config;
   }
 
+  // Forward condenser settings verbatim so the server SDK's create_agent()
+  // path owns condenser construction and stays aligned with SDK defaults.
   return {
     ...agentSettings,
     llm,
