@@ -10,13 +10,14 @@ import { cn } from "#/utils/utils";
 import React from "react";
 import { useTranslation } from "react-i18next";
 
-const MODEL_LABEL_MAX_CHARS = 10;
-
-function truncateModelLabel(model: string): string {
-  if (model.length <= MODEL_LABEL_MAX_CHARS) {
-    return model;
-  }
-  return `${model.slice(0, MODEL_LABEL_MAX_CHARS)}…`;
+/**
+ * Extract a short, meaningful display label from a full model string.
+ * Uses the part after the last slash (e.g. "litellm_proxy/claude-opus-4-6" → "claude-opus-4-6"),
+ * falling back to the full string when there's no slash.
+ */
+function getModelDisplayLabel(model: string): string {
+  const lastSlash = model.lastIndexOf("/");
+  return lastSlash >= 0 ? model.slice(lastSlash + 1) : model;
 }
 
 export function ChatInputModel() {
@@ -31,7 +32,7 @@ export function ChatInputModel() {
   if (!conversation?.llm_model) {
     return null;
   }
-  const truncatedModelLabel = truncateModelLabel(conversation.llm_model);
+  const modelDisplayLabel = getModelDisplayLabel(conversation.llm_model);
 
   return (
     <div className="relative min-w-0">
@@ -51,7 +52,7 @@ export function ChatInputModel() {
           setIsPopoverOpen((open) => !open);
         }}
       >
-        <span>{truncatedModelLabel}</span>
+        <span>{modelDisplayLabel}</span>
         <ChevronDownSmallIcon
           width={18}
           height={18}

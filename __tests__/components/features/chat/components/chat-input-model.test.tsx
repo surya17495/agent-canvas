@@ -29,7 +29,7 @@ describe("ChatInputModel", () => {
 
     const model = screen.getByTestId("chat-input-llm-model");
     expect(model).toBeInTheDocument();
-    expect(model).toHaveTextContent("openai/gpt…");
+    expect(model).toHaveTextContent("gpt-4o");
     expect(model).toHaveAttribute("title", "openai/gpt-4o");
     expect(screen.queryByTestId("chat-input-llm-model-popover")).not.toBeInTheDocument();
 
