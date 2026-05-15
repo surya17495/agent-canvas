@@ -24,7 +24,11 @@ export function useSwitchLlmProfileAndLog() {
         { conversationId, profileName },
         {
           onSuccess: () =>
-            recordModelSwitchMessage(conversationId, profileName, anchorEventId),
+            recordModelSwitchMessage(
+              conversationId,
+              profileName,
+              anchorEventId,
+            ),
           onError: (err: unknown) => {
             const fallback = t(I18nKey.MODEL$SWITCH_FAILED, {
               name: profileName,
