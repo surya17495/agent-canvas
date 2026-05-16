@@ -22,6 +22,7 @@
 
 import { execSync } from "node:child_process";
 import {
+  appendFileSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -39,9 +40,15 @@ const HEAD_REF = requireEnv("HEAD_REF");
 const MAIN_BASELINES_DIR =
   process.env.MAIN_BASELINES_DIR ?? "/tmp/main-baselines";
 const SNAPSHOTS_APPROVED = process.env.SNAPSHOTS_APPROVED === "true";
+const GENERATE_OUTCOME = process.env.GENERATE_OUTCOME ?? "success";
+const COMPARE_OUTCOME = process.env.COMPARE_OUTCOME ?? "success";
 
 const SNAPSHOTS_DIR = "tests/e2e/__snapshots__";
-const TEST_RESULTS_DIR = "test-results";
+// The workflow saves comparison test-results to this path before the
+// --update-snapshots pass wipes test-results/.  Fall back to the default
+// Playwright output directory when running outside CI.
+const TEST_RESULTS_DIR =
+  process.env.COMPARISON_RESULTS_DIR ?? "test-results";
 // Images are pushed to this dedicated branch, NOT to the PR branch.
 // Pushing to the PR branch with [skip ci] was blocking required checks on the HEAD commit.
 const ARTIFACTS_BRANCH = `snapshot-artifacts/pr-${PR_NUMBER}`;
@@ -202,13 +209,23 @@ function rawUrl(commitSha, filePath) {
   return `${RAW_BASE}/${OWNER}/${REPO_NAME}/${commitSha}/${filePath}`;
 }
 
-function formatRelPath(relPath) {
-  // "snapshots/settings-page.snapshot.spec.ts/chromium/sidebar-settings.png"
-  // → "settings-page / sidebar-settings"
-  const parts = relPath.replace(/^snapshots\//, "").split("/");
-  const spec = parts[0]?.replace(".snapshot.spec.ts", "") ?? "";
-  const name = basename(relPath, ".png");
-  return `\`${spec}\` — ${name}`;
+/** Extract the human-readable spec name from a relative snapshot path.
+ *  "snapshots/mcp-page.snapshot.spec.ts/chromium/foo.png" → "mcp-page"
+ */
+function specFromRelPath(relPath) {
+  const segment = relPath.replace(/^snapshots\//, "").split("/")[0] ?? "";
+  return segment.replace(".snapshot.spec.ts", "");
+}
+
+/** Group an array of snapshot objects by their spec name. */
+function groupBySpec(items) {
+  const groups = /** @type {Map<string, typeof items>} */ (new Map());
+  for (const item of items) {
+    const spec = specFromRelPath(item.relPath);
+    if (!groups.has(spec)) groups.set(spec, []);
+    groups.get(spec).push(item);
+  }
+  return groups;
 }
 
 function buildComment(changed, newSnapshots, unchanged, commitSha) {
@@ -241,6 +258,27 @@ function buildComment(changed, newSnapshots, unchanged, commitSha) {
     COMMENT_MARKER,
     `## 📸 Snapshot Test Report`,
     "",
+  ];
+
+  if (COMPARE_OUTCOME === "failure") {
+    lines.push(
+      `> [!WARNING]`,
+      `> **Snapshot comparison step crashed** (timeout, OOM, or runner error) — diff results below may be incomplete or absent.`,
+      `> Check the [CI logs](https://github.com/${REPO}/actions/runs/${RUN_ID}) for the full error output (look for the "Run snapshot comparison" step).`,
+      "",
+    );
+  }
+
+  if (GENERATE_OUTCOME === "failure") {
+    lines.push(
+      `> [!WARNING]`,
+      `> **One or more snapshot tests crashed during generation** — some snapshots below may be incomplete.`,
+      `> Check the [CI logs](https://github.com/${REPO}/actions/runs/${RUN_ID}) for the full error output (look for the "Generate current PR snapshots" step).`,
+      "",
+    );
+  }
+
+  lines.push(
     `${statusIcon} ${statusText}`,
     "",
     `| Category | Count |`,
@@ -250,7 +288,7 @@ function buildComment(changed, newSnapshots, unchanged, commitSha) {
     `| ✅ Unchanged | ${unchanged.length} |`,
     `| **Total** | **${total}** |`,
     "",
-  ];
+  );
 
   if (hasDifferences && !SNAPSHOTS_APPROVED) {
     lines.push(
@@ -261,43 +299,49 @@ function buildComment(changed, newSnapshots, unchanged, commitSha) {
     );
   }
 
-  // Changed snapshots
+  // Changed snapshots — grouped by spec file
   if (changed.length > 0) {
     lines.push(
       `<details>`,
       `<summary>🔴 Changed snapshots (${changed.length})</summary>`,
       "",
     );
-    for (const { relPath, diffFile } of changed) {
-      lines.push(`### ${formatRelPath(relPath)}`, "");
+    for (const [spec, items] of groupBySpec(changed)) {
+      lines.push(
+        `### \`${spec}\`${items.length > 1 ? ` — ${items.length} snapshots` : ""}`,
+        "",
+      );
+      for (const { relPath, diffFile } of items) {
+        const name = basename(relPath, ".png");
+        lines.push(`**${name}**`, "");
 
-      if (commitSha) {
-        // Paths in the orphan commit: changed/<relPath>-{actual,expected,diff}.png
-        const base = join("changed", relPath);
-        const expectedUrl = rawUrl(commitSha, base.replace(".png", "-expected.png"));
-        const actualUrl   = rawUrl(commitSha, base.replace(".png", "-actual.png"));
-        const diffUrl     = diffFile
-          ? rawUrl(commitSha, base.replace(".png", "-diff.png"))
-          : null;
+        if (commitSha) {
+          const base = join("changed", relPath);
+          const expectedUrl = rawUrl(commitSha, base.replace(".png", "-expected.png"));
+          const actualUrl   = rawUrl(commitSha, base.replace(".png", "-actual.png"));
+          const diffUrl     = diffFile
+            ? rawUrl(commitSha, base.replace(".png", "-diff.png"))
+            : null;
 
-        lines.push(
-          `| Expected (main) | Actual (PR) |${diffUrl ? " Diff |" : ""}`,
-          `|---|---|${diffUrl ? "---|" : ""}`,
-          `| ![expected](${expectedUrl}) | ![actual](${actualUrl}) |${diffUrl ? ` ![diff](${diffUrl}) |` : ""}`,
-          "",
-        );
-      } else {
-        lines.push(
-          `_Images could not be embedded (fork PR or push failed). ` +
-            `Download the [\`snapshot-test-results\` artifact](https://github.com/${REPO}/actions/runs/${RUN_ID}) for visual diffs._`,
-          "",
-        );
+          lines.push(
+            `| Expected (main) | Actual (PR) |${diffUrl ? " Diff |" : ""}`,
+            `|---|---|${diffUrl ? "---|" : ""}`,
+            `| ![expected](${expectedUrl}) | ![actual](${actualUrl}) |${diffUrl ? ` ![diff](${diffUrl}) |` : ""}`,
+            "",
+          );
+        } else {
+          lines.push(
+            `_Images could not be embedded (fork PR or push failed). ` +
+              `Download the [\`snapshot-test-results\` artifact](https://github.com/${REPO}/actions/runs/${RUN_ID}) for visual diffs._`,
+            "",
+          );
+        }
       }
     }
     lines.push(`</details>`, "");
   }
 
-  // New snapshots
+  // New snapshots — grouped by spec file
   if (newSnapshots.length > 0) {
     lines.push(
       `<details>`,
@@ -307,15 +351,16 @@ function buildComment(changed, newSnapshots, unchanged, commitSha) {
       "",
     );
     if (commitSha) {
-      for (const { relPath } of newSnapshots) {
-        // Paths in the orphan commit: new/<relPath>.png
-        const actualUrl = rawUrl(commitSha, join("new", relPath));
+      for (const [spec, items] of groupBySpec(newSnapshots)) {
         lines.push(
-          `### ${formatRelPath(relPath)}`,
-          "",
-          `![new snapshot](${actualUrl})`,
+          `### \`${spec}\`${items.length > 1 ? ` — ${items.length} snapshots` : ""}`,
           "",
         );
+        for (const { relPath } of items) {
+          const name = basename(relPath, ".png");
+          const actualUrl = rawUrl(commitSha, join("new", relPath));
+          lines.push(`**${name}**`, "", `![new snapshot](${actualUrl})`, "");
+        }
       }
     } else {
       lines.push(
@@ -327,19 +372,21 @@ function buildComment(changed, newSnapshots, unchanged, commitSha) {
     lines.push(`</details>`, "");
   }
 
-  // Unchanged
+  // Unchanged — compact grouped list by spec file
   if (unchanged.length > 0) {
     lines.push(
       `<details>`,
       `<summary>✅ Unchanged snapshots (${unchanged.length})</summary>`,
       "",
-      `The following ${unchanged.length} snapshot${unchanged.length !== 1 ? "s" : ""} match${unchanged.length === 1 ? "es" : ""} the main branch baselines:`,
-      "",
     );
-    for (const { relPath } of unchanged) {
-      lines.push(`- ${formatRelPath(relPath)}`);
+    for (const [spec, items] of groupBySpec(unchanged)) {
+      lines.push(`**\`${spec}\`**`);
+      for (const { relPath } of items) {
+        lines.push(`- ${basename(relPath, ".png")}`);
+      }
+      lines.push("");
     }
-    lines.push("", `</details>`, "");
+    lines.push(`</details>`, "");
   }
 
   lines.push(
@@ -429,6 +476,18 @@ async function main() {
 
   const body = buildComment(changed, newSnapshots, unchanged, commitSha);
   await postFreshComment(body);
+
+  // Tell the workflow whether there are actual pixel-diff failures so the
+  // "Fail if differences" step can distinguish changed snapshots (should
+  // fail CI) from missing baselines (new tests from this PR, should pass).
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `has_changes=${changed.length > 0}\n`,
+    );
+    console.log(`  has_changes=${changed.length > 0} written to GITHUB_OUTPUT`);
+  }
+
   console.log("Done.");
 }
 

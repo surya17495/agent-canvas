@@ -19,6 +19,81 @@
 - Verification command: `npm run typecheck && npm run build`.
 - GitHub automation now includes `.github/workflows/ci.yml` for `npm ci`, `npm test`, and `npm run build`, plus `.github/dependabot.yml` with weekly npm/github-actions updates gated by a 7-day cooldown.
 
+## Runtime Services in Dev Stacks
+
+- When the agent-canvas dev launchers (`npm run dev:safe` / `dev:automation` / `dev:docker` / the published `agent-canvas` binary) start a stack, they set a `VITE_RUNTIME_SERVICES_INFO` env var on the frontend describing which services are running and how the agent should reach them. The frontend forwards this verbatim as `AgentContext.system_message_suffix` on every `POST /api/conversations`, so conversations land with a `<RUNTIME_SERVICES>` block appended to the system prompt.
+- The block lists URLs **from the agent's point of view**:
+  - The Agent Server is always reachable as `http://localhost:<port>` from inside the sandbox — but that is _you_, not the automation backend.
+  - Host-side services (ingress, Vite, automation) are reachable as `http://localhost:<port>` in dockerless modes and `http://host.docker.internal:<port>` in `dev:docker`.
+- Agents should treat the `<RUNTIME_SERVICES>` block as authoritative: don't hardcode `localhost:8000` for "the automation server", and don't probe random ports trying to discover services. If the block says automation is not running, skip `/api/automation` calls; otherwise use the listed `url_from_agent` + `api_prefix` (default `/api/automation`) and the `X-API-Key: $OPENHANDS_AUTOMATION_API_KEY` header.
+- The launcher → frontend → suffix plumbing is:
+  - `scripts/dev-safe.mjs::buildRuntimeServicesInfo()` — pure helper that constructs the info object.
+  - `scripts/dev-with-automation.mjs::buildAutomationRuntimeServicesInfo()` — wraps it with automation details; called from both Vite spawn (`startVite`) and the static build (`static-build.mjs`).
+  - `scripts/dev-docker.mjs` and `bin/agent-canvas.mjs` pass `agentHostAlias: "host.docker.internal"` to `main()` because the agent-server runs in a container in those modes.
+  - `src/api/agent-server-adapter.ts::buildRuntimeServicesSystemSuffix()` reads `VITE_RUNTIME_SERVICES_INFO` and renders the `<RUNTIME_SERVICES>` markdown block; `createAgentFromSettings()` attaches it to `agent_context.system_message_suffix` when present.
+
+### `VITE_RUNTIME_SERVICES_INFO` shape
+
+The env var is a JSON string of:
+
+```json
+{
+  "mode": "dev:docker",
+  "agent_host_alias": "host.docker.internal",
+  "services": {
+    "agent_server": {
+      "description": "The OpenHands Agent Server this agent is running inside. ...",
+      "url_from_agent": "http://localhost:8000"
+    },
+    "ingress": {
+      "description": "Unified entry point. Routes /api/automation/* ...",
+      "url_from_agent": "http://host.docker.internal:8000"
+    },
+    "frontend": {
+      "kind": "vite",
+      "description": "Vite dev server hosting the agent-canvas frontend.",
+      "url_from_agent": "http://host.docker.internal:3001"
+    },
+    "automation": {
+      "description": "OpenHands Automations service. All routes are mounted under '/api/automation'. Authenticate with header 'X-API-Key: $OPENHANDS_AUTOMATION_API_KEY'.",
+      "url_from_agent": "http://host.docker.internal:18001",
+      "api_prefix": "/api/automation",
+      "docs_url": "http://host.docker.internal:18001/api/automation/docs",
+      "openapi_url": "http://host.docker.internal:18001/api/automation/openapi.json",
+      "auth_env_var": "OPENHANDS_AUTOMATION_API_KEY"
+    }
+  }
+}
+```
+
+All keys under `services` are optional and omitted when the corresponding service isn't running. `frontend.kind` is `"vite"` for dev launchers running the Vite dev server and `"static"` for stacks serving a pre-built `build/` directory (`dev:docker`, `dev:dangerously-dockerless`, the published `agent-canvas` binary). `services.vite` is accepted as a legacy alias for `services.frontend` by the renderer.
+
+### Example `<RUNTIME_SERVICES>` block (dev:docker with automation)
+
+```
+<RUNTIME_SERVICES>
+You are running inside an agent-canvas dev stack started in 'dev:docker' mode.
+The following services are reachable from your sandbox. URLs are written
+from your point of view (i.e., as you should curl/fetch them).
+
+* Agent Server (you): http://localhost:8000
+    The OpenHands Agent Server this agent is running inside. Tool calls (terminal, file_editor, browser, etc.) execute here.
+* Ingress: http://host.docker.internal:8000
+    Unified entry point. Routes /api/automation/* to the automation backend, /api/* and /sockets to the agent-server, and /* to the frontend.
+* Frontend: http://host.docker.internal:3001
+    Static-file server hosting the agent-canvas production build.
+* Automation backend: http://host.docker.internal:18001
+    OpenHands Automations service. All routes are mounted under '/api/automation'. Authenticate with header 'X-API-Key: $OPENHANDS_AUTOMATION_API_KEY'.
+    Docs:    http://host.docker.internal:18001/api/automation/docs
+    OpenAPI: http://host.docker.internal:18001/api/automation/openapi.json
+    Auth:    header 'X-API-Key: $OPENHANDS_AUTOMATION_API_KEY'
+
+Trust this block over guessing: do not assume any other URLs are running.
+In particular, http://localhost:8000 inside your sandbox is the Agent Server
+you are running inside of — NOT the automation backend.
+</RUNTIME_SERVICES>
+```
+
 ## Visual Snapshot Testing
 
 - Snapshot tests live in `tests/e2e/snapshots/` and compare screenshots against baselines stored as GitHub Actions artifacts (NOT in git).
@@ -29,6 +104,7 @@
   - **On PRs**: Downloads the latest `snapshot-baselines` artifact, runs `test:e2e:snapshots` against it, generates current snapshots via `test:e2e:snapshots:update`, then posts a fresh PR comment (old comment is deleted first so image URLs always point to the current run). Changed snapshots are shown in a side-by-side expected/actual/diff table; new snapshots show the full screenshot. Images are force-pushed to a dedicated `snapshot-artifacts/pr-<N>` orphan branch (NOT the PR branch) so required CI checks are never invalidated. URLs are `raw.githubusercontent.com/<owner>/<repo>/<sha>/changed/...` or `.../new/...`. Triggers: `opened`, `synchronize`, `reopened`, `labeled`, `unlabeled`.
   - **Force-regenerate baselines**: Trigger the `Snapshot Tests` workflow manually with `force_update=true`.
 - **PR comment**: `tests/e2e/snapshots/scripts/post-snapshot-comment.mjs` posts a fresh comment (`<!-- snapshot-test-report -->` marker) with collapsed `<details>` sections — 🔴 Changed (side-by-side expected/actual/diff), 🆕 New (full screenshot), ✅ Unchanged (list of names).
+- **Critical ordering note**: Playwright clears `test-results/` at the start of every new run. The workflow runs two Playwright passes: (1) `test:e2e:snapshots` (comparison, writes `*-diff.png`), then (2) `test:e2e:snapshots:update` (regenerates baselines, clears `test-results/`, no diffs written). The "Save comparison test-results" step copies `test-results/` to `/tmp/comparison-results` between these two passes and passes it as `COMPARISON_RESULTS_DIR` to the comment script, which reads `TEST_RESULTS_DIR` from that env var. Without this step all snapshots appear "unchanged" because the diff files are gone.
 - **Acknowledging intentional changes**: If snapshots changed on purpose (UI redesign, etc.), add the `update-snapshots` label to the PR. This causes: (1) the CI failure step to be skipped so the check passes, (2) the comment status to flip to ✅ with a note that changes are acknowledged, (3) the `labeled` trigger fires a fresh CI run automatically so no manual re-run is needed. Removing the label re-enables the failure. When the PR merges, the main-branch run uploads the new screenshots as the updated baseline — no separate "regenerate on main" step required.
 - **Viewing diffs**: On failure, Playwright generates `*-actual.png`, `*-expected.png`, and `*-diff.png` in `test-results/`. Run `npx playwright show-report` to view the HTML report. The PR comment also embeds these images directly.
 - **Bootstrap**: When no `snapshot-baselines` artifact exists on main yet, all snapshots are classified as "🆕 New" and CI passes. The first main-branch run after this state uploads the initial artifact.
@@ -80,6 +156,94 @@
 
 - `@openhands/typescript-client` is currently pinned to commit `ef62e82fc3dfb03991a1c8025429caf354427263` because the package metadata needed by this PR has not been published as a consistent npm/tagged release yet. That commit ships the needed typed clients plus subpath exports for `client/http-client`, `events/remote-events-list`, and `workspace/remote-workspace`. `RemoteWorkspace.gitChanges`/`gitDiff` accept an optional `{ ref }` option; agent-canvas passes `'HEAD'` so the changes panel reflects working-tree + index versus the latest commit (i.e. staged + unstaged) instead of a diff against the upstream/default branch.
 - The `@openhands/typescript-client` git dep must be expressed as a `git+https://github.com/...` URL in both `package.json` and the top-level dep entry of `package-lock.json`; the `github:OpenHands/...` shorthand normalizes to `git+ssh://` inside the lockfile, and Vercel's build environment has no GitHub SSH key, so an ssh-pinned lockfile makes Vercel fall back to a stale cached tarball and the bundler then fails with `[MISSING_EXPORT] ConversationClient/FileClient/SharedClient is not exported by .../dist/clients.js`. `scripts/vercel-install.sh` (wired up via `vercel.json`'s `installCommand`) defensively rewrites any leftover `git+ssh://git@github.com/` resolved URLs to `git+https://github.com/` and adds matching `git config --global url..insteadOf` aliases before invoking `npm ci`, so a future regression that re-introduces an ssh-pinned lockfile entry still builds on Vercel. See GitHub issue #384 for the original failure and PR #382 for the prior single-shot lockfile fix that this generalizes.
+## API Access Rules
+
+Two strict conventions govern every REST call in the frontend. Violations break CI
+via `src/api/no-direct-agent-server-calls.test.ts`.
+
+### Rule 1 -- Agent-server calls must use `@openhands/typescript-client`
+
+All calls that target the local agent-server (`/api/*`, `/server_info`, `/sockets`)
+**must** go through typed client classes from `@openhands/typescript-client`, **never**
+raw `axios`, `fetch`, or the legacy shared `openHands` axios instance.
+
+Available clients and their subpath imports:
+- `ConversationClient` -- `@openhands/typescript-client/clients`
+- `FileClient` -- `@openhands/typescript-client/clients`
+- `VSCodeClient` -- `@openhands/typescript-client/clients`
+- `ServerClient` -- `@openhands/typescript-client/clients`
+- `HttpClient` -- `@openhands/typescript-client/client/http-client`
+- `RemoteWorkspace` -- `@openhands/typescript-client/workspace/remote-workspace`
+- `RemoteEventsList` -- `@openhands/typescript-client/events/remote-events-list`
+
+Client options are always assembled via helpers in `src/api/agent-server-client-options.ts`:
+- `getAgentServerClientOptions(overrides?)` -- for SDK client constructors
+- `getAgentServerHttpClientOptions(overrides?)` -- for `HttpClient`-based callers
+
+These helpers read host, session API key, and working directory from the active backend
+registry and env config, so callers never hardcode URLs or auth tokens.
+
+```ts
+// CORRECT
+const data = await new ConversationClient(getAgentServerClientOptions()).getConversation(id);
+const file = await new FileClient(getAgentServerClientOptions()).downloadTextFile(path);
+
+// WRONG -- raw axios/fetch calls fail the no-direct-agent-server-calls.test.ts guard
+const data = await axios.get(`${host}/api/conversations/${id}`);
+const data = await fetch(`/api/conversations/${id}`);
+```
+
+**Allowed exceptions** (files that may use axios directly for infrastructure reasons):
+- `src/api/automation-service/automation-service.api.ts`
+- `src/api/cloud/proxy.ts` -- the proxy envelope POST itself
+
+### Rule 2 -- Cloud backend routes must go through `callCloudProxy`
+
+Any call from the browser to the cloud SaaS backend (`app.all-hands.dev`) or a cloud
+runtime sandbox (`*.prod-runtime.all-hands.dev`) **must** go through `callCloudProxy()`
+in `src/api/cloud/proxy.ts`. These origins do not permit CORS from `localhost`;
+`callCloudProxy` POSTs the request envelope to `/api/cloud-proxy` on the local
+agent-server, which forwards it server-side.
+
+```ts
+import { callCloudProxy } from "../cloud/proxy";
+
+// CORRECT -- cloud SaaS endpoint
+const result = await callCloudProxy<ResponseType>({
+  backend,
+  method: "GET",
+  path: `/api/v1/app-conversations/search?${params}`,
+});
+
+// CORRECT -- cloud runtime sandbox, auth via session key
+const result = await callCloudProxy<ResponseType>({
+  backend,
+  method: "GET",
+  hostOverride: buildHttpBaseUrl(conversationUrl),
+  path: `/api/git/changes?path=${path}`,
+  authMode: "session-api-key",
+  sessionApiKey,
+});
+
+// WRONG -- direct fetch/axios to a cloud host is blocked by CORS in the browser
+const result = await axios.get(`${backend.host}/api/v1/app-conversations`);
+```
+
+`callCloudProxy` key options:
+- `backend` -- the cloud `Backend` object (provides host and bearer token)
+- `hostOverride` -- override for runtime-sandbox calls; replaces `backend.host`
+- `authMode` -- `"bearer"` (default, cloud SaaS) | `"session-api-key"` (runtime sandbox) | `"none"`
+- `sessionApiKey` -- required when `authMode === "session-api-key"`
+
+Standard cloud/local branch pattern used throughout the service layer:
+
+```ts
+if (getActiveBackend().backend.kind === "cloud") {
+  return callCloudProxy({ backend: active, ... });
+}
+return new ConversationClient(getAgentServerClientOptions()).someMethod(...);
+```
+
 - Use `@openhands/typescript-client` classes directly for agent-server-backed REST/workspace/event/VS Code calls. Centralize host/session API key/working-directory option assembly through `src/api/agent-server-client-options.ts`; the backend fallback policy itself lives in `src/api/backend-registry/active-store.ts`.
 - Local verification/build gotchas:
   - `npm run typecheck` assumes generated translation types exist; run `npm run make-i18n` first if `src/i18n/declaration.ts` is missing.
@@ -151,7 +315,7 @@
   - `OH_SECRET_KEY` — secret key for settings encryption; uses a static default for local dev since it's needed for reading persisted encrypted values across restarts
   - `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` / `VITE_SESSION_API_KEY` — session API key for agent-server authentication; auto-generated using `crypto.randomBytes(32)` if not set, passed to both agent-server (`OH_SESSION_API_KEYS_0`) and frontend (`VITE_SESSION_API_KEY`)
   - Default: released PyPI version `1.22.1` for agent-server SDK libraries
-- `scripts/dev-docker.mjs` runs the agent-server inside a Docker container instead of via `uvx`, and serves a static frontend build by default for stable user/tunnel access. Use `npm run dev:docker:dynamic` or `node scripts/dev-docker.mjs --dynamic` for the Vite dev server. The default image uses versioned release tags:
+- `scripts/dev-docker.mjs` runs the agent-server inside a Docker container instead of via `uvx`, and serves a static frontend build by default for stable user/tunnel access. The required host-projects env var is `PROJECTS_PATH` and it is mounted into the container at `/projects`. Use `npm run dev:docker:dynamic` or `node scripts/dev-docker.mjs --dynamic` for the Vite dev server. The default image uses versioned release tags:
   - `DEFAULT_AGENT_SERVER_TAG` — uses format `{version}-python` (e.g., `1.22.1-python`) for reproducibility. Note: the SDK build script strips the "v" prefix from semver release tags.
   - Should stay in sync with `DEFAULT_AGENT_SERVER_VERSION` in `dev-safe.mjs` for consistency between Docker and non-Docker dev modes
   - `OH_AGENT_SERVER_GIT_REF` — override to use a git ref-based tag (e.g., `main` → `main-python`, `abc1234` → `abc1234-python`)
