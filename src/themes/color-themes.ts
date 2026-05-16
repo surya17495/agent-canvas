@@ -154,10 +154,14 @@ export const COLOR_THEMES: Record<ColorThemeKey, ColorThemeDefinition> = {
     },
   },
 
-  // rbren branch: long-running-fork-local theme. Mild green "hackery" tint —
-  // hue ~130 with low saturation so the dark UI reads like a CRT phosphor
-  // terminal without going neon. Lives only on this branch; do not propagate
-  // upstream. See .agents/skills/long-running-fork.md.
+  // rbren branch: long-running-fork-local theme. Two-tone dark mode:
+  //   • main app shell (positions 950 / 975) → dark slate, restrained cool-
+  //     blue-gray (hue ~220, low saturation).
+  //   • side panel / cards / inputs / elevated surfaces (positions 50–925) →
+  //     mild green "hackery" tint (hue ~130, low saturation) so the chrome
+  //     reads like a CRT phosphor terminal without going neon.
+  // Lives only on this branch; do not propagate upstream.
+  // See .agents/skills/long-running-fork.md.
   "rbren-hackery": {
     label: "rbren — Hackery Green",
     scale: {
@@ -172,14 +176,20 @@ export const COLOR_THEMES: Record<ColorThemeKey, ColorThemeDefinition> = {
       "--cool-grey-800": "#2F352F",
       "--cool-grey-900": "#262C26",
       "--cool-grey-925": "#1E221E",
-      "--cool-grey-950": "#161A16",
-      "--cool-grey-975": "#0E120E",
+      // Main page background — dark slate, NOT green.
+      "--cool-grey-950": "#161A22",
+      "--cool-grey-975": "#0E1218",
     },
     heroui: {
-      "--heroui-background": "130 8% 9.41%",
+      // App-shell positions (950 / 975) — dark slate.
+      "--heroui-background": "222 21% 11%", // ~#161A22
       "--heroui-background-foreground": "130 8% 96.86%",
-      "--heroui-foreground-50": "130 8% 6.27%",
-      "--heroui-foreground-100": "130 8% 9.41%",
+      "--heroui-foreground-50": "216 26% 7%", // ~#0E1218
+      "--heroui-foreground-100": "222 21% 11%", // ~#161A22
+      "--heroui-default-50": "216 26% 7%", // ~#0E1218
+      "--heroui-default-100": "222 21% 11%", // ~#161A22
+
+      // Side panel / cards / elevated surfaces — green-tinted.
       "--heroui-foreground-200": "130 8% 12.55%",
       "--heroui-foreground-300": "130 8% 15.69%",
       "--heroui-foreground-400": "130 8% 19.22%",
@@ -197,8 +207,6 @@ export const COLOR_THEMES: Record<ColorThemeKey, ColorThemeDefinition> = {
       "--heroui-content3-foreground": "130 8% 74.51%",
       "--heroui-content4": "130 8% 25.1%",
       "--heroui-content4-foreground": "130 8% 59.22%",
-      "--heroui-default-50": "130 8% 6.27%",
-      "--heroui-default-100": "130 8% 9.41%",
       "--heroui-default-200": "130 8% 12.55%",
       "--heroui-default-300": "130 8% 15.69%",
       "--heroui-default-400": "130 8% 19.22%",
