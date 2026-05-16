@@ -66,7 +66,11 @@ export function ChatInputActions({
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const llmDisplay = useChatInputLlmDisplay();
-  const isCloud = useActiveBackend().backend.kind === "cloud";
+  const { backend } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
+  const llmDestinationLabel = t(
+    isCloud ? I18nKey.SETTINGS$LLM_SETTINGS : I18nKey.SETTINGS$LLM_PROFILES,
+  );
   const webSocketStatus = useUnifiedWebSocketStatus();
   const { curAgentState } = useAgentState();
   const { conversationMode, setConversationMode } = useConversationStore();
@@ -479,7 +483,7 @@ export function ChatInputActions({
                     className="shrink-0"
                     aria-hidden
                   />
-                  <span>{t(I18nKey.SETTINGS$LLM_SETTINGS)}</span>
+                  <span>{llmDestinationLabel}</span>
                 </NavigationLink>
               </li>
             </ContextMenu>

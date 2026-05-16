@@ -5,6 +5,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { ContextMenu } from "#/ui/context-menu";
 import { Divider } from "#/ui/divider";
 import { I18nKey } from "#/i18n/declaration";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { cn } from "#/utils/utils";
 import React from "react";
 import { useTranslation } from "react-i18next";
@@ -21,7 +22,13 @@ function truncateModelLabel(model: string): string {
 
 export function ChatInputModel() {
   const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
   const llmDisplay = useChatInputLlmDisplay();
+  const llmDestinationLabel = t(
+    backend.kind === "cloud"
+      ? I18nKey.SETTINGS$LLM_SETTINGS
+      : I18nKey.SETTINGS$LLM_PROFILES,
+  );
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
 
   const popoverRef = useClickOutsideElement<HTMLUListElement>(() => {
@@ -94,7 +101,7 @@ export function ChatInputModel() {
                 className="shrink-0"
                 aria-hidden
               />
-              <span>{t(I18nKey.SETTINGS$LLM_SETTINGS)}</span>
+              <span>{llmDestinationLabel}</span>
             </NavigationLink>
           </li>
         </ContextMenu>
