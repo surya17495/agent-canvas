@@ -1,15 +1,25 @@
 // @vitest-environment node
 import { createServer } from "node:http";
-import { mkdtemp, readFile, stat, writeFile, utimes } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+  utimes,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleSetupServerRequest } from "../../scripts/setup_server/handle-setup-server-request.mjs";
 
 const SESSION_KEY = "session-secret";
 
 let previousPersistenceDir: string | undefined;
 let previousSessionKey: string | undefined;
+let previousSecondarySessionKey: string | undefined;
 let baseUrl = "";
 let closeServer: (() => Promise<void>) | null = null;
 
@@ -48,6 +58,7 @@ async function startServer() {
 beforeEach(async () => {
   previousPersistenceDir = process.env.OPENHANDS_PERSISTENCE_DIR;
   previousSessionKey = process.env.SESSION_API_KEY;
+  previousSecondarySessionKey = process.env.OH_SESSION_API_KEYS_1;
   process.env.OPENHANDS_PERSISTENCE_DIR = await mkdtemp(
     path.join(os.tmpdir(), "agent-canvas-credentials-"),
   );
@@ -63,6 +74,9 @@ afterEach(async () => {
   else process.env.OPENHANDS_PERSISTENCE_DIR = previousPersistenceDir;
   if (previousSessionKey === undefined) delete process.env.SESSION_API_KEY;
   else process.env.SESSION_API_KEY = previousSessionKey;
+  if (previousSecondarySessionKey === undefined)
+    delete process.env.OH_SESSION_API_KEYS_1;
+  else process.env.OH_SESSION_API_KEYS_1 = previousSecondarySessionKey;
 });
 
 describe("/setup/backends", () => {
@@ -139,6 +153,92 @@ describe("/setup/backends", () => {
       headers: authHeaders(),
     });
     expect(authorized.status).toBe(200);
+  });
+
+  it("rate limits repeated authentication failures", async () => {
+    for (let i = 0; i < 10; i += 1) {
+      const response = await fetch(`${baseUrl}/setup/backends`, {
+        headers: { "X-Session-API-Key": "wrong-key" },
+      });
+      expect(response.status).toBe(401);
+    }
+
+    const limited = await fetch(`${baseUrl}/setup/backends`, {
+      headers: { "X-Session-API-Key": "wrong-key" },
+    });
+    expect(limited.status).toBe(429);
+  });
+
+  it("accepts bearer auth and additional configured session keys", async () => {
+    process.env.OH_SESSION_API_KEYS_1 = "secondary-secret";
+    const response = await fetch(`${baseUrl}/setup/backends`, {
+      headers: { Authorization: "Bearer secondary-secret" },
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects oversized request bodies", async () => {
+    const response = await fetch(`${baseUrl}/setup/backends`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: "x".repeat(65 * 1024),
+    });
+    expect(response.status).toBe(413);
+  });
+
+  it("rejects credential symlinks on delete", async () => {
+    await fetch(`${baseUrl}/setup/backends`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        id: "cloud-1",
+        name: "OpenHands Cloud",
+        host: "https://app.all-hands.dev",
+        kind: "cloud",
+        api_key: "cloud-api-key",
+      }),
+    });
+
+    const credentialFile = encodedCredentialFile("cloud-1");
+    await unlink(credentialFile);
+    await symlink(path.join(os.tmpdir(), "not-a-credential"), credentialFile);
+
+    const response = await fetch(`${baseUrl}/setup/backends/cloud-1`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    expect(response.status).toBe(500);
+  });
+
+  it("rejects insecure existing credential file permissions", async () => {
+    await fetch(`${baseUrl}/setup/backends`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        id: "cloud-1",
+        name: "OpenHands Cloud",
+        host: "https://app.all-hands.dev",
+        kind: "cloud",
+        api_key: "cloud-api-key",
+      }),
+    });
+    await chmod(encodedCredentialFile("cloud-1"), 0o644);
+
+    const response = await fetch(`${baseUrl}/setup/backends`, {
+      headers: authHeaders(),
+    });
+    expect(response.status).toBe(500);
+  });
+
+  it("fails closed on unsupported Windows credential persistence", async () => {
+    const platformSpy = vi
+      .spyOn(process, "platform", "get")
+      .mockReturnValue("win32");
+    const response = await fetch(`${baseUrl}/setup/backends`, {
+      headers: authHeaders(),
+    });
+    expect(response.status).toBe(500);
+    platformSpy.mockRestore();
   });
 
   it("rejects non-Cloud or malformed credential payloads", async () => {

@@ -40,12 +40,18 @@ const ActiveBackendContext =
 async function persistCloudBackendCredential(backend: Backend): Promise<void> {
   if (backend.kind !== "cloud" || !backend.apiKey.trim()) return;
 
-  await saveCloudBackendCredential({
-    id: backend.id,
-    name: backend.name,
-    host: backend.host,
-    cloudApiKey: backend.apiKey,
-  });
+  try {
+    await saveCloudBackendCredential({
+      id: backend.id,
+      name: backend.name,
+      host: backend.host,
+      cloudApiKey: backend.apiKey,
+    });
+  } catch (error) {
+    throw new Error("Failed to persist Cloud backend credentials", {
+      cause: error,
+    });
+  }
 }
 
 async function deletePersistedCloudBackendCredential(
@@ -53,7 +59,13 @@ async function deletePersistedCloudBackendCredential(
 ): Promise<void> {
   if (backend?.kind !== "cloud") return;
 
-  await deleteCloudBackendCredential(backend.id);
+  try {
+    await deleteCloudBackendCredential(backend.id);
+  } catch (error) {
+    throw new Error("Failed to delete persisted Cloud backend credentials", {
+      cause: error,
+    });
+  }
 }
 
 function generateId(): string {
@@ -75,6 +87,22 @@ export function ActiveBackendProvider({
     subscribeActiveBackend,
     getSnapshot,
     getSnapshot,
+  );
+
+  const backendMutationQueueRef = React.useRef<Promise<void>>(
+    Promise.resolve(),
+  );
+
+  const enqueueBackendMutation = React.useCallback(
+    async <T,>(operation: () => Promise<T>): Promise<T> => {
+      const run = backendMutationQueueRef.current.then(operation, operation);
+      backendMutationQueueRef.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
+    [],
   );
 
   const setActive = React.useCallback(
@@ -100,63 +128,69 @@ export function ActiveBackendProvider({
   );
 
   const addBackend = React.useCallback(
-    async (backend: Omit<Backend, "id">): Promise<Backend> => {
-      const next: Backend = { ...backend, id: generateId() };
-      await persistCloudBackendCredential(next);
-      const list = [...getRegisteredBackends(), next];
-      setRegisteredBackends(list);
-      return next;
-    },
-    [],
+    async (backend: Omit<Backend, "id">): Promise<Backend> =>
+      enqueueBackendMutation(async () => {
+        const next: Backend = { ...backend, id: generateId() };
+        await persistCloudBackendCredential(next);
+        const list = [...getRegisteredBackends(), next];
+        setRegisteredBackends(list);
+        return next;
+      }),
+    [enqueueBackendMutation],
   );
 
   const updateBackend = React.useCallback(
-    async (id: string, patch: Partial<Omit<Backend, "id">>): Promise<void> => {
-      const prev = getRegisteredBackends().find((b) => b.id === id);
-      const list = getRegisteredBackends().map((b) =>
-        b.id === id ? { ...b, ...patch } : b,
-      );
-      const next = list.find((backend) => backend.id === id);
+    async (id: string, patch: Partial<Omit<Backend, "id">>): Promise<void> =>
+      enqueueBackendMutation(async () => {
+        const currentBackends = getRegisteredBackends();
+        const prev = currentBackends.find((b) => b.id === id);
+        const list = currentBackends.map((b) =>
+          b.id === id ? { ...b, ...patch } : b,
+        );
+        const next = list.find((backend) => backend.id === id);
 
-      if (next?.kind === "cloud" && next.apiKey.trim()) {
-        await persistCloudBackendCredential(next);
-      } else {
-        await deletePersistedCloudBackendCredential(prev);
-      }
+        if (next?.kind === "cloud" && next.apiKey.trim()) {
+          await persistCloudBackendCredential(next);
+        } else {
+          await deletePersistedCloudBackendCredential(prev);
+        }
 
-      setRegisteredBackends(list);
+        setRegisteredBackends(list);
 
-      // Re-arm health polling when the user edits the fields that
-      // actually drive the probe. Cosmetic edits (name) shouldn't
-      // re-enable a backend that was disabled for being unreachable.
-      const hostChanged =
-        patch.host !== undefined &&
-        prev !== undefined &&
-        patch.host !== prev.host;
-      const apiKeyChanged =
-        patch.apiKey !== undefined &&
-        prev !== undefined &&
-        patch.apiKey !== prev.apiKey;
-      if (hostChanged || apiKeyChanged) {
-        resetBackendHealth(id);
-      }
-    },
-    [],
+        // Re-arm health polling when the user edits the fields that
+        // actually drive the probe. Cosmetic edits (name) shouldn't
+        // re-enable a backend that was disabled for being unreachable.
+        const hostChanged =
+          patch.host !== undefined &&
+          prev !== undefined &&
+          patch.host !== prev.host;
+        const apiKeyChanged =
+          patch.apiKey !== undefined &&
+          prev !== undefined &&
+          patch.apiKey !== prev.apiKey;
+        if (hostChanged || apiKeyChanged) {
+          resetBackendHealth(id);
+        }
+      }),
+    [enqueueBackendMutation],
   );
 
-  const removeBackend = React.useCallback(async (id: string): Promise<void> => {
-    const removed = getRegisteredBackends().find(
-      (backend) => backend.id === id,
-    );
-    await deletePersistedCloudBackendCredential(removed);
-    const list = getRegisteredBackends().filter((b) => b.id !== id);
-    setRegisteredBackends(list);
-    dropBackendHealth(id);
-    // If the active selection pointed at this backend, the active
-    // store falls back to the first remaining local backend (or the
-    // env-derived default if no locals exist); consumer hooks re-key
-    // by the new active backend identity and refetch automatically.
-  }, []);
+  const removeBackend = React.useCallback(
+    async (id: string): Promise<void> =>
+      enqueueBackendMutation(async () => {
+        const currentBackends = getRegisteredBackends();
+        const removed = currentBackends.find((backend) => backend.id === id);
+        await deletePersistedCloudBackendCredential(removed);
+        const list = currentBackends.filter((b) => b.id !== id);
+        setRegisteredBackends(list);
+        dropBackendHealth(id);
+        // If the active selection pointed at this backend, the active
+        // store falls back to the first remaining local backend (or the
+        // env-derived default if no locals exist); consumer hooks re-key
+        // by the new active backend identity and refetch automatically.
+      }),
+    [enqueueBackendMutation],
+  );
 
   const value = React.useMemo<ActiveBackendContextValue>(
     () => ({

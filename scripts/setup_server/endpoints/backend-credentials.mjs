@@ -9,6 +9,9 @@ const LOCK_STALE_MS = 30_000;
 const LOCK_RETRY_MS = 20;
 const LOCK_MAX_ATTEMPTS = 50;
 const STORE_LOCK_ID = "__store__";
+const AUTH_FAILURE_WINDOW_MS = 60_000;
+const AUTH_MAX_FAILURES_PER_WINDOW = 10;
+const authFailures = new Map();
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -318,6 +321,36 @@ function requestSessionKey(req) {
   return null;
 }
 
+function authRateLimitKey(req) {
+  return `${req.socket.remoteAddress || "unknown"}:${req.socket.localPort || "unknown"}`;
+}
+
+function getAuthFailureEntry(req) {
+  const key = authRateLimitKey(req);
+  const now = Date.now();
+  const entry = authFailures.get(key);
+  if (!entry || now - entry.windowStartedAt > AUTH_FAILURE_WINDOW_MS) {
+    return { key, count: 0, windowStartedAt: now };
+  }
+  return { key, ...entry };
+}
+
+function isAuthRateLimited(req) {
+  return getAuthFailureEntry(req).count >= AUTH_MAX_FAILURES_PER_WINDOW;
+}
+
+function recordAuthFailure(req) {
+  const entry = getAuthFailureEntry(req);
+  authFailures.set(entry.key, {
+    count: entry.count + 1,
+    windowStartedAt: entry.windowStartedAt,
+  });
+}
+
+function clearAuthFailures(req) {
+  authFailures.delete(authRateLimitKey(req));
+}
+
 function isAuthorized(req) {
   const allowed = configuredSessionKeys();
   if (allowed.length === 0) return false;
@@ -366,10 +399,17 @@ export async function handleSetupBackendsRequest(req, res) {
     return false;
   }
 
+  if (isAuthRateLimited(req)) {
+    sendError(res, 429, "Too many authentication attempts");
+    return true;
+  }
+
   if (!isAuthorized(req)) {
+    recordAuthFailure(req);
     sendError(res, 401, "Unauthorized");
     return true;
   }
+  clearAuthFailures(req);
 
   try {
     if (req.method === "GET" && url.pathname === SETUP_BACKENDS_PREFIX) {

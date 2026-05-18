@@ -250,6 +250,14 @@ export function BackendForm({
 }: BackendFormProps) {
   const { t } = useTranslation("openhands");
   const { addBackend, updateBackend } = useActiveBackendContext();
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(
+    () => () => {
+      isMountedRef.current = false;
+    },
+    [],
+  );
 
   const [name, setName] = React.useState(backend?.name ?? "");
   const [host, setHost] = React.useState(backend?.host ?? "");
@@ -304,9 +312,11 @@ export function BackendForm({
       } else {
         await addBackend(payload);
       }
-      onSubmitted();
+      if (isMountedRef.current) onSubmitted();
     } catch (error) {
-      console.error("Failed to save backend", error);
+      if (isMountedRef.current) {
+        console.error("Failed to save backend", error);
+      }
     }
   };
 

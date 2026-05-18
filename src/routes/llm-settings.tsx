@@ -276,6 +276,7 @@ function OpenHandsApiKeyAuth({
         const normalizedLlmApiKey = llmApiKey?.trim() ?? "";
 
         if (!normalizedLlmApiKey) {
+          if (isComponentAborted(componentSignal)) return;
           setFetchError(
             translateRef.current(
               I18nKey.SETTINGS$OPENHANDS_LM_API_KEY_FETCH_FAILED,
@@ -284,6 +285,7 @@ function OpenHandsApiKeyAuth({
           return;
         }
 
+        if (isComponentAborted(componentSignal)) return;
         onApiKeyObtainedRef.current(normalizedLlmApiKey);
       } catch (error) {
         if (
@@ -297,6 +299,7 @@ function OpenHandsApiKeyAuth({
           "Failed to fetch OpenHands-provided LM API key from Cloud",
           error,
         );
+        if (isComponentAborted(componentSignal)) return;
         setFetchError(
           translateRef.current(
             I18nKey.SETTINGS$OPENHANDS_LM_API_KEY_FETCH_FAILED,
@@ -330,7 +333,9 @@ function OpenHandsApiKeyAuth({
         });
         if (isComponentAborted(callbackSignal)) return;
         setCloudAuths((existing) => dedupeCloudAuths([savedAuth, ...existing]));
+        if (isComponentAborted(callbackSignal)) return;
         setSelectedCloudAuthId(savedAuth.id);
+        if (isComponentAborted(callbackSignal)) return;
         await fetchAndApplyLlmApiKey(savedAuth, "device", callbackSignal);
       } catch (error) {
         if (isAbortError(error) || isComponentAborted(callbackSignal)) return;
@@ -338,6 +343,7 @@ function OpenHandsApiKeyAuth({
           `Failed to persist OpenHands Cloud credential for ${auth.id}`,
           error,
         );
+        if (isComponentAborted(callbackSignal)) return;
         setDeviceFlowLlmApiKeyError(
           translateRef.current(
             I18nKey.SETTINGS$OPENHANDS_LM_API_KEY_FETCH_FAILED,
