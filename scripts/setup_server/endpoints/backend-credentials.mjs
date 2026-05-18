@@ -6,6 +6,15 @@ import path from "node:path";
 const SETUP_BACKENDS_PREFIX = "/setup/backends";
 const MAX_BODY_BYTES = 64 * 1024;
 const LOCK_STALE_MS = 30_000;
+const LOCK_RETRY_MS = 20;
+const LOCK_MAX_ATTEMPTS = 50;
+const STORE_LOCK_ID = "__store__";
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 function sendJson(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -81,15 +90,32 @@ function lockPath(id) {
   return `${credentialPath(id)}.lock`;
 }
 
+function assertSupportedPlatform() {
+  if (process.platform === "win32") {
+    throw new Error(
+      "Cloud credential persistence is not supported on Windows until ACL enforcement is implemented",
+    );
+  }
+}
+
+function assertPrivateMode(stat, expectedMode, label) {
+  const actualMode = stat.mode & 0o777;
+  if (actualMode !== expectedMode) {
+    throw new Error(
+      `${label} must have mode ${expectedMode.toString(8)} (got ${actualMode.toString(8)})`,
+    );
+  }
+}
+
 async function ensurePrivateDirectory(dir) {
+  assertSupportedPlatform();
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const stat = await fs.lstat(dir);
   if (stat.isSymbolicLink() || !stat.isDirectory()) {
     throw new Error(`Credential path is not a private directory: ${dir}`);
   }
-  if (process.platform !== "win32") {
-    await fs.chmod(dir, 0o700);
-  }
+  await fs.chmod(dir, 0o700);
+  assertPrivateMode(await fs.lstat(dir), 0o700, "Credential directory");
 }
 
 async function fsyncPath(targetPath) {
@@ -104,6 +130,7 @@ async function fsyncPath(targetPath) {
 async function readCredentialFile(filePath) {
   const stat = await fs.lstat(filePath);
   if (stat.isSymbolicLink() || !stat.isFile()) return null;
+  assertPrivateMode(stat, 0o600, "Credential file");
   const parsed = JSON.parse(await fs.readFile(filePath, "utf8"));
   return validateCredential(parsed);
 }
@@ -123,33 +150,71 @@ async function readAllCredentials() {
   return credentials;
 }
 
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+async function readLockMetadata(file) {
+  const stat = await fs.lstat(file).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!stat) return null;
+  if (stat.isSymbolicLink()) throw new Error("Refusing to follow symlink lock");
+  assertPrivateMode(stat, 0o600, "Credential lock file");
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(await fs.readFile(file, "utf8"));
+  } catch {
+    parsed = null;
+  }
+  return parsed && typeof parsed === "object"
+    ? { pid: Number(parsed.pid), mtimeMs: stat.mtimeMs }
+    : { pid: null, mtimeMs: stat.mtimeMs };
+}
+
+async function shouldRemoveExistingLock(file) {
+  const metadata = await readLockMetadata(file).catch(() => null);
+  if (!metadata) return true;
+  if (isProcessAlive(metadata.pid)) return false;
+  return Date.now() - metadata.mtimeMs > LOCK_STALE_MS;
+}
+
 async function acquireLock(id) {
   const file = lockPath(id);
   await ensurePrivateDirectory(getCredentialDir());
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS; attempt += 1) {
     try {
       const handle = await fs.open(file, "wx", 0o600);
-      await handle.writeFile(
-        JSON.stringify({ pid: process.pid, created_at: Date.now() }),
-      );
-      await handle.close();
+      try {
+        await handle.writeFile(
+          JSON.stringify({ pid: process.pid, created_at: Date.now() }),
+        );
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
       return async () => {
         await fs.unlink(file).catch(() => undefined);
       };
     } catch (error) {
       if (error?.code !== "EEXIST") throw error;
-
-      const stat = await fs.lstat(file).catch(() => null);
-      if (
-        stat &&
-        !stat.isSymbolicLink() &&
-        Date.now() - stat.mtimeMs > LOCK_STALE_MS
-      ) {
+      if (await shouldRemoveExistingLock(file)) {
         await fs.unlink(file).catch(() => undefined);
         continue;
       }
-
+      if (attempt < LOCK_MAX_ATTEMPTS - 1) {
+        await sleep(LOCK_RETRY_MS);
+        continue;
+      }
       throw new Error("Credential store is busy");
     }
   }
@@ -170,13 +235,14 @@ async function writeCredential(credential) {
   const dir = getCredentialDir();
   await ensurePrivateDirectory(dir);
 
-  const existing = (await readAllCredentials()).find(
-    (stored) =>
-      stored.host === credential.host && stored.api_key === credential.api_key,
-  );
-  if (existing) return existing;
+  return withCredentialLock(STORE_LOCK_ID, async () => {
+    const existing = (await readAllCredentials()).find(
+      (stored) =>
+        stored.host === credential.host &&
+        stored.api_key === credential.api_key,
+    );
+    if (existing) return existing;
 
-  return withCredentialLock(credential.id, async () => {
     const file = credentialPath(credential.id);
     const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
     let handle;
@@ -184,15 +250,14 @@ async function writeCredential(credential) {
     try {
       handle = await fs.open(temp, "wx", 0o600);
       await handle.writeFile(
-        `${JSON.stringify(credential, null, 2)}\n`,
+        `${JSON.stringify(credential, null, 2)}
+`,
         "utf8",
       );
       await handle.sync();
       await handle.close();
       handle = null;
-      if (process.platform !== "win32") {
-        await fs.chmod(temp, 0o600);
-      }
+      await fs.chmod(temp, 0o600);
       await fs.rename(temp, file);
       await fsyncPath(dir);
       return credential;
@@ -205,8 +270,9 @@ async function writeCredential(credential) {
 }
 
 async function deleteCredential(id) {
-  await ensurePrivateDirectory(getCredentialDir());
-  await withCredentialLock(id, async () => {
+  const dir = getCredentialDir();
+  await ensurePrivateDirectory(dir);
+  await withCredentialLock(STORE_LOCK_ID, async () => {
     const file = credentialPath(id);
     const stat = await fs.lstat(file).catch((error) => {
       if (error?.code === "ENOENT") return null;
@@ -215,8 +281,9 @@ async function deleteCredential(id) {
     if (!stat) return;
     if (stat.isSymbolicLink())
       throw new Error("Refusing to delete symlink credential");
+    assertPrivateMode(stat, 0o600, "Credential file");
     await fs.unlink(file);
-    await fsyncPath(getCredentialDir());
+    await fsyncPath(dir);
   });
 }
 
@@ -253,7 +320,7 @@ function requestSessionKey(req) {
 
 function isAuthorized(req) {
   const allowed = configuredSessionKeys();
-  if (allowed.length === 0) return true;
+  if (allowed.length === 0) return false;
   const provided = requestSessionKey(req);
   return Boolean(provided && allowed.some((key) => safeEqual(provided, key)));
 }

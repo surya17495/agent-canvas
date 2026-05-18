@@ -26,36 +26,34 @@ interface ActiveBackendContextValue {
   backends: Backend[];
   active: ResolvedActiveBackend;
   setActive: (backendId: string, orgId?: string | null) => void;
-  addBackend: (backend: Omit<Backend, "id">) => Backend;
-  updateBackend: (id: string, patch: Partial<Omit<Backend, "id">>) => void;
-  removeBackend: (id: string) => void;
+  addBackend: (backend: Omit<Backend, "id">) => Promise<Backend>;
+  updateBackend: (
+    id: string,
+    patch: Partial<Omit<Backend, "id">>,
+  ) => Promise<void>;
+  removeBackend: (id: string) => Promise<void>;
 }
 
 const ActiveBackendContext =
   React.createContext<ActiveBackendContextValue | null>(null);
 
-function persistCloudBackendCredential(backend: Backend): void {
+async function persistCloudBackendCredential(backend: Backend): Promise<void> {
   if (backend.kind !== "cloud" || !backend.apiKey.trim()) return;
 
-  void saveCloudBackendCredential({
+  await saveCloudBackendCredential({
     id: backend.id,
     name: backend.name,
     host: backend.host,
     cloudApiKey: backend.apiKey,
-  }).catch((error) => {
-    console.error(
-      "Failed to persist OpenHands Cloud backend credential",
-      error,
-    );
   });
 }
 
-function deletePersistedCloudBackendCredential(backend?: Backend): void {
+async function deletePersistedCloudBackendCredential(
+  backend?: Backend,
+): Promise<void> {
   if (backend?.kind !== "cloud") return;
 
-  void deleteCloudBackendCredential(backend.id).catch((error) => {
-    console.error("Failed to delete OpenHands Cloud backend credential", error);
-  });
+  await deleteCloudBackendCredential(backend.id);
 }
 
 function generateId(): string {
@@ -102,30 +100,31 @@ export function ActiveBackendProvider({
   );
 
   const addBackend = React.useCallback(
-    (backend: Omit<Backend, "id">): Backend => {
+    async (backend: Omit<Backend, "id">): Promise<Backend> => {
       const next: Backend = { ...backend, id: generateId() };
+      await persistCloudBackendCredential(next);
       const list = [...getRegisteredBackends(), next];
       setRegisteredBackends(list);
-      persistCloudBackendCredential(next);
       return next;
     },
     [],
   );
 
   const updateBackend = React.useCallback(
-    (id: string, patch: Partial<Omit<Backend, "id">>) => {
+    async (id: string, patch: Partial<Omit<Backend, "id">>): Promise<void> => {
       const prev = getRegisteredBackends().find((b) => b.id === id);
       const list = getRegisteredBackends().map((b) =>
         b.id === id ? { ...b, ...patch } : b,
       );
       const next = list.find((backend) => backend.id === id);
-      setRegisteredBackends(list);
 
       if (next?.kind === "cloud" && next.apiKey.trim()) {
-        persistCloudBackendCredential(next);
+        await persistCloudBackendCredential(next);
       } else {
-        deletePersistedCloudBackendCredential(prev);
+        await deletePersistedCloudBackendCredential(prev);
       }
+
+      setRegisteredBackends(list);
 
       // Re-arm health polling when the user edits the fields that
       // actually drive the probe. Cosmetic edits (name) shouldn't
@@ -145,13 +144,13 @@ export function ActiveBackendProvider({
     [],
   );
 
-  const removeBackend = React.useCallback((id: string) => {
+  const removeBackend = React.useCallback(async (id: string): Promise<void> => {
     const removed = getRegisteredBackends().find(
       (backend) => backend.id === id,
     );
+    await deletePersistedCloudBackendCredential(removed);
     const list = getRegisteredBackends().filter((b) => b.id !== id);
     setRegisteredBackends(list);
-    deletePersistedCloudBackendCredential(removed);
     dropBackendHealth(id);
     // If the active selection pointed at this backend, the active
     // store falls back to the first remaining local backend (or the

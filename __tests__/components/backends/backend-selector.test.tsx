@@ -60,12 +60,14 @@ function TestSeed({
   onMount,
   children,
 }: {
-  onMount: (ctx: ReturnType<typeof useActiveBackendContext>) => void;
+  onMount: (
+    ctx: ReturnType<typeof useActiveBackendContext>,
+  ) => void | Promise<void>;
   children: React.ReactNode;
 }) {
   const ctx = useActiveBackendContext();
   React.useEffect(() => {
-    onMount(ctx);
+    void onMount(ctx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return children as React.ReactElement;
@@ -184,13 +186,15 @@ describe("BackendSelector", () => {
     let cloudId = "";
     renderWithProviders(
       <TestSeed
-        onMount={(ctx) => {
-          cloudId = ctx.addBackend({
-            name: "Production",
-            host: "https://app.all-hands.dev",
-            apiKey: "bearer-key",
-            kind: "cloud",
-          }).id;
+        onMount={async (ctx) => {
+          cloudId = (
+            await ctx.addBackend({
+              name: "Production",
+              host: "https://app.all-hands.dev",
+              apiKey: "bearer-key",
+              kind: "cloud",
+            })
+          ).id;
         }}
       >
         <BackendSelector />
@@ -336,13 +340,15 @@ describe("BackendSelector", () => {
     let cloudId = "";
     renderWithProviders(
       <TestSeed
-        onMount={(ctx) => {
-          cloudId = ctx.addBackend({
-            name: "Production",
-            host: "https://app.all-hands.dev",
-            apiKey: "bearer-key",
-            kind: "cloud",
-          }).id;
+        onMount={async (ctx) => {
+          cloudId = (
+            await ctx.addBackend({
+              name: "Production",
+              host: "https://app.all-hands.dev",
+              apiKey: "bearer-key",
+              kind: "cloud",
+            })
+          ).id;
           // Simulate the post-refresh malformed state: active backend is
           // the cloud one but no orgId is set yet.
           ctx.setActive(cloudId, null);

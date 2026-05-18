@@ -281,7 +281,7 @@ export function BackendForm({
         : undefined
     : undefined;
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit) {
       // Mark all validated fields as touched so inline errors become visible
@@ -298,13 +298,16 @@ export function BackendForm({
       kind,
     };
 
-    if (mode === "edit" && backend) {
-      updateBackend(backend.id, payload);
-    } else {
-      addBackend(payload);
+    try {
+      if (mode === "edit" && backend) {
+        await updateBackend(backend.id, payload);
+      } else {
+        await addBackend(payload);
+      }
+      onSubmitted();
+    } catch (error) {
+      console.error("Failed to save backend", error);
     }
-
-    onSubmitted();
   };
 
   return (
@@ -403,16 +406,20 @@ function ManualConnectionColumn({ onClose }: { onClose: () => void }) {
     isValidHostUrl(host) &&
     (kind === "local" || apiKey.trim().length > 0);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!canSubmit) return;
-    addBackend({
-      name: name.trim(),
-      host: normalizeHost(host),
-      apiKey: apiKey.trim(),
-      kind,
-    });
-    onClose();
+    try {
+      await addBackend({
+        name: name.trim(),
+        host: normalizeHost(host),
+        apiKey: apiKey.trim(),
+        kind,
+      });
+      onClose();
+    } catch (error) {
+      console.error("Failed to save backend", error);
+    }
   };
 
   return (
@@ -494,14 +501,18 @@ function CloudLoginColumn({ onClose }: { onClose: () => void }) {
 
   const effectiveHost = customHost.trim() || DEFAULT_OPENHANDS_CLOUD_HOST;
 
-  const handleLoginSuccess = (apiKey: string) => {
-    addBackend({
-      name: OPENHANDS_CLOUD_DISPLAY_NAME,
-      host: normalizeHost(effectiveHost),
-      apiKey,
-      kind: "cloud",
-    });
-    onClose();
+  const handleLoginSuccess = async (apiKey: string) => {
+    try {
+      await addBackend({
+        name: OPENHANDS_CLOUD_DISPLAY_NAME,
+        host: normalizeHost(effectiveHost),
+        apiKey,
+        kind: "cloud",
+      });
+      onClose();
+    } catch (error) {
+      console.error("Failed to save backend", error);
+    }
   };
 
   return (

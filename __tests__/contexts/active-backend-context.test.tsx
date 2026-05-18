@@ -56,19 +56,19 @@ describe("ActiveBackendProvider", () => {
     });
   });
 
-  it("addBackend exposes new local backends alongside the seeded default", () => {
+  it("addBackend exposes new local backends alongside the seeded default", async () => {
     const { result } = renderHook(() => useActiveBackendContext(), {
       wrapper: makeWrapper(),
     });
 
-    act(() => {
-      result.current.addBackend({
+    await act(async () => {
+      await result.current.addBackend({
         name: "Local A",
         host: "http://localhost:9000",
         apiKey: "key-a",
         kind: "local",
       });
-      result.current.addBackend({
+      await result.current.addBackend({
         name: "Local B",
         host: "http://localhost:9001",
         apiKey: "key-b",
@@ -83,7 +83,7 @@ describe("ActiveBackendProvider", () => {
     ]);
   });
 
-  it("setActive switches the active backend without touching unrelated React Query cache entries", () => {
+  it("setActive switches the active backend without touching unrelated React Query cache entries", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(["dummy"], { value: 1 });
 
@@ -92,8 +92,8 @@ describe("ActiveBackendProvider", () => {
     });
 
     let added: { id: string } | null = null;
-    act(() => {
-      added = result.current.addBackend({
+    await act(async () => {
+      added = await result.current.addBackend({
         name: "Local 1",
         host: "http://localhost:9000",
         apiKey: "key-1",
@@ -111,19 +111,21 @@ describe("ActiveBackendProvider", () => {
     expect(queryClient.getQueryData(["dummy"])).toEqual({ value: 1 });
   });
 
-  it("removeBackend falls back to the seeded default when the active backend is removed", () => {
+  it("removeBackend falls back to the seeded default when the active backend is removed", async () => {
     const { result } = renderHook(() => useActiveBackendContext(), {
       wrapper: makeWrapper(),
     });
 
     let id = "";
-    act(() => {
-      id = result.current.addBackend({
-        name: "Local 1",
-        host: "http://localhost:9000",
-        apiKey: "k",
-        kind: "local",
-      }).id;
+    await act(async () => {
+      id = (
+        await result.current.addBackend({
+          name: "Local 1",
+          host: "http://localhost:9000",
+          apiKey: "k",
+          kind: "local",
+        })
+      ).id;
     });
 
     act(() => {
@@ -131,23 +133,23 @@ describe("ActiveBackendProvider", () => {
     });
     expect(result.current.active.backend.id).toBe(id);
 
-    act(() => {
-      result.current.removeBackend(id);
+    await act(async () => {
+      await result.current.removeBackend(id);
     });
     expect(result.current.active.backend.id).toBe(DEFAULT_LOCAL_BACKEND_ID);
     expect(result.current.backends).toHaveLength(1);
     expect(result.current.backends[0].id).toBe(DEFAULT_LOCAL_BACKEND_ID);
   });
 
-  it("removeBackend allows removing the seeded default and falls back to a synthesized env-derived backend", () => {
+  it("removeBackend allows removing the seeded default and falls back to a synthesized env-derived backend", async () => {
     const { result } = renderHook(() => useActiveBackendContext(), {
       wrapper: makeWrapper(),
     });
 
     expect(result.current.backends).toHaveLength(1);
 
-    act(() => {
-      result.current.removeBackend(DEFAULT_LOCAL_BACKEND_ID);
+    await act(async () => {
+      await result.current.removeBackend(DEFAULT_LOCAL_BACKEND_ID);
     });
 
     expect(result.current.backends).toEqual([]);
@@ -165,24 +167,28 @@ describe("ActiveBackendProvider", () => {
     errorSpy.mockRestore();
   });
 
-  it("updateBackend applies multiple same-tick local updates without losing fields", () => {
+  it("updateBackend applies multiple same-tick local updates without losing fields", async () => {
     const { result } = renderHook(() => useActiveBackendContext(), {
       wrapper: makeWrapper(),
     });
 
     let id = "";
-    act(() => {
-      id = result.current.addBackend({
-        name: "Local",
-        host: "http://localhost:9000",
-        apiKey: "old-key",
-        kind: "local",
-      }).id;
-      result.current.updateBackend(id, { name: "Renamed" });
-      result.current.updateBackend(id, { host: "http://localhost:9001" });
+    await act(async () => {
+      id = (
+        await result.current.addBackend({
+          name: "Local",
+          host: "http://localhost:9000",
+          apiKey: "old-key",
+          kind: "local",
+        })
+      ).id;
+      await result.current.updateBackend(id, { name: "Renamed" });
+      await result.current.updateBackend(id, { host: "http://localhost:9001" });
     });
 
-    expect(result.current.backends.find((backend) => backend.id === id)).toEqual(
+    expect(
+      result.current.backends.find((backend) => backend.id === id),
+    ).toEqual(
       expect.objectContaining({
         name: "Renamed",
         host: "http://localhost:9001",
@@ -191,55 +197,59 @@ describe("ActiveBackendProvider", () => {
     );
   });
 
-  it("updateBackend re-arms health polling when host or apiKey changes but leaves cosmetic edits alone", () => {
+  it("updateBackend re-arms health polling when host or apiKey changes but leaves cosmetic edits alone", async () => {
     const { result } = renderHook(() => useActiveBackendContext(), {
       wrapper: makeWrapper(),
     });
 
     let id = "";
-    act(() => {
-      id = result.current.addBackend({
-        name: "Stale",
-        host: "http://localhost:9000",
-        apiKey: "old-key",
-        kind: "local",
-      }).id;
+    await act(async () => {
+      id = (
+        await result.current.addBackend({
+          name: "Stale",
+          host: "http://localhost:9000",
+          apiKey: "old-key",
+          kind: "local",
+        })
+      ).id;
     });
     for (let i = 0; i < MAX_CONSECUTIVE_FAILURES; i += 1) {
       recordBackendFailure(id, new Error("timeout"));
     }
     expect(getBackendHealthEntry(id)?.disabled).toBe(true);
 
-    act(() => {
-      result.current.updateBackend(id, { name: "Renamed" });
+    await act(async () => {
+      await result.current.updateBackend(id, { name: "Renamed" });
     });
     expect(getBackendHealthEntry(id)?.disabled).toBe(true);
 
-    act(() => {
-      result.current.updateBackend(id, { host: "http://localhost:9001" });
+    await act(async () => {
+      await result.current.updateBackend(id, { host: "http://localhost:9001" });
     });
 
     expect(getBackendHealthEntry(id)).toBeNull();
   });
 
-  it("removeBackend drops the backend's persisted health entry", () => {
+  it("removeBackend drops the backend's persisted health entry", async () => {
     const { result } = renderHook(() => useActiveBackendContext(), {
       wrapper: makeWrapper(),
     });
     let id = "";
-    act(() => {
-      id = result.current.addBackend({
-        name: "Doomed",
-        host: "http://localhost:9000",
-        apiKey: "k",
-        kind: "local",
-      }).id;
+    await act(async () => {
+      id = (
+        await result.current.addBackend({
+          name: "Doomed",
+          host: "http://localhost:9000",
+          apiKey: "k",
+          kind: "local",
+        })
+      ).id;
     });
     recordBackendFailure(id, new Error("boom"));
     expect(getBackendHealthEntry(id)).not.toBeNull();
 
-    act(() => {
-      result.current.removeBackend(id);
+    await act(async () => {
+      await result.current.removeBackend(id);
     });
 
     expect(getBackendHealthEntry(id)).toBeNull();
