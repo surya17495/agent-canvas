@@ -19,6 +19,29 @@ function sleep(ms) {
   });
 }
 
+async function readLinuxProcessStartTime(pid) {
+  if (process.platform !== "linux") return null;
+  try {
+    const stat = await fs.readFile(`/proc/${pid}/stat`, "utf8");
+    const endOfCommand = stat.lastIndexOf(")");
+    const fields = stat
+      .slice(endOfCommand + 2)
+      .trim()
+      .split(/\s+/);
+    return fields[19] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function currentProcessLockMetadata() {
+  return {
+    pid: process.pid,
+    process_start_time: await readLinuxProcessStartTime(process.pid),
+    created_at: Date.now(),
+  };
+}
+
 function sendJson(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
@@ -131,6 +154,7 @@ async function fsyncPath(targetPath) {
 }
 
 async function readCredentialFile(filePath) {
+  assertSupportedPlatform();
   const stat = await fs.lstat(filePath);
   if (stat.isSymbolicLink() || !stat.isFile()) return null;
   assertPrivateMode(stat, 0o600, "Credential file");
@@ -163,6 +187,17 @@ function isProcessAlive(pid) {
   }
 }
 
+async function isLockOwnerAlive(metadata) {
+  if (!isProcessAlive(metadata.pid)) return false;
+  const expectedStartTime =
+    typeof metadata.process_start_time === "string"
+      ? metadata.process_start_time
+      : null;
+  if (!expectedStartTime) return false;
+  const actualStartTime = await readLinuxProcessStartTime(metadata.pid);
+  return actualStartTime !== null && actualStartTime === expectedStartTime;
+}
+
 async function readLockMetadata(file) {
   const stat = await fs.lstat(file).catch((error) => {
     if (error?.code === "ENOENT") return null;
@@ -179,15 +214,22 @@ async function readLockMetadata(file) {
     parsed = null;
   }
   return parsed && typeof parsed === "object"
-    ? { pid: Number(parsed.pid), mtimeMs: stat.mtimeMs }
-    : { pid: null, mtimeMs: stat.mtimeMs };
+    ? {
+        pid: Number(parsed.pid),
+        process_start_time: readString(parsed.process_start_time),
+        mtimeMs: stat.mtimeMs,
+      }
+    : { pid: null, process_start_time: null, mtimeMs: stat.mtimeMs };
 }
 
 async function shouldRemoveExistingLock(file) {
-  const metadata = await readLockMetadata(file).catch(() => null);
+  const metadata = await readLockMetadata(file);
   if (!metadata) return true;
-  if (isProcessAlive(metadata.pid)) return false;
-  return Date.now() - metadata.mtimeMs > LOCK_STALE_MS;
+  if (await isLockOwnerAlive(metadata)) return false;
+  return (
+    Date.now() - metadata.mtimeMs > LOCK_STALE_MS ||
+    !isProcessAlive(metadata.pid)
+  );
 }
 
 async function acquireLock(id) {
@@ -199,7 +241,7 @@ async function acquireLock(id) {
       const handle = await fs.open(file, "wx", 0o600);
       try {
         await handle.writeFile(
-          JSON.stringify({ pid: process.pid, created_at: Date.now() }),
+          JSON.stringify(await currentProcessLockMetadata()),
         );
         await handle.sync();
       } finally {
@@ -325,9 +367,18 @@ function authRateLimitKey(req) {
   return `${req.socket.remoteAddress || "unknown"}:${req.socket.localPort || "unknown"}`;
 }
 
+function pruneExpiredAuthFailures(now = Date.now()) {
+  for (const [key, entry] of authFailures.entries()) {
+    if (now - entry.windowStartedAt > AUTH_FAILURE_WINDOW_MS) {
+      authFailures.delete(key);
+    }
+  }
+}
+
 function getAuthFailureEntry(req) {
   const key = authRateLimitKey(req);
   const now = Date.now();
+  pruneExpiredAuthFailures(now);
   const entry = authFailures.get(key);
   if (!entry || now - entry.windowStartedAt > AUTH_FAILURE_WINDOW_MS) {
     return { key, count: 0, windowStartedAt: now };

@@ -196,7 +196,7 @@ function OpenHandsApiKeyAuth({
 
   const isComponentAborted = React.useCallback(
     (signal: AbortSignal | null = getComponentAbortSignal()) =>
-      !signal || signal.aborted,
+      signal?.aborted ?? false,
     [getComponentAbortSignal],
   );
 

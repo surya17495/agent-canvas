@@ -42,6 +42,18 @@ function encodedCredentialFile(id: string) {
   );
 }
 
+async function readCurrentProcessStartTime() {
+  if (process.platform !== "linux") return null;
+  const stat = await readFile(`/proc/${process.pid}/stat`, "utf8");
+  const endOfCommand = stat.lastIndexOf(")");
+  return (
+    stat
+      .slice(endOfCommand + 2)
+      .trim()
+      .split(/\s+/)[19] || null
+  );
+}
+
 async function startServer() {
   const server = createServer(async (req, res) => {
     if (await handleSetupServerRequest(req, res)) return;
@@ -271,9 +283,14 @@ describe("/setup/backends", () => {
     });
 
     const lockFile = `${encodedCredentialFile("__store__")}.lock`;
-    await writeFile(lockFile, JSON.stringify({ pid: process.pid }), {
-      mode: 0o600,
-    });
+    await writeFile(
+      lockFile,
+      JSON.stringify({
+        pid: process.pid,
+        process_start_time: await readCurrentProcessStartTime(),
+      }),
+      { mode: 0o600 },
+    );
     const staleTime = new Date(Date.now() - 60_000);
     await utimes(lockFile, staleTime, staleTime);
 
