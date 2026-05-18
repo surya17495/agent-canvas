@@ -317,23 +317,33 @@ function OpenHandsApiKeyAuth({
   );
 
   const handleCloudApiKeyObtained = React.useCallback(
-    (cloudApiKey: string) => {
+    async (cloudApiKey: string) => {
       const callbackSignal = getComponentAbortSignal();
       if (isComponentAborted(callbackSignal)) return;
 
       const auth = makeDefaultOpenHandsCloudCredential(cloudApiKey);
-      setCloudAuths((existing) => dedupeCloudAuths([auth, ...existing]));
-      setSelectedCloudAuthId(auth.id);
       setDeviceFlowLlmApiKeyError(null);
-      void saveCloudBackendCredential(auth).catch((error) => {
+
+      try {
+        const savedAuth = await saveCloudBackendCredential(auth, {
+          signal: callbackSignal ?? undefined,
+        });
+        if (isComponentAborted(callbackSignal)) return;
+        setCloudAuths((existing) => dedupeCloudAuths([savedAuth, ...existing]));
+        setSelectedCloudAuthId(savedAuth.id);
+        await fetchAndApplyLlmApiKey(savedAuth, "device", callbackSignal);
+      } catch (error) {
         if (isAbortError(error) || isComponentAborted(callbackSignal)) return;
         console.warn(
           `Failed to persist OpenHands Cloud credential for ${auth.id}`,
           error,
         );
-      });
-      if (isComponentAborted(callbackSignal)) return;
-      void fetchAndApplyLlmApiKey(auth, "device", callbackSignal);
+        setDeviceFlowLlmApiKeyError(
+          translateRef.current(
+            I18nKey.SETTINGS$OPENHANDS_LM_API_KEY_FETCH_FAILED,
+          ),
+        );
+      }
     },
     [fetchAndApplyLlmApiKey, getComponentAbortSignal, isComponentAborted],
   );
