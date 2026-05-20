@@ -101,6 +101,7 @@ export function LlmSettingsScreen({
   embedded,
   hideSaveButton,
   onSaveControlChange,
+  apiKeyIsSet,
 }: {
   scope?: SettingsScope;
   /** Optional hook fired after a successful save (e.g. advance an onboarding step). */
@@ -113,6 +114,13 @@ export function LlmSettingsScreen({
   hideSaveButton?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
   onSaveControlChange?: (control: SdkSectionSaveControl) => void;
+  /**
+   * When provided, overrides `settings.llm_api_key_set` for the API key
+   * field placeholder. Pass the profile's own `api_key_set` value when
+   * embedding this form inside a profile editor so the placeholder reflects
+   * the profile's key status rather than the global settings.
+   */
+  apiKeyIsSet?: boolean;
 }) {
   const { t } = useTranslation("openhands");
 
@@ -156,6 +164,7 @@ export function LlmSettingsScreen({
           ? values["llm.base_url"]
           : "";
       const showOpenHandsApiKeyHelp = modelValue.startsWith("openhands/");
+      const keyIsSet = apiKeyIsSet ?? settings?.llm_api_key_set ?? false;
 
       const renderApiKeyInput = (testId: string, helpTestId: string) => (
         <>
@@ -169,13 +178,11 @@ export function LlmSettingsScreen({
                 ? values["llm.api_key"]
                 : ""
             }
-            placeholder={settings?.llm_api_key_set ? "<hidden>" : ""}
+            placeholder={keyIsSet ? "**********" : ""}
             onChange={(value) => onChange("llm.api_key", value)}
             isDisabled={isDisabled}
             startContent={
-              settings?.llm_api_key_set ? (
-                <KeyStatusIcon isSet={settings.llm_api_key_set} />
-              ) : undefined
+              keyIsSet ? <KeyStatusIcon isSet={keyIsSet} /> : undefined
             }
           />
 
@@ -257,7 +264,7 @@ export function LlmSettingsScreen({
         </div>
       );
     },
-    [defaultModel, settings?.llm_api_key_set, t],
+    [defaultModel, settings?.llm_api_key_set, t, apiKeyIsSet],
   );
 
   const buildPayload = React.useCallback(

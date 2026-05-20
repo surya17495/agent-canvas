@@ -307,10 +307,17 @@ export function LlmSettingsLocalView() {
         }
         embedded
         hideSaveButton
+        apiKeyIsSet={
+          viewMode === "edit"
+            ? (editingProfile?.profile.api_key_set ?? false)
+            : false
+        }
         initialValueOverrides={
           viewMode === "edit" && editingProfile?.initialValues
-            ? // Edit mode: use the existing profile values
-              editingProfile.initialValues
+            ? // Edit mode: start the API key field empty so users see a clean
+              // input; the encrypted key is preserved in editingProfile.initialValues
+              // and used as a fallback in handleSave when the field is left blank.
+              { ...editingProfile.initialValues, "llm.api_key": "" }
             : // Create mode: start with empty fields for a fresh profile
               { "llm.model": "", "llm.api_key": "", "llm.base_url": "" }
         }
