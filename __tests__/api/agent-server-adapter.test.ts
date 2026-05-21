@@ -554,19 +554,65 @@ describe("toAppConversation", () => {
     expect(result.llm_model).toBe("claude-sonnet-4-6");
   });
 
-  it("marks ACP conversations and nulls llm_model so the chat UI can't mislead", () => {
+  it("nulls llm_model on ACP conversations from older agent-servers that don't lift current_model_*", () => {
     // The SDK's ACPAgent carries a sentinel ``llm`` (``acp-managed``) for
     // cost-attribution only; the *real* model lives on the ACP subprocess via
     // ``acp_model`` and isn't surfaced on ``agent.llm.model``. Surfacing the
     // sentinel as ``llm_model`` would let SwitchProfileButton render an
     // affordance to "change the model" on a Claude-Code conversation while
     // the running subprocess kept its own — a confusing silent no-op.
+    //
+    // For older agent-servers (pre software-agent-sdk PR #3347) neither
+    // ``current_model_name`` nor ``current_model_id`` is on the response,
+    // so we fall through to ``null`` — the chip then shows just the
+    // provider brand ("Claude Code") rather than a misleading model name.
     const result = toAppConversation({
       ...baseInfo,
       agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
     });
     expect(result.agent_kind).toBe("acp");
     expect(result.llm_model).toBeNull();
+  });
+
+  it("prefers ConversationInfo.current_model_name on ACP conversations", () => {
+    // When the agent-server lifts ``current_model_name`` (software-agent-sdk
+    // PR #3347+, resolved via ``available_models.name`` lookup), surface the
+    // human-readable name as ``llm_model`` so the chip shows
+    // "Default (recommended)" / "GPT-5.5 (xhigh)" rather than the opaque id.
+    const result = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+      current_model_id: "default",
+      current_model_name: "Default (recommended)",
+    });
+    expect(result.agent_kind).toBe("acp");
+    expect(result.llm_model).toBe("Default (recommended)");
+  });
+
+  it("falls back to current_model_id when only the raw id is available", () => {
+    // Intermediate state — some SDK builds set ``current_model_id`` without
+    // also lifting ``current_model_name``. Better the raw id than ``null``.
+    const result = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+      current_model_id: "claude-opus-4-1",
+    });
+    expect(result.llm_model).toBe("claude-opus-4-1");
+  });
+
+  it("treats current_model_* on non-ACP conversations as a no-op", () => {
+    // Defensive: native conversations should always source ``llm_model`` from
+    // ``agent.llm.model``. A stray ``current_model_name`` on the wire
+    // shouldn't be promoted onto an OpenHands conversation (it doesn't
+    // semantically apply there).
+    const result = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "Agent", llm: { model: "claude-sonnet-4-6" } },
+      current_model_id: "ignored",
+      current_model_name: "Ignored",
+    });
+    expect(result.agent_kind).toBe("openhands");
+    expect(result.llm_model).toBe("claude-sonnet-4-6");
   });
 
   it("surfaces acp_server from tags.acpserver for ACP conversations", () => {

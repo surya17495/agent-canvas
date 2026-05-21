@@ -597,12 +597,12 @@ describe("ConversationCard", () => {
     });
   });
 
-  describe("ACP agent badge", () => {
-    it("renders the resolved display name for a known ACP server", () => {
-      // ``claude-code`` resolves through the ACP_PROVIDERS registry to the
-      // human display name "Claude Code". The badge always renders for
-      // ACP conversations — it's identity info, not gated by the LLM-
-      // profile preference.
+  describe("agent chip (brand icon + model text)", () => {
+    it("renders provider brand text when an ACP conversation has no llm_model", () => {
+      // When the SDK doesn't report ``current_model_name`` yet (older
+      // builds), the adapter sets ``llm_model`` to null and we fall back
+      // to the provider display name. The brand icon still flags this as
+      // an ACP / Claude Code conversation.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -613,15 +613,39 @@ describe("ConversationCard", () => {
         />,
       );
 
-      const badge = screen.getByTestId("conversation-card-acp-badge");
-      expect(badge).toHaveTextContent("Claude Code");
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("Claude Code");
+      expect(
+        chip.querySelector('[data-testid="agent-brand-icon-claude-code"]'),
+      ).toBeInTheDocument();
     });
 
-    it("falls back to the generic 'ACP' label when the server key is unknown", () => {
-      // The Custom-command preset uses ``acp_server: "custom"`` (and
-      // future ACP servers Canvas's registry doesn't know about look the
-      // same here) — the resolver returns null and the chip shows the
-      // generic ``CONVERSATION$ACP_AGENT_GENERIC`` translation.
+    it("prefers llm_model (resolved name) over the provider brand for ACP chips", () => {
+      // Once the agent-server lifts ``current_model_name`` onto the
+      // conversation, the chip becomes the actual model the harness is
+      // running — exactly the model surfacing we wanted for ACP.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          agentKind="acp"
+          acpServer="claude-code"
+          llmModel="Default (recommended)"
+        />,
+      );
+
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("Default (recommended)");
+      // Tooltip still includes the harness identity so the chip is
+      // unambiguous on hover even when the visible text is just a model.
+      expect(chip).toHaveAttribute(
+        "title",
+        "Claude Code · Default (recommended)",
+      );
+    });
+
+    it("falls back to the generic 'ACP' label when the server key is unknown (custom command)", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -632,14 +656,15 @@ describe("ConversationCard", () => {
         />,
       );
 
-      const badge = screen.getByTestId("conversation-card-acp-badge");
-      expect(badge).toHaveTextContent("ACP");
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("ACP");
+      // Unknown providers get the neutral terminal glyph, not a brand mark.
+      expect(
+        chip.querySelector('[data-testid="agent-brand-icon-generic"]'),
+      ).toBeInTheDocument();
     });
 
     it("falls back to the generic 'ACP' label when the server key is null", () => {
-      // ACP conversations missing the ``acpserver`` tag (older clients,
-      // raw API writes) still get a chip — the goal is "this is an ACP
-      // conversation" first, exact provider second.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -650,14 +675,14 @@ describe("ConversationCard", () => {
         />,
       );
 
-      const badge = screen.getByTestId("conversation-card-acp-badge");
-      expect(badge).toHaveTextContent("ACP");
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("ACP");
     });
 
-    it("does not render the badge for OpenHands conversations", () => {
-      // The OpenHands rendering path must be untouched — even if a stray
-      // ``acp_server`` value somehow reaches the prop, the chip stays
-      // hidden because ``agentKind !== "acp"``.
+    it("does not render the chip for OpenHands conversations by default", () => {
+      // For native OpenHands conversations the chip is gated behind the
+      // ``showLlmProfiles`` user preference; without it the chip stays
+      // hidden even when ``llmModel`` is present (preserves prior UX).
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -665,12 +690,32 @@ describe("ConversationCard", () => {
           lastUpdatedAt="2021-10-01T12:00:00Z"
           agentKind="openhands"
           acpServer="claude-code"
+          llmModel="anthropic/claude-sonnet-4-5"
         />,
       );
 
       expect(
-        screen.queryByTestId("conversation-card-acp-badge"),
+        screen.queryByTestId("conversation-card-agent-chip"),
       ).not.toBeInTheDocument();
+    });
+
+    it("renders the OpenHands logo + model when showLlmProfiles is on", () => {
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          agentKind="openhands"
+          llmModel="anthropic/claude-sonnet-4-5"
+          showLlmProfiles
+        />,
+      );
+
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("anthropic/claude-sonnet-4-5");
+      expect(
+        chip.querySelector('[data-testid="agent-brand-icon-openhands"]'),
+      ).toBeInTheDocument();
     });
   });
 });

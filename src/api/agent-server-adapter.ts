@@ -64,6 +64,22 @@ export interface DirectConversationInfo {
    * values are opaque strings.
    */
   tags?: Record<string, string> | null;
+  /**
+   * Raw model id the agent-server reports as active for the current session
+   * (lifted from ``ACPAgent.current_model_id`` for ACP conversations on
+   * software-agent-sdk PR #3347+). For Claude Code this is sometimes an
+   * alias like ``"default"``; prefer ``current_model_name`` for display.
+   */
+  current_model_id?: string | null;
+  /**
+   * Human-readable model name resolved via the SDK's ``available_models``
+   * lookup (e.g. ``"Default (recommended)"``, ``"GPT-5.5 (xhigh)"``,
+   * ``"Opus 4.1"``). Falls back to the raw model id when the alias-resolution
+   * lookup misses, and is undefined for SDK builds that predate the field —
+   * callers consuming this should chain through ``current_model_id`` then
+   * ``null``.
+   */
+  current_model_name?: string | null;
 }
 
 // Module qualname for the Canvas-UI tool. The agent-server imports this via
@@ -274,8 +290,16 @@ export function toAppConversation(
     pr_number: [],
     agent_kind: isAcp ? "acp" : "openhands",
     acp_server: acpServer,
+    // For ACP conversations the dummy ``agent.llm.model`` would lie (see the
+    // longer comment above). The agent-server lifts the SDK's resolved
+    // model — ``ConversationInfo.current_model_name`` (human-readable, via
+    // ``ModelInfo.name`` lookup against ``availableModels``) and
+    // ``.current_model_id`` (raw) — onto the response when running software-
+    // agent-sdk PR #3347 or later. Prefer the name; fall back to the id so
+    // older agent-server builds still surface *something*, and to ``null``
+    // for builds that predate both fields. Mirrors OpenHands PR #14511.
     llm_model: isAcp
-      ? null
+      ? (info.current_model_name ?? info.current_model_id ?? null)
       : (info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model),
     metrics: info.metrics
       ? {

@@ -124,6 +124,23 @@ export function getAcpProviderDisplayName(
 }
 
 /**
+ * Resolve an ACP provider registry key to the icon discriminator the
+ * conversation chip should render alongside the model text.
+ *
+ * Falls back to {@link ACP_PROVIDER_FALLBACK_ICON} for ``"custom"``,
+ * unknown keys, or a missing key — the chip then shows a neutral
+ * terminal glyph that still communicates "this is an ACP conversation"
+ * without claiming a brand identity we don't know.
+ */
+export function resolveAcpProviderIcon(
+  key: string | null | undefined,
+): ACPProviderIcon {
+  if (!key) return ACP_PROVIDER_FALLBACK_ICON;
+  const found = ACP_PROVIDERS.find((p) => p.key === key);
+  return found?.icon ?? ACP_PROVIDER_FALLBACK_ICON;
+}
+
+/**
  * Build the ``agent_settings_diff`` payload PATCH /api/settings expects
  * for the agent-kind/provider choice the user just made.
  *

@@ -44,6 +44,11 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
 ];
 const DEFAULT_SECRET_KEY = SHARED_DEFAULTS.defaults.secretKey;
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
+// Optional git pin in ``config/defaults.json``: when present, dev installs
+// the agent-server from this commit/branch of software-agent-sdk instead of
+// the PyPI release. Used to track unreleased SDK PRs; cleared once the SDK
+// PR merges and a release ships.
+const DEFAULT_AGENT_SERVER_GIT_REF = SHARED_DEFAULTS.agentServerGitRef ?? null;
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 
 /**
@@ -348,8 +353,19 @@ export function validateFrontendDependencies(
  */
 export function buildAgentServerCommand(env = process.env) {
   const localPath = env.OH_AGENT_SERVER_LOCAL_PATH;
-  const gitRef = env.OH_AGENT_SERVER_GIT_REF;
-  const version = env.OH_AGENT_SERVER_VERSION;
+  // Precedence (highest first):
+  //   1. OH_AGENT_SERVER_LOCAL_PATH  — env: editable local checkout
+  //   2. OH_AGENT_SERVER_GIT_REF     — env: explicit git ref override
+  //   3. OH_AGENT_SERVER_VERSION     — env: explicit PyPI version override
+  //   4. DEFAULT_AGENT_SERVER_GIT_REF — config: in-repo PR-tracking pin
+  //   5. DEFAULT_AGENT_SERVER_VERSION — config: released PyPI default
+  // Env vars beat the in-repo default so devs can always override, but the
+  // in-repo git-ref pin beats the PyPI fallback so an unreleased SDK PR can
+  // be the operative agent-server for everyone running the dev stack.
+  const envGitRef = env.OH_AGENT_SERVER_GIT_REF;
+  const envVersion = env.OH_AGENT_SERVER_VERSION;
+  const gitRef = envGitRef ?? (envVersion ? null : DEFAULT_AGENT_SERVER_GIT_REF);
+  const version = envVersion;
 
   const uvxArgs = [];
   let source = "";

@@ -312,21 +312,23 @@ describe("formatMissingUvxGuidance", () => {
 });
 
 describe("buildAgentServerCommand", () => {
-  it("uses released PyPI version by default with all packages pinned", () => {
+  it("uses the in-repo git-ref pin from config/defaults.json by default", () => {
+    // The repo currently pins to a software-agent-sdk PR commit so the dev
+    // stack picks up the unreleased ConversationInfo.current_model_name /
+    // .current_model_id fields used by the conversation chip. Once that PR
+    // merges and ships in a release, the pin is removed and the default
+    // reverts to the latest PyPI version (see the "no git ref pin" case
+    // below).
     const cmd = buildAgentServerCommand({});
 
     expect(cmd.command).toBe("uvx");
-    // Defaults to the released PyPI version with all SDK packages pinned to same version
-    expect(cmd.args).toEqual([
-      "--from",
-      "openhands-agent-server==1.23.0",
-      "--with",
-      "openhands-tools==1.23.0",
-      "--with",
-      "openhands-workspace==1.23.0",
-      "agent-server",
-    ]);
-    expect(cmd.source).toBe("PyPI (1.23.0, default)");
+    expect(cmd.source).toMatch(/^git \(/);
+    // Sanity-check that all three SDK packages got pinned to the same ref.
+    const fromArgs = cmd.args.filter(
+      (_v, i) => cmd.args[i - 1] === "--from" || cmd.args[i - 1] === "--with",
+    );
+    expect(fromArgs).toHaveLength(3);
+    expect(fromArgs.every((a) => a.startsWith("git+"))).toBe(true);
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {

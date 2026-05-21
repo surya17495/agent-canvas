@@ -5,7 +5,14 @@ import { I18nKey } from "#/i18n/declaration";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionPaused } from "#/utils/status";
-import { getAcpProviderDisplayName } from "#/constants/acp-providers";
+import {
+  getAcpProviderDisplayName,
+  resolveAcpProviderIcon,
+} from "#/constants/acp-providers";
+import {
+  AgentBrandIcon,
+  type AgentBrandKind,
+} from "#/components/shared/agent-brand-icon";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
 
@@ -56,11 +63,29 @@ export function ConversationCardFooter({
 
   const isPaused = isExecutionPaused(executionStatus);
 
-  const acpDisplayName =
-    agentKind === "acp"
-      ? (getAcpProviderDisplayName(acpServer) ??
-        t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC))
-      : null;
+  // Pick the chip's icon + text. For ACP we always show the chip (identity
+  // info): icon = provider brand mark, text = model the agent is running
+  // (lifted from ConversationInfo.current_model_name via the adapter), with
+  // the provider display name as a fallback when no model surfaced. For
+  // OpenHands we gate behind the existing ``showLlmModel`` preference and
+  // render the OpenHands logo + raw model id.
+  let chip: { kind: AgentBrandKind; text: string; tooltip: string } | null =
+    null;
+  if (agentKind === "acp") {
+    const providerName =
+      getAcpProviderDisplayName(acpServer) ??
+      t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC);
+    const text = llmModel ?? providerName;
+    chip = {
+      kind: resolveAcpProviderIcon(acpServer),
+      text,
+      // Hover always reveals the harness + model so the chip is
+      // unambiguous even when the text is just the model name.
+      tooltip: llmModel ? `${providerName} · ${llmModel}` : providerName,
+    };
+  } else if (showLlmModel && llmModel) {
+    chip = { kind: "openhands", text: llmModel, tooltip: llmModel };
+  }
 
   return (
     <div
@@ -69,24 +94,17 @@ export function ConversationCardFooter({
         isPaused && "opacity-60",
       )}
     >
-      {acpDisplayName ? (
+      {chip ? (
         <div className="pl-[18px]">
           <span
-            data-testid="conversation-card-acp-badge"
-            className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[var(--oh-surface-raised)] text-[var(--oh-muted)] text-xs font-medium max-w-full truncate"
-            title={acpDisplayName}
+            data-testid="conversation-card-agent-chip"
+            className="inline-flex items-center gap-1 text-xs text-[var(--oh-muted)] max-w-full min-w-0"
+            title={chip.tooltip}
           >
-            {acpDisplayName}
+            <AgentBrandIcon kind={chip.kind} />
+            <span className="truncate">{chip.text}</span>
           </span>
         </div>
-      ) : null}
-      {showLlmModel && llmModel ? (
-        <span
-          className="min-w-0 max-w-full truncate pl-[18px] text-xs text-[var(--oh-muted)]"
-          title={llmModel}
-        >
-          {llmModel}
-        </span>
       ) : null}
       <div
         className={cn(
