@@ -7,10 +7,11 @@ interface EllipsisButtonProps {
   /**
    * Optional override classes applied to the button. Use this when a
    * caller needs to customize layout (e.g. translate, flex), not to
-   * change the icon size or hover treatment which are intentionally
-   * shared across the app.
+   * replace hover treatment which is intentionally shared.
    */
   className?: string;
+  /** Icon box; default `w-4 h-4` (use `mobileTopBarIconClassName` in mobile top bars). */
+  iconClassName?: string;
   ariaLabel?: string;
   /**
    * Override the default `ellipsis-button` test id. Most callers
@@ -33,14 +34,16 @@ interface EllipsisButtonProps {
  * variant with a custom hover background — do NOT replace that one
  * with this component; it is intentionally different.
  */
-export function EllipsisButton({
-  onClick,
-  className,
-  ariaLabel,
-  testId = "ellipsis-button",
-}: EllipsisButtonProps) {
+export const EllipsisButton = React.forwardRef<
+  HTMLButtonElement,
+  EllipsisButtonProps
+>(function EllipsisButton(
+  { onClick, className, iconClassName, ariaLabel, testId = "ellipsis-button" },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       data-testid={testId}
       type="button"
       onClick={onClick}
@@ -52,7 +55,7 @@ export function EllipsisButton({
         className,
       )}
     >
-      <ThreeDotsVerticalIcon className="w-4 h-4" />
+      <ThreeDotsVerticalIcon className={iconClassName ?? "w-4 h-4"} />
     </button>
   );
-}
+});

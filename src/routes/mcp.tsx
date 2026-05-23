@@ -9,19 +9,24 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { useDeleteMcpServer } from "#/hooks/mutation/use-delete-mcp-server";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { parseMcpConfig } from "#/utils/mcp-config";
+import { redirectIfAcpActive } from "#/utils/acp-route-guard";
 import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 import {
   findCatalogEntryForServer,
   findInstalledMatch,
   installedServerMatchesQuery,
 } from "#/utils/mcp-marketplace-utils";
-import { MCP_MARKETPLACE, MarketplaceEntry } from "#/constants/mcp-marketplace";
-import { MCPConfig } from "#/types/settings";
+import {
+  MCP_CATALOG as MCP_MARKETPLACE,
+  type McpCatalogEntry as MarketplaceEntry,
+} from "@openhands/extensions/mcps";
 import { MCPServerConfig } from "#/types/mcp-server";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import {
   InstalledServersSection,
   MarketplaceSearch,
@@ -30,31 +35,16 @@ import {
   CustomServerEditor,
 } from "#/components/features/mcp-page";
 
-function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
-  return [
-    ...config.sse_servers.map((server, index) => ({
-      id: `sse-${index}`,
-      type: "sse" as const,
-      url: typeof server === "string" ? server : server.url,
-      api_key: typeof server === "object" ? server.api_key : undefined,
-    })),
-    ...config.stdio_servers.map((server, index) => ({
-      id: `stdio-${index}`,
-      type: "stdio" as const,
-      name: server.name,
-      command: server.command,
-      args: server.args,
-      env: server.env,
-    })),
-    ...config.shttp_servers.map((server, index) => ({
-      id: `shttp-${index}`,
-      type: "shttp" as const,
-      url: typeof server === "string" ? server : server.url,
-      api_key: typeof server === "object" ? server.api_key : undefined,
-      timeout: typeof server === "object" ? server.timeout : undefined,
-    })),
-  ];
-}
+// ACP guard: the ACP sub-agent owns its own MCP server configuration —
+// the SDK explicitly rejects `mcp_config` on ACPAgent init, and
+// `agent-server-adapter` already strips it from start payloads. The
+// Settings → Agent page is where the user configures the ACP server, so
+// bouncing there is consistent with how `/settings` and
+// `/settings/condenser` already behave under ACP.
+//
+// Declared with no parameters (rather than typed as Route.ClientLoaderArgs)
+// so the lib build doesn't pull generated React Router types out of rootDir.
+export const clientLoader = async () => redirectIfAcpActive();
 
 export default function MCPPage() {
   const { t } = useTranslation("openhands");
@@ -124,9 +114,12 @@ export default function MCPPage() {
 
   if (isLoading || !settings) {
     return (
-      <div data-testid="mcp-page" className="flex h-full gap-10">
+      <div
+        data-testid="mcp-page"
+        className="flex h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10"
+      >
         <ExtensionsNavigation />
-        <div className="flex h-full flex-1 items-center justify-center">
+        <div className="flex h-full flex-1 items-center justify-center px-4 md:px-0">
           <div className="h-8 w-8 rounded-full border-2 border-[var(--oh-border)] border-t-white animate-spin" />
         </div>
       </div>
@@ -134,10 +127,13 @@ export default function MCPPage() {
   }
 
   return (
-    <div data-testid="mcp-page" className="flex h-full gap-10">
+    <div
+      data-testid="mcp-page"
+      className="flex h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10"
+    >
       <ExtensionsNavigation />
-      <main className="flex-1 min-w-0 overflow-auto custom-scrollbar-always pr-[14px] pt-8 pb-12">
-        <div className="max-w-5xl flex flex-col gap-6">
+      <main className={settingsLikeMainScrollClassName}>
+        <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
           <div className="min-w-0">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
@@ -190,9 +186,8 @@ export default function MCPPage() {
           />
         )}
 
-        {/* Custom (or non-marketplace) server editor — falls back to the
-            legacy MCPServerForm for full control. The empty-id sentinel
-            (`{ id: "", type: "sse" }`) means "add new". */}
+        {/* Custom (or non-marketplace) server editor. The empty-id
+            sentinel (`{ id: "", type: "sse" }`) means "add new". */}
         {editingServer && (
           <CustomServerEditor
             server={editingServer}

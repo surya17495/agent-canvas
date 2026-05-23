@@ -29,6 +29,11 @@
  * Environment variables:
  *   - PORT: Ingress port (default: 8000)
  *   - OH_AUTOMATION_GIT_REF: Git ref for automation (default: main)
+ *   - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a local software-agent-sdk
+ *     checkout. Highest precedence for agent-server source selection: rebuilds
+ *     the agent-server from local source and installs openhands-sdk,
+ *     openhands-tools and openhands-workspace as editable so source edits are
+ *     picked up without manual reinstall.
  *   - OH_AGENT_SERVER_GIT_REF: Git ref for agent-server
  *   - AUTOMATION_LOCAL_API_KEY: Custom API key for automation backend auth
  *   - OH_AUTOMATION_API_KEY_PATH: Override persisted default automation key path
@@ -39,7 +44,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -51,10 +56,12 @@ import {
   buildSafeDevConfig,
   buildAgentServerEnv,
   buildNpmScriptCommand,
+  buildRuntimeServicesInfo,
   formatMissingUvxGuidance,
   findFreePorts,
   getOrCreatePersistedApiKey,
   validateFrontendDependencies,
+  validateLocalAgentServerPath,
 } from "./dev-safe.mjs";
 import {
   createShutdownHookRegistry,
@@ -66,16 +73,19 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
 
+// ── Centralized config (single source of truth for versions, ports, etc.) ───
+const SHARED_DEFAULTS = JSON.parse(
+  readFileSync(join(projectRoot, "config", "defaults.json"), "utf-8"),
+);
+
 const DEFAULT_AUTOMATION_REPO = "https://github.com/OpenHands/automation";
-const DEFAULT_AUTOMATION_PACKAGE = "openhands-automation";
-// Default automation version (released PyPI version)
-// Set OH_AUTOMATION_GIT_REF to use a git branch/SHA instead
-const DEFAULT_AUTOMATION_VERSION = "1.0.0a3";
+const DEFAULT_AUTOMATION_PACKAGE = SHARED_DEFAULTS.packages.automation;
+const DEFAULT_AUTOMATION_VERSION = SHARED_DEFAULTS.versions.automation;
 // SDK version used by DEFAULT_AUTOMATION_VERSION. This can intentionally lag
-// DEFAULT_AGENT_SERVER_VERSION while automation releases catch up.
-const DEFAULT_AUTOMATION_SDK_VERSION = "1.22.1";
-const DEFAULT_BACKEND_PORT = 18000;
-const DEFAULT_AUTOMATION_PORT = 18001;
+// the agent-server version while automation releases catch up.
+const DEFAULT_AUTOMATION_SDK_VERSION = SHARED_DEFAULTS.versions.automationSdk;
+const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
+const DEFAULT_AUTOMATION_PORT = SHARED_DEFAULTS.ports.automation;
 // Where the auto-generated default automation API key is persisted. Static
 // frontend builds bake VITE_AUTOMATION_API_KEY at build time, so the default
 // must remain stable across restarts and --skip-build reuse.
@@ -199,6 +209,7 @@ ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
+  OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
   OH_SECRET_KEY               Secret key for sessions
@@ -517,6 +528,17 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // Service Starters
 // ═══════════════════════════════════════════════════════════════════════════
 
+function buildAgentServerAutomationEnv(config) {
+  return {
+    // Make the local automation backend key available to terminal commands
+    // spawned by the agent-server. The launcher also seeds this into Settings
+    // > Secrets, but agents commonly create automations with a curl command
+    // that references `$OPENHANDS_AUTOMATION_API_KEY`; exposing it here keeps
+    // that path working even before/without secret-registry env expansion.
+    OPENHANDS_AUTOMATION_API_KEY: config.localApiKey,
+  };
+}
+
 function startAgentServer(config) {
   logService(
     "agent-server",
@@ -535,7 +557,10 @@ function startAgentServer(config) {
     OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString(),
   });
 
-  const agentServerEnv = buildAgentServerEnv(safeConfig);
+  const agentServerEnv = {
+    ...buildAgentServerEnv(safeConfig),
+    ...buildAgentServerAutomationEnv(config),
+  };
 
   spawnService(
     "agent-server",
@@ -578,11 +603,54 @@ function startAutomationBackend(config) {
     {
       cwd: config.stateDir,
       env: {
-        AUTOMATION_AGENT_SERVER_URL: `http://localhost:${config.agentServerPort}`,
+        // The URL the automation backend itself uses to call the
+        // agent-server's REST API (tarball upload + bash dispatch).
+        //
+        // Priority:
+        //   1. AUTOMATION_AGENT_SERVER_URL explicitly set in the user's env
+        //   2. `localhost:<agentServerPort>`
+        AUTOMATION_AGENT_SERVER_URL:
+          process.env.AUTOMATION_AGENT_SERVER_URL ||
+          `http://localhost:${config.agentServerPort}`,
+        // The URL exported into the in-sandbox bash chain as
+        // `AGENT_SERVER_URL` (read by main.py / setup.sh to call back into
+        // the agent-server).
+        //
+        // Priority:
+        //   1. AUTOMATION_SANDBOX_AGENT_SERVER_URL explicitly set in env
+        //   2. launcher-provided value
+        //   3. unset — backend falls back to AUTOMATION_AGENT_SERVER_URL
+        ...(process.env.AUTOMATION_SANDBOX_AGENT_SERVER_URL ||
+        config.sandboxAgentServerUrl
+          ? {
+              AUTOMATION_SANDBOX_AGENT_SERVER_URL:
+                process.env.AUTOMATION_SANDBOX_AGENT_SERVER_URL ||
+                config.sandboxAgentServerUrl,
+            }
+          : {}),
         AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
         AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(config.stateDir, "automations.db")}`,
-        AUTOMATION_BASE_URL: `http://localhost:${config.ingressPort}`,
-        AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
+        // The automation backend uses this as its publicly-reachable base
+        // URL: it's appended to callback URLs and injected into each
+        // sandbox as `AUTOMATION_API_URL` (consumed by setup.sh for
+        // /sdk-version and by the SDK for run completion).
+        // Priority:
+        //   1. AUTOMATION_BASE_URL explicitly set in the user's env
+        //   2. launcher-provided host
+        //   3. `localhost`
+        AUTOMATION_BASE_URL:
+          process.env.AUTOMATION_BASE_URL ||
+          `http://${config.automationApiHost ?? "localhost"}:${config.ingressPort}`,
+        // The dispatcher resolves this path and embeds it into a
+        // `mkdir -p ...` shell command executed by the agent-server.
+        // Priority:
+        //   1. AUTOMATION_WORKSPACE_BASE explicitly set in the user's env
+        //   2. `automationWorkspaceBase` option passed by the launcher
+        //   3. host-side default under config.stateDir
+        AUTOMATION_WORKSPACE_BASE:
+          process.env.AUTOMATION_WORKSPACE_BASE ||
+          config.automationWorkspaceBase ||
+          join(config.stateDir, "workspaces"),
         // Local API key for self-hosted auth (no cloud API needed)
         AUTOMATION_LOCAL_API_KEY: config.localApiKey,
         // CORS: allow localhost origins for dev
@@ -671,10 +739,32 @@ function startIngress(config) {
   );
 }
 
+/**
+ * Build the JSON-serializable runtime services info for an automation
+ * stack. Used by both the Vite dev server (dev mode) and static-build.mjs
+ * (static mode) so the frontend can populate the agent's
+ * `<RUNTIME_SERVICES>` system-prompt block.
+ */
+export function buildAutomationRuntimeServicesInfo(config) {
+  return buildRuntimeServicesInfo({
+    mode: config.mode ?? "dev:automation",
+    agentHostAlias: config.agentHostAlias ?? "localhost",
+    agentServerPort: config.agentServerPort,
+    ingressPort: config.ingressPort,
+    frontendPort: config.vitePort,
+    // The same port hosts Vite in dynamic mode and a static-file server
+    // in static mode. The launcher records this on the config so the
+    // description shown to the agent matches reality.
+    frontendKind: config.frontendKind ?? "vite",
+    automation: { port: config.autoBackendPort },
+  });
+}
+
 function startVite(config) {
   logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
+  const runtimeServicesInfo = buildAutomationRuntimeServicesInfo(config);
 
   spawnService("vite", frontendCommand.command, frontendCommand.args, {
     cwd: config.canvasPath,
@@ -689,6 +779,9 @@ function startVite(config) {
       VITE_SESSION_API_KEY: config.sessionApiKey,
       // Automation API key for frontend to authenticate with automation backend
       VITE_AUTOMATION_API_KEY: config.localApiKey,
+      // Inform the frontend (and downstream, the agent's system prompt) about
+      // which services are available in this dev stack.
+      VITE_RUNTIME_SERVICES_INFO: JSON.stringify(runtimeServicesInfo),
       // Session API key for agent-server auth (when SESSION_API_KEY is set)
       ...(config.sessionApiKey && {
         VITE_SESSION_API_KEY: config.sessionApiKey,
@@ -836,10 +929,26 @@ async function main(options = {}) {
     startAgentServer: startAgentServerOverride,
     extraPrereqs,
     viteWorkingDir,
+    // Path used as `AUTOMATION_WORKSPACE_BASE` by the automation backend.
+    // Defaults to a host-side path under config.stateDir.
+    automationWorkspaceBase,
+    // Host used in `AUTOMATION_BASE_URL` (the URL the automation sandbox
+    // uses to call back into the automation backend). Defaults to `localhost`.
+    automationApiHost,
+    // Value exported as `AUTOMATION_SANDBOX_AGENT_SERVER_URL` to the
+    // automation backend. This is the URL the in-sandbox bash chain uses
+    // to reach the agent-server. When unset the backend falls back to
+    // AUTOMATION_AGENT_SERVER_URL.
+    sandboxAgentServerUrl,
     staticMode: staticModeOverride,
     defaultStaticMode = false,
     buildStaticFrontend,
     staticDir: staticDirOverride,
+    // Hostname the agent uses to reach services running on the host.
+    agentHostAlias = "localhost",
+    // Human-readable label for the dev mode, surfaced in the agent's
+    // <RUNTIME_SERVICES> system-prompt block.
+    mode = "dev:automation",
   } = options;
 
   const args = parseArgs();
@@ -859,16 +968,42 @@ async function main(options = {}) {
   console.log("");
 
   // Setup phase
-  // (uvx is still required even in docker mode because the automation
-  // backend runs via uvx; only the agent-server is dockerized.)
   checkPrerequisites({
     checkFrontendDependencies:
       !useStaticMode || typeof buildStaticFrontend === "function",
   });
 
+  // Fail fast on an obviously bad OH_AGENT_SERVER_LOCAL_PATH so we don't waste
+  // time allocating ports / generating keys / launching uvx with a path that
+  // would only produce a cryptic build error. Mirrors dev-safe.mjs and
+  // dev-extra-backend.mjs.
+  if (process.env.OH_AGENT_SERVER_LOCAL_PATH) {
+    try {
+      validateLocalAgentServerPath(process.env.OH_AGENT_SERVER_LOCAL_PATH);
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
   // Build config with dynamic port allocation
   const config = await buildConfig(args);
   if (viteWorkingDir) config.viteWorkingDir = viteWorkingDir;
+  if (automationWorkspaceBase) {
+    config.automationWorkspaceBase = automationWorkspaceBase;
+  }
+  if (automationApiHost) {
+    config.automationApiHost = automationApiHost;
+  }
+  if (sandboxAgentServerUrl) {
+    config.sandboxAgentServerUrl = sandboxAgentServerUrl;
+  }
+  // Stamp the dev-mode label, host alias, and frontend kind on the config
+  // so downstream helpers (Vite spawn, static build) can produce a
+  // runtime-services info object describing what the agent can reach.
+  config.mode = mode;
+  config.agentHostAlias = agentHostAlias;
+  config.frontendKind = useStaticMode ? "static" : "vite";
   ensureDirectories(config);
   if (typeof extraPrereqs === "function") {
     extraPrereqs(config);
@@ -984,6 +1119,7 @@ function startStaticFrontend(config, staticDir) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export {
+  buildAgentServerAutomationEnv,
   buildAutomationCommand,
   buildConfig,
   main,

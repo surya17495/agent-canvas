@@ -2,8 +2,10 @@ import { ConversationSortOrder } from "@openhands/typescript-client";
 import {
   ConversationClient,
   FileClient,
+  ProfilesClient,
   VSCodeClient,
 } from "@openhands/typescript-client/clients";
+import { HttpClient } from "@openhands/typescript-client/client/http-client";
 import { v4 as uuidv4 } from "uuid";
 import { Provider } from "#/types/settings";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
@@ -35,7 +37,10 @@ import {
   toConversationPage,
 } from "../agent-server-adapter";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
-import { getAgentServerClientOptions } from "../agent-server-client-options";
+import {
+  getAgentServerClientOptions,
+  getAgentServerHttpClientOptions,
+} from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
 import {
   ConversationMetadata,
@@ -123,7 +128,12 @@ function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
   const llm = isRecord(value.llm)
     ? { model: stringOrNull(value.llm.model) }
     : null;
-  return { llm };
+  // ``kind`` is the SDK's pydantic discriminator (``"Agent"`` vs ``"ACPAgent"``);
+  // ``toAppConversation`` reads it to derive ``agent_kind`` and to gate the
+  // ACP-server chip + ``llm_model`` null-out. Preserving it here makes the
+  // wire path agree with the unit-test path that builds ``DirectConversationInfo``
+  // directly (e.g. ``__tests__/api/agent-server-adapter.test.ts``).
+  return { kind: stringOrNull(value.kind), llm };
 }
 
 function normalizeWorkspace(
@@ -131,6 +141,27 @@ function normalizeWorkspace(
 ): DirectConversationInfo["workspace"] {
   if (!isRecord(value)) return null;
   return { working_dir: stringOrNull(value.working_dir) };
+}
+
+/**
+ * Accept the agent-server's ``tags: Record[str, str]`` payload defensively:
+ * the wire shape is guaranteed by the server-side validator (keys
+ * ``^[a-z0-9]+$``, string values), but a non-conforming response (older
+ * server, raw API write, future schema drift) must never crash the parser
+ * — Canvas only consumes ``acpserver`` and falls back to a generic chip
+ * for anything it doesn't recognize. Drop entries whose value isn't a
+ * plain string; return ``null`` when the wire field is absent or not an
+ * object so consumers can use ``info.tags?.[KEY] ?? null`` uniformly.
+ */
+function normalizeTags(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null;
+  const tags: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") {
+      tags[key] = entry;
+    }
+  }
+  return tags;
 }
 
 function normalizeAbsolutePath(path: string): string | null {
@@ -178,9 +209,11 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     created_at: readTimestamp(item, "created_at", "createdAt"),
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
+    sandbox_status: stringOrNull(item.sandbox_status),
     metrics: normalizeMetrics(item.metrics),
     agent: normalizeAgent(item.agent),
     workspace: normalizeWorkspace(item.workspace),
+    tags: normalizeTags(item.tags),
   };
 }
 
@@ -271,11 +304,11 @@ class AgentServerConversationService {
     sandboxId?: string,
   ): Promise<AppConversationStartTask> {
     if (getActiveBackend().backend.kind === "cloud") {
-      // Cloud SaaS path mirrors OpenHands' frontend: build a flat
+      // Cloud path mirrors OpenHands' frontend: build a flat
       // AppConversationStartRequest, POST /api/v1/app-conversations
       // (returns a WORKING task), and let the conversation route's
       // useTaskPolling drive it to READY. NO encrypted-settings
-      // round-trip — the SaaS holds secrets server-side.
+      // round-trip — the cloud backend holds secrets server-side.
       const request: AppConversationStartRequest = {
         initial_message: initialUserMsg
           ? {
@@ -365,7 +398,7 @@ class AgentServerConversationService {
     sessionApiKey?: string | null,
   ): Promise<GetVSCodeUrlResponse> {
     // Local-only path. Cloud conversations read the VSCode URL straight
-    // from the SaaS-computed `sandbox.exposed_urls` (see
+    // from the cloud-computed `sandbox.exposed_urls` (see
     // `useUnifiedVSCodeUrl` + `useCloudSandbox`); the runtime's own
     // `/api/vscode/url` only knows its internal `localhost:8001`, which
     // the user's browser can't reach.
@@ -452,7 +485,7 @@ class AgentServerConversationService {
     filePath?: string,
   ): Promise<string> {
     if (getActiveBackend().backend.kind === "cloud") {
-      // Cloud SaaS exposes a per-conversation file endpoint; the sandbox
+      // Cloud exposes a per-conversation file endpoint; the sandbox
       // working dir is fixed (`/workspace/project`), so PLAN.md lives at
       // a known absolute path. Mirrors OpenHands' readConversationFile.
       const path = requirePathInsideDirectory(
@@ -579,8 +612,18 @@ class AgentServerConversationService {
     return requireAppConversation(conversation, conversationId);
   }
 
+  /**
+   * Switches the LLM profile for the running conversation when one is open
+   * (POST /switch_llm — per-conversation swap, doesn't change the user's
+   * default profile). When called without a conversationId (home page),
+   * falls back to POST /activate so the next conversation created picks up
+   * the chosen profile.
+   *
+   * The /switch_llm body needs the LLM config, which we fetch with encrypted
+   * secrets — same flow as conversation-start.
+   */
   static async switchProfile(
-    conversationId: string,
+    conversationId: string | null,
     profileName: string,
   ): Promise<void> {
     if (getActiveBackend().backend.kind === "cloud") {
@@ -589,9 +632,20 @@ class AgentServerConversationService {
       );
     }
 
-    await new ConversationClient(getAgentServerClientOptions()).switchProfile(
-      conversationId,
-      profileName,
+    const profilesClient = new ProfilesClient(getAgentServerClientOptions());
+
+    if (!conversationId) {
+      await profilesClient.activateProfile(profileName);
+      return;
+    }
+
+    const profile = await profilesClient.getProfile(profileName, {
+      exposeSecrets: "encrypted",
+    });
+
+    await new HttpClient(getAgentServerHttpClientOptions()).post(
+      `/api/conversations/${conversationId}/switch_llm`,
+      { llm: profile.config },
     );
   }
 }

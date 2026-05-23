@@ -13,22 +13,27 @@ import { I18nKey } from "#/i18n/declaration";
  * issued the command.
  */
 export function useSwitchLlmProfileAndLog() {
-  const { mutate } = useSwitchLlmProfile();
+  const { mutate, isPending } = useSwitchLlmProfile();
   const { t } = useTranslation();
 
-  return useCallback(
-    (conversationId: string, profileName: string) => {
+  const switchAndLog = useCallback(
+    (conversationId: string | null, profileName: string) => {
       const anchorEventId = getLastRenderableEventId();
 
       mutate(
         { conversationId, profileName },
         {
-          onSuccess: () =>
-            recordModelSwitchMessage(
-              conversationId,
-              profileName,
-              anchorEventId,
-            ),
+          onSuccess: () => {
+            // The inline "Switched to" message is scoped to a conversation;
+            // skip it when activating from the home page (no convo yet).
+            if (conversationId) {
+              recordModelSwitchMessage(
+                conversationId,
+                profileName,
+                anchorEventId,
+              );
+            }
+          },
           onError: (err: unknown) => {
             const fallback = t(I18nKey.MODEL$SWITCH_FAILED, {
               name: profileName,
@@ -42,4 +47,6 @@ export function useSwitchLlmProfileAndLog() {
     },
     [mutate, t],
   );
+
+  return { switchAndLog, isPending };
 }

@@ -3,7 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { FileClient } from "@openhands/typescript-client/clients";
 
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
-import { useWorkspacesStore } from "#/stores/workspaces-store";
+import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
 
 interface UseResolvedWorkspacesResult {
@@ -14,10 +14,9 @@ interface UseResolvedWorkspacesResult {
 
 /**
  * Implicit workspace parents that are always considered when resolving
- * workspaces. The `dev:docker` script mounts the host's PROJECT_PATH at
- * `/projects` inside the agent-server container, so this directory is
- * effectively the user's projects root in the dockerized dev stack. We
- * surface its immediate subdirectories as workspaces automatically.
+ * workspaces. `/projects` is a well-known directory that some agent-server
+ * setups use as the projects root. We surface its immediate subdirectories
+ * as workspaces automatically in dev mode.
  *
  * This is a development convenience only. Production previews may point at
  * arbitrary remote agent servers that do not expose the file-browser endpoint;
@@ -36,14 +35,19 @@ const IMPLICIT_WORKSPACE_PARENTS: LocalWorkspaceParent[] = [
  *   - the immediate subdirectories of every saved "workspace parent",
  *     fetched dynamically, and
  *   - the immediate subdirectories of any implicit, built-in parents
- *     (currently just `/projects`, the dockerized dev mount point).
+ *     (currently just `/projects`).
  *
  * Static workspaces always take precedence over a dynamic child with the
  * same path so that user-selected names/ids are preserved.
  */
 export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
-  const workspaces = useWorkspacesStore((s) => s.workspaces);
-  const storedParents = useWorkspacesStore((s) => s.workspaceParents);
+  const {
+    data,
+    isLoading: isLoadingList,
+    isError: isErrorList,
+  } = useLocalWorkspaces();
+  const workspaces = data?.workspaces ?? [];
+  const storedParents = data?.workspaceParents ?? [];
 
   // Merge stored parents with the implicit ones, deduping on path so a
   // user-added `/projects` doesn't trigger a second query.
@@ -70,8 +74,8 @@ export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
     })),
   });
 
-  const isLoading = parentQueries.some((q) => q.isLoading);
-  const isError = parentQueries.some((q) => q.isError);
+  const isLoading = isLoadingList || parentQueries.some((q) => q.isLoading);
+  const isError = isErrorList || parentQueries.some((q) => q.isError);
 
   // Stable string fingerprint that changes whenever any parent's subdir
   // results change. Avoids spreading timestamps into the `useMemo` deps,

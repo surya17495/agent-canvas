@@ -5,7 +5,10 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
-import { MCP_MARKETPLACE, MarketplaceEntry } from "#/constants/mcp-marketplace";
+import {
+  MCP_CATALOG as MCP_MARKETPLACE,
+  type McpCatalogEntry as MarketplaceEntry,
+} from "@openhands/extensions/mcps";
 
 function renderWith(ui: React.ReactNode) {
   return render(ui, {
@@ -63,6 +66,7 @@ describe("InstallServerModal", () => {
     expect(sentMcpConfig.mcp_config.mcpServers).toMatchObject({
       slack: {
         command: "npx",
+        args: ["-y", "@zencoderai/slack-mcp-server"],
         env: { SLACK_BOT_TOKEN: "xoxb-abc", SLACK_TEAM_ID: "T01" },
       },
     });
@@ -118,7 +122,6 @@ describe("InstallServerModal", () => {
       id: "synthetic-required",
       name: "Synthetic",
       description: "Synthetic catalog entry used in tests.",
-      logo: null,
       iconBg: "#000000",
       template: {
         kind: "shttp",
@@ -153,7 +156,6 @@ describe("InstallServerModal", () => {
       id: "synthetic-optional",
       name: "Synthetic Optional",
       description: "Synthetic entry that allows empty api_key.",
-      logo: null,
       iconBg: "#000000",
       template: {
         kind: "shttp",
@@ -178,5 +180,32 @@ describe("InstallServerModal", () => {
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+  });
+
+  it("calls onClose when the header close button is clicked", async () => {
+    const onClose = vi.fn();
+    const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
+    renderWith(<InstallServerModal entry={slack} onClose={onClose} />);
+
+    fireEvent.click(await screen.findByTestId("close-mcp-install-modal"));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("places Cancel before Install in the footer so the dominant action is the last focusable button", async () => {
+    // Arrange: render with any marketplace entry so the footer is mounted.
+    const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
+    renderWith(<InstallServerModal entry={slack} onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-install-modal");
+
+    // Act: locate both footer buttons.
+    const cancel = screen.getByTestId("mcp-install-cancel");
+    const submit = screen.getByTestId("mcp-install-submit");
+
+    // Assert: Cancel precedes the dominant Install action in DOM order.
+    // eslint-disable-next-line no-bitwise
+    expect(
+      cancel.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

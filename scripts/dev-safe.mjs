@@ -14,7 +14,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   getProcessTreeSpawnOptions,
@@ -22,10 +22,19 @@ import {
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 
-const DEFAULT_BACKEND_PORT = 18000;
+// ── Centralized config (single source of truth for versions, ports, etc.) ───
+const __dev_safe_dirname = path.dirname(fileURLToPath(import.meta.url));
+const SHARED_DEFAULTS = JSON.parse(
+  readFileSync(
+    path.join(__dev_safe_dirname, "..", "config", "defaults.json"),
+    "utf-8",
+  ),
+);
+
+const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
-const DEFAULT_AGENT_SERVER_PACKAGE = "openhands-agent-server";
+const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
 const AGENT_SERVER_GIT_REPO = "https://github.com/OpenHands/software-agent-sdk";
 const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-agent-server",
@@ -33,12 +42,8 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-tools",
   "openhands-workspace",
 ];
-// Default secret key for local development (DO NOT use in production)
-// This is kept static because it's used for encrypting/decrypting persisted settings
-const DEFAULT_SECRET_KEY = "openhands-dev-secret-key-change-in-prod";
-// Default agent-server version (released PyPI version)
-// Set OH_AGENT_SERVER_GIT_REF to use a git branch/SHA instead
-const DEFAULT_AGENT_SERVER_VERSION = "1.22.1";
+const DEFAULT_SECRET_KEY = SHARED_DEFAULTS.defaults.secretKey;
+const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 
 /**
@@ -50,8 +55,7 @@ export function generateRandomApiKey() {
 }
 
 // Where the auto-generated default session API key is persisted so it stays
-// stable across `npm run dev` / `npm run dev:dangerously-dockerless` /
-// `npm run dev:docker` restarts. Keeping the key stable means the value
+// stable across `npm run dev` restarts. Keeping the key stable means the value
 // baked into the frontend (VITE_SESSION_API_KEY) and the persisted
 // backend-registry entry (`openhands-backends` localStorage) stay in sync
 // without users needing to set anything in `.env`.
@@ -333,7 +337,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.22.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.23.0")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -454,10 +458,7 @@ export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
     env.OH_CANVAS_SAFE_BACKEND_PORT,
     DEFAULT_BACKEND_PORT,
   );
-  const vscodePort = parsePort(
-    env.OH_CANVAS_SAFE_VSCODE_PORT,
-    backendPort + 1,
-  );
+  const vscodePort = parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1);
 
   return buildConfigFromPorts({ backendPort, vscodePort }, cwd, env);
 }
@@ -526,6 +527,7 @@ export async function buildSafeDevConfigAsync(
  * @property {string} workingDir
  * @property {string} secretKey
  * @property {string} sessionApiKey
+ * @property {string} canvasToolsDir
  */
 
 /**
@@ -565,6 +567,12 @@ function buildConfigFromPorts(ports, cwd, env) {
     env.VITE_SESSION_API_KEY ||
     getOrCreatePersistedSessionApiKey(persistedKeyPath);
 
+  // Host directory containing Agent-Canvas-specific Python tools (e.g. the
+  // canvas_ui tool). Added to OH_EXTRA_PYTHON_PATH below so the agent-server
+  // can import the modules listed in `tool_module_qualnames`. Lives at
+  // <repo-root>/tools relative to this script.
+  const canvasToolsDir = fileURLToPath(new URL("../tools", import.meta.url));
+
   return {
     cwd,
     backendPort,
@@ -579,6 +587,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     workingDir: env.VITE_WORKING_DIR || workspacesPath,
     secretKey,
     sessionApiKey,
+    canvasToolsDir,
   };
 }
 
@@ -600,6 +609,137 @@ export function buildAgentServerEnv(config) {
     OH_SECRET_KEY: config.secretKey,
     // Use OH_SESSION_API_KEYS_0 for agent-server V1 config format
     OH_SESSION_API_KEYS_0: config.sessionApiKey,
+    // Alias for the agent-server's own URL. The agent-server itself sets
+    // OH_INTERNAL_SERVER_URL at startup, but downstream consumers (the
+    // OpenHands SDK boilerplate emitted by automation prompt/plugin
+    // presets) read AGENT_SERVER_URL — the canonical SDK name. Mirror it
+    // here so automation runs work without each tarball having to know
+    // about the OH_-prefixed variant.
+    //
+    // We deliberately do NOT set a SESSION_API_KEY alias: the SDK's
+    // sanitized_env() would strip it from bash subprocesses anyway, and
+    // a follow-up change to the automation preset reads
+    // OH_SESSION_API_KEYS_0 directly (which is already in env).
+    AGENT_SERVER_URL: config.backendBaseUrl,
+    // Make the host tools/ directory importable so the agent-server can
+    // resolve modules listed in tool_module_qualnames (e.g. canvas_ui_tool).
+    OH_EXTRA_PYTHON_PATH: config.canvasToolsDir,
+  };
+}
+
+/**
+ * Build a structured description of the dev-stack services that are
+ * reachable from inside the agent's sandbox. The frontend forwards this
+ * (verbatim, as a JSON string in `VITE_RUNTIME_SERVICES_INFO`) and renders
+ * it into the system prompt via `AgentContext.system_message_suffix`, so
+ * the agent sees a `<RUNTIME_SERVICES>` block listing what's available
+ * without having to probe.
+ *
+ * URLs are written from the *agent's* point of view. The agent-server
+ * runs on the host, so the host alias is "localhost".
+ *
+ * @param {object} options
+ * @param {string} [options.mode] - Human-readable dev mode label (e.g. "dev:safe").
+ * @param {string} [options.agentHostAlias="localhost"] - Hostname the agent
+ *   uses to reach services running on the host machine.
+ * @param {number} [options.agentServerPort] - Port the agent-server listens on.
+ *   Required at runtime; the function throws if missing because the resulting
+ *   URL would otherwise bake `undefined` into the agent's system prompt.
+ *   Typed as optional only so TypeScript callers can negative-test the guard.
+ * @param {number} [options.ingressPort] - Ingress port (omit if no ingress).
+ * @param {number} [options.frontendPort] - Frontend port (Vite dev server
+ *   or static-file server). Omit if no frontend is exposed.
+ * @param {number} [options.vitePort] - Deprecated alias for `frontendPort`,
+ *   accepted for backward compat with older launchers. Remove after one release.
+ * @param {"vite"|"static"} [options.frontendKind="vite"] - Whether the
+ *   frontend port hosts Vite or a static build. Only affects the
+ *   description shown to the agent.
+ * @param {object} [options.automation] - Automation backend info. Skipped
+ *   entirely if `.port` is missing, so passing `{}` is safe.
+ * @param {number} [options.automation.port] - Automation backend port.
+ * @param {string} [options.automation.apiPrefix="/api/automation"] - Path
+ *   prefix all automation routes are mounted under.
+ * @param {string} [options.automation.authEnvVar="OPENHANDS_AUTOMATION_API_KEY"]
+ *   - Env var holding the API key.
+ * @returns {object} A JSON-serializable runtime services info object.
+ */
+export function buildRuntimeServicesInfo(options) {
+  const {
+    mode,
+    agentHostAlias = "localhost",
+    agentServerPort,
+    ingressPort,
+    // Accept legacy `vitePort` for one release so external callers keep working.
+    vitePort,
+    frontendPort = vitePort,
+    frontendKind = "vite",
+    automation,
+  } = options;
+
+  if (agentServerPort === undefined || agentServerPort === null) {
+    // Without this the URL becomes `http://localhost:undefined` and ends up
+    // verbatim in the agent's system prompt, which is worse than failing fast.
+    throw new Error(
+      "buildRuntimeServicesInfo: agentServerPort is required " +
+        "(otherwise the agent_server URL would be `http://localhost:undefined`).",
+    );
+  }
+
+  const services = {
+    agent_server: {
+      description:
+        "The OpenHands Agent Server this agent is running inside. " +
+        "Tool calls (terminal, file_editor, browser, etc.) execute here.",
+      // From the agent's POV, the agent-server it's *inside* is on
+      // localhost, regardless of where the host is.
+      url_from_agent: `http://localhost:${agentServerPort}`,
+    },
+  };
+
+  if (ingressPort !== undefined) {
+    services.ingress = {
+      description:
+        "Unified entry point. Routes /api/automation/* to the automation " +
+        "backend, /api/* and /sockets to the agent-server, and /* to the " +
+        "frontend.",
+      url_from_agent: `http://${agentHostAlias}:${ingressPort}`,
+    };
+  }
+
+  if (frontendPort !== undefined) {
+    services.frontend = {
+      kind: frontendKind,
+      description:
+        frontendKind === "static"
+          ? "Static-file server hosting the agent-canvas production build."
+          : "Vite dev server hosting the agent-canvas frontend.",
+      url_from_agent: `http://${agentHostAlias}:${frontendPort}`,
+    };
+  }
+
+  // Require an explicit port so we don't bake `:undefined` into the
+  // automation URL when the caller passes `automation: {}`.
+  if (automation?.port !== undefined && automation.port !== null) {
+    const apiPrefix = automation.apiPrefix ?? "/api/automation";
+    const authEnvVar = automation.authEnvVar ?? "OPENHANDS_AUTOMATION_API_KEY";
+    const baseUrl = `http://${agentHostAlias}:${automation.port}`;
+    services.automation = {
+      description:
+        "OpenHands Automations service. All routes are mounted under " +
+        `'${apiPrefix}'. Authenticate with header ` +
+        `'X-API-Key: $${authEnvVar}'.`,
+      url_from_agent: baseUrl,
+      api_prefix: apiPrefix,
+      docs_url: `${baseUrl}${apiPrefix}/docs`,
+      openapi_url: `${baseUrl}${apiPrefix}/openapi.json`,
+      auth_env_var: authEnvVar,
+    };
+  }
+
+  return {
+    mode,
+    agent_host_alias: agentHostAlias,
+    services,
   };
 }
 
@@ -636,9 +776,7 @@ export function validateLocalAgentServerPath(localPath) {
     );
   }
   if (!existsSync(localPath)) {
-    throw new Error(
-      `OH_AGENT_SERVER_LOCAL_PATH does not exist: ${localPath}`,
-    );
+    throw new Error(`OH_AGENT_SERVER_LOCAL_PATH does not exist: ${localPath}`);
   }
   for (const subdir of LOCAL_AGENT_SERVER_SUBDIRS) {
     const subdirPath = path.join(localPath, subdir);
@@ -670,10 +808,14 @@ async function waitForServer(url, timeoutMs = DEFAULT_WAIT_TIMEOUT_MS) {
 }
 
 function spawnProcess(command, args, options = {}) {
-  const child = spawn(command, args, getProcessTreeSpawnOptions({
-    stdio: "inherit",
-    ...options,
-  }));
+  const child = spawn(
+    command,
+    args,
+    getProcessTreeSpawnOptions({
+      stdio: "inherit",
+      ...options,
+    }),
+  );
 
   child.once("error", (error) => {
     if (isEnoentError(error) && command === "uvx") {
@@ -810,6 +952,10 @@ async function main() {
   }
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
+  const runtimeServicesInfo = buildRuntimeServicesInfo({
+    mode: "dev:safe",
+    agentServerPort: config.backendPort,
+  });
   frontend = spawnProcess(frontendCommand.command, frontendCommand.args, {
     cwd: config.cwd,
     env: {
@@ -819,6 +965,9 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
+      // Inform the frontend (and downstream, the agent's system prompt) about
+      // which services are available in this dev stack.
+      VITE_RUNTIME_SERVICES_INFO: JSON.stringify(runtimeServicesInfo),
     },
   });
 

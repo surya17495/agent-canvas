@@ -1,9 +1,9 @@
-import { FaPencil, FaTrash } from "react-icons/fa6";
-import { Puzzle } from "lucide-react";
+import { Puzzle, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { MCPServerConfig } from "#/types/mcp-server";
-import { MCP_MARKETPLACE } from "#/constants/mcp-marketplace";
+import { MCP_CATALOG as MCP_MARKETPLACE } from "@openhands/extensions/mcps";
 import { findCatalogEntryForServer } from "#/utils/mcp-marketplace-utils";
 import { cn } from "#/utils/utils";
 
@@ -65,16 +65,7 @@ export function InstalledServerCard({
         "border border-[var(--oh-border)] bg-base-secondary p-4",
       )}
     >
-      <span
-        aria-hidden="true"
-        className="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg"
-        style={{
-          backgroundColor: catalog?.iconBg ?? "var(--oh-color-tertiary)",
-          color: catalog?.iconColor ?? "#FFFFFF",
-        }}
-      >
-        {catalog?.logo ?? <Puzzle className="h-5 w-5" strokeWidth={2.25} />}
-      </span>
+      <McpLogoBadge entry={catalog} fallback={<Puzzle strokeWidth={2.25} />} />
 
       <div className="flex flex-col min-w-0 flex-1 gap-0.5">
         <div className="flex items-center gap-2">
@@ -86,33 +77,30 @@ export function InstalledServerCard({
           </span>
         </div>
         {subtitle && (
-          <p
-            className="text-xs text-content-2 italic truncate"
-            title={subtitle}
-          >
+          <p className="text-xs text-content-2 truncate" title={subtitle}>
             {subtitle}
           </p>
         )}
       </div>
 
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex shrink-0 items-center gap-0.5">
         <button
           data-testid="edit-mcp-server-button"
           type="button"
           onClick={onEdit}
           aria-label={t(I18nKey.MCP$EDIT_SERVER_ARIA, { name: title })}
-          className="text-content-2 hover:text-content-1 transition-colors cursor-pointer"
+          className="inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted transition-colors hover:bg-interactive-hover hover:text-white"
         >
-          <FaPencil size={14} />
+          <Pencil aria-hidden className="size-3.5" strokeWidth={2} />
         </button>
         <button
           data-testid="delete-mcp-server-button"
           type="button"
           onClick={onDelete}
           aria-label={t(I18nKey.MCP$DELETE_SERVER_ARIA, { name: title })}
-          className="text-content-2 hover:text-red-500 transition-colors cursor-pointer"
+          className="inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted transition-colors hover:bg-interactive-hover hover:text-white"
         >
-          <FaTrash size={14} />
+          <Trash2 aria-hidden className="size-3.5" strokeWidth={2} />
         </button>
       </div>
     </div>

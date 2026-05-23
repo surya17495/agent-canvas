@@ -60,6 +60,19 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      {
+        name: "suppress-chrome-devtools-well-known",
+        apply: "serve",
+        configureServer(server) {
+          server.middlewares.use(
+            "/.well-known/appspecific/com.chrome.devtools.json",
+            (_req, res) => {
+              res.statusCode = 204;
+              res.end();
+            },
+          );
+        },
+      },
       !process.env.VITEST && !isLibraryBuild && reactRouter(),
       svgr(),
       tailwindcss(),
@@ -189,6 +202,12 @@ export default defineConfig(({ mode }) => {
         "framer-motion",
         "rehype-raw",
         "rehype-sanitize",
+        // ``shell-quote`` is a CJS module used by ``src/utils/acp-command.ts``
+        // for the Settings → Agent textarea. With ``noDiscovery: true`` above,
+        // omitting it from this list means Vite serves the raw CJS file to
+        // the browser and dev crashes with ``ReferenceError: exports is not
+        // defined`` on the first import of agent-settings.tsx.
+        "shell-quote",
         "unist-util-visit",
         "uuid",
         "zustand",
@@ -321,6 +340,11 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       setupFiles: ["vitest.setup.ts"],
       exclude: [...configDefaults.exclude, "tests"],
+      server: {
+        deps: {
+          inline: ["@openhands/typescript-client"],
+        },
+      },
       coverage: {
         reporter: ["text", "json", "html", "lcov", "text-summary"],
         reportsDirectory: "coverage",

@@ -1,9 +1,15 @@
 import { useTranslation } from "react-i18next";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { useSettings } from "#/hooks/query/use-settings";
+import { ACP_PROVIDERS } from "#/constants/acp-providers";
 import { cn } from "#/utils/utils";
+import SkillsIcon from "#/icons/skills.svg?react";
 import ServerProcessIcon from "#/icons/server-process.svg?react";
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import { I18nKey } from "#/i18n/declaration";
+import { useSidebarStore } from "#/stores/sidebar-store";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
 
 interface ExtensionNavItem {
   to: string;
@@ -11,32 +17,21 @@ interface ExtensionNavItem {
   icon: React.ReactElement;
   end?: boolean;
   comingSoon?: boolean;
+  /**
+   * When true, this item greys out (and the /route's ``clientLoader``
+   * bounces to ``/settings/agent``) while an ACP agent is active.
+   * The ACP sub-agent manages its own MCP servers; the SDK rejects
+   * ``mcp_config`` on ``ACPAgent`` init outright, so the OpenHands-
+   * side editor would silently no-op against the running subprocess.
+   */
+  disabledByAcp?: boolean;
 }
 
-const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
+export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
   {
     to: "/skills",
     label: "Skills",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 19.13 24.62"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        width={16}
-        height={16}
-        aria-hidden="true"
-      >
-        <path d="M.86,7.26l5.74,3.3,11.68-6.6" />
-        <path d="M6.6,17.15v-6.6" />
-        <path d="M1.32,14.34l4.62,2.64c.41.24.91.24,1.32,0l10.56-5.94" />
-        <path d="M.66,20c0,.47.25.91.66,1.14l4.62,2.64c.41.24.91.24,1.32,0l10.56-5.94c.41-.24.66-.67.66-1.14V4.62c0-.47-.25-.91-.66-1.14L13.2.84c-.41-.24-.91-.24-1.32,0L1.32,6.78c-.41.24-.66.67-.66,1.14v12.08Z" />
-        <path d="M.86,14.06l5.74,3.3,11.68-6.6" />
-        <path d="M6.6,23.96v-6.6" />
-      </svg>
-    ),
+    icon: <SkillsIcon width={16} height={16} aria-hidden="true" />,
     end: true,
   },
   {
@@ -44,6 +39,7 @@ const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
     label: "MCP Servers",
     icon: <ServerProcessIcon width={16} height={16} />,
     end: true,
+    disabledByAcp: true,
   },
   {
     to: "/plugins",
@@ -73,42 +69,98 @@ const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
 
 export function ExtensionsNavigation() {
   const { t } = useTranslation("openhands");
+  const { data: settings } = useSettings();
+  const sidebarCollapsed = useSidebarStore((state) => state.collapsed);
+  // At iPad portrait widths (md to <lg) an expanded primary Sidebar (300px)
+  // plus this nav (260px) leaves the main content unreadable. Hide ourselves
+  // until the user collapses the Sidebar or the viewport reaches `lg`.
+  const belowLg = useBreakpoint(1023);
+  const belowMd = useBreakpoint(767);
+  const hideForExpandedSidebar = !sidebarCollapsed && belowLg && !belowMd;
+  const isAcpAgent = settings?.agent_settings?.agent_kind === "acp";
+  const acpServerKey =
+    typeof settings?.agent_settings?.acp_server === "string"
+      ? settings.agent_settings.acp_server
+      : undefined;
+  const acpServerName = isAcpAgent
+    ? (ACP_PROVIDERS.find(({ key }) => key === acpServerKey)?.display_name ??
+      "ACP Agent")
+    : undefined;
+
+  if (hideForExpandedSidebar) return null;
 
   return (
     <aside
       data-testid="extensions-navbar-desktop"
-      className="hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2 md:sticky md:top-8 md:self-start md:pl-[14px]"
+      className="hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2 md:sticky md:top-8 md:self-start"
     >
-      <span className="px-3 text-xs font-semibold uppercase tracking-wider text-[var(--oh-muted)]">
+      <span className="px-2 text-sm font-normal text-white">
         {t(I18nKey.NAV$EXTENSIONS)}
       </span>
       <div className="flex flex-col gap-0.5 pt-0.5">
-        {EXTENSIONS_NAV_ITEMS.map((item) => (
-          <NavigationLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            data-testid={`sidebar-extensions-${item.to}`}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2 rounded-md transition-colors text-sm leading-5 truncate px-2 py-2 w-full",
-                isActive
-                  ? "bg-tertiary text-white font-medium"
-                  : "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
-              )
-            }
-          >
+        {EXTENSIONS_NAV_ITEMS.map((item) => {
+          const disabled = !!(isAcpAgent && item.disabledByAcp);
+          const baseRow = (
             <span className="shrink-0 flex items-center justify-center">
               {item.icon}
             </span>
-            <span className="truncate">{item.label}</span>
-            {item.comingSoon && (
-              <span className="ml-auto shrink-0 rounded-full border border-white/20 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-[var(--oh-text-dim)]">
-                {t(I18nKey.NAV$COMING_SOON)}
-              </span>
-            )}
-          </NavigationLink>
-        ))}
+          );
+          const label = <span className="truncate">{item.label}</span>;
+          const comingSoonBadge = item.comingSoon && (
+            <span className="ml-auto shrink-0 rounded-full border border-white/20 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-[var(--oh-text-dim)]">
+              {t(I18nKey.NAV$COMING_SOON)}
+            </span>
+          );
+
+          if (disabled) {
+            // Render a non-clickable surrogate so the URL and a11y tree
+            // both communicate "you can't go here right now," then wrap
+            // in StyledTooltip for the why. Mirrors the SettingsNavLink
+            // disabled rendering — same flag (``disabledByAcp``), same
+            // explanatory tooltip ("Disabled while {agentName} is the
+            // active agent"), same greyed styles.
+            return (
+              <StyledTooltip
+                key={item.to}
+                content={t(I18nKey.SETTINGS$AGENT_DISABLED_TOOLTIP, {
+                  agentName: acpServerName,
+                })}
+                placement="right"
+              >
+                <span
+                  aria-disabled="true"
+                  data-testid={`sidebar-extensions-${item.to}`}
+                  className="flex items-center gap-2 rounded-md text-sm leading-5 truncate px-2 py-2 w-full text-[var(--oh-muted)] opacity-50 cursor-not-allowed"
+                >
+                  {baseRow}
+                  {label}
+                  {comingSoonBadge}
+                </span>
+              </StyledTooltip>
+            );
+          }
+
+          return (
+            <NavigationLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              data-testid={`sidebar-extensions-${item.to}`}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-2 rounded-md transition-colors text-sm leading-5 truncate px-2 py-2 w-full",
+                  isActive
+                    ? "bg-tertiary text-white font-medium"
+                    : "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+                )
+              }
+            >
+              {baseRow}
+              {label}
+              {comingSoonBadge}
+            </NavigationLink>
+          );
+        })}
       </div>
       <div className="px-2 pt-3">
         <BackendSyncedSettingsBadge />

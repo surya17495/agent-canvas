@@ -12,6 +12,7 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePostHog } from "posthog-js/react";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
+import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -34,7 +35,9 @@ import {
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
+  isCanvasUIActionEvent,
 } from "#/types/agent-server/type-guards";
+import { handleCanvasUIAction } from "#/services/canvas-ui";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import type {
   ConversationErrorEvent,
@@ -74,6 +77,7 @@ interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
   sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
+  reconnect: () => void;
 }
 
 const ConversationWebSocketContext = createContext<
@@ -528,6 +532,14 @@ export function ConversationWebSocketProvider({
 
             invalidateConversationQueries(queryClient, conversationId);
           }
+
+          // Handle canvas_ui custom-tool ActionEvents - drive the frontend
+          // (navigate to a file, switch tabs, show a preview). The tool
+          // executes server-side as a no-op; the actual UI change happens
+          // here on the client.
+          if (isCanvasUIActionEvent(event)) {
+            handleCanvasUIAction(event.action);
+          }
         }
       } catch (error) {
         console.warn("Failed to parse WebSocket message as JSON:", error);
@@ -757,7 +769,7 @@ export function ConversationWebSocketProvider({
         setMainConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefMain.current) {
-          setErrorMessage("Failed to connect to server");
+          setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE);
         }
       },
       onMessage: handleMainMessage,
@@ -821,7 +833,7 @@ export function ConversationWebSocketProvider({
         setPlanningConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefPlanning.current) {
-          setErrorMessage("Failed to connect to server");
+          setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE);
         }
       },
       onMessage: handlePlanningMessage,
@@ -837,15 +849,28 @@ export function ConversationWebSocketProvider({
   // Only attempt WebSocket connection when we have a valid URL
   // This prevents connection attempts during task polling phase
   const websocketUrl = wsUrl;
-  const { socket: mainSocket } = useWebSocket(
+  const { socket: mainSocket, reconnect: reconnectMain } = useWebSocket(
     websocketUrl || "",
     mainWebsocketOptions,
   );
 
-  const { socket: planningAgentSocket } = useWebSocket(
-    planningAgentWsUrl || "",
-    planningWebsocketOptions,
-  );
+  const { socket: planningAgentSocket, reconnect: reconnectPlanning } =
+    useWebSocket(planningAgentWsUrl || "", planningWebsocketOptions);
+
+  const reconnect = useCallback(() => {
+    removeErrorMessage();
+    const currentMode = useConversationStore.getState().conversationMode;
+    if (currentMode === "plan" && planningAgentWsUrl) {
+      reconnectPlanning();
+      return;
+    }
+    reconnectMain();
+  }, [
+    planningAgentWsUrl,
+    reconnectMain,
+    reconnectPlanning,
+    removeErrorMessage,
+  ]);
 
   // V1 send message function via WebSocket
   // Falls back to REST API queue when WebSocket is not connected
@@ -887,8 +912,9 @@ export function ConversationWebSocketProvider({
       }
 
       try {
-        // Send message through WebSocket as JSON
-        currentSocket.send(JSON.stringify(message));
+        // Send message through WebSocket as JSON with run: true so the
+        // agent loop starts automatically in async mode.
+        currentSocket.send(JSON.stringify({ ...message, run: true }));
         return { queued: false };
       } catch (error) {
         const errorMessage =
@@ -959,8 +985,8 @@ export function ConversationWebSocketProvider({
   }, [planningAgentSocket, planningAgentWsUrl]);
 
   const contextValue = useMemo(
-    () => ({ connectionState, sendMessage, isLoadingHistory }),
-    [connectionState, sendMessage, isLoadingHistory],
+    () => ({ connectionState, sendMessage, isLoadingHistory, reconnect }),
+    [connectionState, sendMessage, isLoadingHistory, reconnect],
   );
 
   return (

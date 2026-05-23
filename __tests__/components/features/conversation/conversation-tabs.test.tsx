@@ -20,6 +20,7 @@ const REAL_CONVERSATION_ID = "conv-abc123";
 let mockConversationId = TASK_CONVERSATION_ID;
 
 vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
   useConversationId: () => ({ conversationId: mockConversationId }),
 }));
 
@@ -312,6 +313,49 @@ describe("ConversationTabs localStorage behavior", () => {
       expect(testIds).toContain("conversation-tab-tasklist");
     });
 
+    it("shows an unpinned tab in the bar while it is selected", () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "planner",
+        unpinnedTabs: ["planner"],
+      });
+      useConversationStore.setState({
+        selectedTab: "planner",
+        isRightPanelShown: true,
+        hasRightPanelToggled: true,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
+    });
+
+    it("hides an unpinned tab from the bar once another tab is selected", () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        unpinnedTabs: ["planner"],
+      });
+      useConversationStore.setState({
+        selectedTab: "files",
+        isRightPanelShown: true,
+        hasRightPanelToggled: true,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.queryByTestId("conversation-tab-planner"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("conversation-tab-files")).toBeInTheDocument();
+    });
+
     it("does not show the build button when the planner tab is inactive", () => {
       setActiveTabState("files");
       useConversationStore.setState({
@@ -430,6 +474,30 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Assert
       expect(screen.getByTestId("conversation-tab-vscode")).toBeInTheDocument();
+    });
+  });
+
+  describe("ellipsis context menu", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("opens the context menu when the ellipsis button is clicked", async () => {
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.queryByTestId("conversation-tabs-menu-open-files"),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("ellipsis-button"));
+
+      expect(
+        screen.getByTestId("conversation-tabs-menu-open-files"),
+      ).toBeInTheDocument();
     });
   });
 

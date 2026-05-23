@@ -33,7 +33,6 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
   const { conversationId } = useConversationId();
   const [isOpenRepoModalOpen, setIsOpenRepoModalOpen] = useState(false);
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
-  const [isFolderBrowserOpen, _setIsFolderBrowserOpen] = useState(false);
   const workspaceMenuContainerRef = useRef<HTMLDivElement>(null);
   const { addRecentRepository } = useHomeStore();
   const enqueuePendingMessage = useOptimisticUserMessageStore(
@@ -101,7 +100,7 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
   const isConversationReady = !!conversation && webSocketStatus === "OPEN";
 
   useEffect(() => {
-    if (!isWorkspaceMenuOpen || isFolderBrowserOpen) return undefined;
+    if (!isWorkspaceMenuOpen) return undefined;
     const onMouseDown = (event: MouseEvent) => {
       if (
         workspaceMenuContainerRef.current &&
@@ -112,10 +111,10 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
     };
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [isWorkspaceMenuOpen, isFolderBrowserOpen]);
+  }, [isWorkspaceMenuOpen]);
 
   useEffect(() => {
-    if (!isWorkspaceMenuOpen || isFolderBrowserOpen) return undefined;
+    if (!isWorkspaceMenuOpen) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsWorkspaceMenuOpen(false);
@@ -123,7 +122,7 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isWorkspaceMenuOpen, isFolderBrowserOpen]);
+  }, [isWorkspaceMenuOpen]);
 
   const handleLaunchRepository = (
     repository: GitRepository,
@@ -200,9 +199,17 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
   // click is a no-op. Linkable repos render as <a> and ignore `disabled`.
   const isRepoButtonInert = isLocalBackend && !hasRepository;
 
+  // True when the bar will render at least one chip (cloud always shows
+  // "Open Repository"; local needs a repo or a workspace name; selected
+  // branch or push/pull/PR also count). When false, the bar has nothing to
+  // show — return null so the wrapper above collapses to its natural padding
+  // instead of leaving an empty DOM node below the chat input.
+  const hasAnyContent = showRepoButton || !!selectedBranch || hasRepository;
+  if (!hasAnyContent) return null;
+
   return (
     <div className="flex flex-row items-center">
-      <div className="flex flex-row gap-2.5 items-center overflow-x-auto flex-wrap md:flex-nowrap relative scrollbar-hide">
+      <div className="flex flex-row gap-2.5 items-center overflow-x-auto flex-nowrap relative scrollbar-hide">
         {showRepoButton ? (
           <GitControlBarRepoButton
             selectedRepository={selectedRepository}

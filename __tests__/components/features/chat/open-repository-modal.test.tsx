@@ -102,10 +102,6 @@ vi.mock(
 );
 
 // Mock RepoForkedIcon
-vi.mock("#/icons/repo-forked.svg?react", () => ({
-  default: () => <div data-testid="repo-forked-icon" />,
-}));
-
 describe("OpenRepositoryModal", () => {
   const mockOnClose = vi.fn();
   const mockOnLaunch = vi.fn();
@@ -142,9 +138,26 @@ describe("OpenRepositoryModal", () => {
       screen.getByText("CONVERSATION$OPEN_REPOSITORY"),
     ).toBeInTheDocument();
     expect(
+      screen.getByTestId("close-open-repository-modal"),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText("CONVERSATION$SELECT_OR_INSERT_LINK"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("repo-forked-icon")).toBeInTheDocument();
+  });
+
+  it("calls onClose when the header close button is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <OpenRepositoryModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onLaunch={mockOnLaunch}
+      />,
+    );
+
+    await user.click(screen.getByTestId("close-open-repository-modal"));
+
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
   it("should render Launch and Cancel buttons", () => {
@@ -158,6 +171,28 @@ describe("OpenRepositoryModal", () => {
 
     expect(screen.getByText("BUTTON$LAUNCH")).toBeInTheDocument();
     expect(screen.getByText("BUTTON$CANCEL")).toBeInTheDocument();
+  });
+
+  it("places Cancel before Launch in the footer so the dominant action is the last focusable button", () => {
+    // Arrange: render the modal so both footer buttons are mounted.
+    render(
+      <OpenRepositoryModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onLaunch={mockOnLaunch}
+      />,
+    );
+
+    // Act: locate both footer buttons.
+    const cancel = screen.getByText("BUTTON$CANCEL");
+    const launch = screen.getByText("BUTTON$LAUNCH");
+
+    // Assert: Cancel precedes the dominant Launch action in DOM order.
+    // eslint-disable-next-line no-bitwise
+    expect(
+      cancel.compareDocumentPosition(launch) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("should disable Launch button when no repository or branch is selected", () => {
@@ -282,37 +317,6 @@ describe("OpenRepositoryModal", () => {
     // Launch button should be disabled again (branch was reset)
     launchButton = screen.getByText("BUTTON$LAUNCH").closest("button");
     expect(launchButton).toBeDisabled();
-  });
-
-  it("should use small modal width", () => {
-    render(
-      <OpenRepositoryModal
-        isOpen={true}
-        onClose={mockOnClose}
-        onLaunch={mockOnLaunch}
-      />,
-    );
-
-    // ModalBody with width="small" renders w-[384px]
-    const modalBody = screen
-      .getByText("CONVERSATION$OPEN_REPOSITORY")
-      .closest(".bg-base-secondary");
-    expect(modalBody).toHaveClass("w-[384px]");
-  });
-
-  it("should override default gap with !gap-4 for tighter spacing", () => {
-    render(
-      <OpenRepositoryModal
-        isOpen={true}
-        onClose={mockOnClose}
-        onLaunch={mockOnLaunch}
-      />,
-    );
-
-    const modalBody = screen
-      .getByText("CONVERSATION$OPEN_REPOSITORY")
-      .closest(".bg-base-secondary");
-    expect(modalBody).toHaveClass("!gap-4");
   });
 
   describe("provider switching", () => {

@@ -1,7 +1,10 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  modalWidthClassName,
+} from "#/components/shared/modals/modal-body";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { OnboardingProgressBar } from "./onboarding-progress-bar";
@@ -44,6 +47,7 @@ function Slide({ index, currentStep, children }: SlideProps) {
       data-testid={`onboarding-slide-${index}`}
       data-active={isActive}
       aria-hidden={!isActive}
+      // slide offset computed from step index at runtime
       style={{ transform: `translateX(${offsetPct}%)` }}
       className={cn(
         "w-full transition-transform duration-300 ease-out",
@@ -82,14 +86,39 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
   const [selectedAgentId, setSelectedAgentId] =
     React.useState<OnboardingAgentId>("openhands");
 
+  // The LLM-setup step (index 2) is OpenHands-specific: ACP agents drive
+  // their own LLM via the subprocess and authenticate through the Secrets
+  // panel, so there's nothing to configure in that form for them. Skip
+  // over it in both directions when the user has picked an ACP agent,
+  // keeping the rest of the flow intact (back from SayHello on the ACP
+  // path returns to ChooseAgent, not to a dead-end LLM page).
+  const skipLlmStep = selectedAgentId !== "openhands";
   const goNext = React.useCallback(
-    () => setCurrentStep((step) => (step >= TOTAL_STEPS - 1 ? step : step + 1)),
-    [],
+    () =>
+      setCurrentStep((step) => {
+        const delta = skipLlmStep && step === 1 ? 2 : 1;
+        return Math.min(step + delta, TOTAL_STEPS - 1);
+      }),
+    [skipLlmStep],
   );
   const goBack = React.useCallback(
-    () => setCurrentStep((step) => (step <= 0 ? 0 : step - 1)),
-    [],
+    () =>
+      setCurrentStep((step) => {
+        const delta = skipLlmStep && step === 3 ? 2 : 1;
+        return Math.max(step - delta, 0);
+      }),
+    [skipLlmStep],
   );
+
+  // The progress bar should show the user's actual visited-step count,
+  // not the underlying index. On the ACP path the LLM-setup slide is
+  // skipped, so:
+  //   * the bar renders 3 segments instead of 4, and
+  //   * the SayHello slide (modal index 3) maps to logical step 2 so
+  //     segment 2 doesn't pop "completed" on a slide the user never saw.
+  const progressTotal = skipLlmStep ? TOTAL_STEPS - 1 : TOTAL_STEPS;
+  const progressStep =
+    skipLlmStep && currentStep > 1 ? currentStep - 1 : currentStep;
 
   return (
     <ModalBackdrop
@@ -97,66 +126,62 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
       closeOnEscape={false}
       aria-label={t(I18nKey.ONBOARDING$TITLE)}
     >
-      <section
-        data-testid="onboarding-modal"
-        data-current-step={currentStep}
-        className={cn(
-          "flex flex-col gap-6 overflow-hidden rounded-2xl border border-white/10 bg-base-secondary shadow-2xl",
-          "w-[560px] max-w-[92vw] max-h-[90vh]",
-        )}
-      >
-        <header className="flex flex-col gap-3 px-7 pt-7 shrink-0">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-[var(--oh-muted)]">
-              {t(I18nKey.ONBOARDING$STEP_LABEL, {
-                current: currentStep + 1,
-                total: TOTAL_STEPS,
-              })}
-            </p>
-            <button
-              type="button"
-              data-testid="onboarding-skip"
-              onClick={onClose}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--oh-muted)] hover:bg-white/5 hover:text-white cursor-pointer"
-            >
-              <span>{t(I18nKey.ONBOARDING$SKIP)}</span>
-              <X className="size-3.5" aria-hidden />
-            </button>
-          </div>
-          <OnboardingProgressBar
-            currentStep={currentStep}
-            totalSteps={TOTAL_STEPS}
-          />
-        </header>
-
-        <div
-          data-testid="onboarding-scroll-area"
-          className="flex-1 min-h-0 overflow-y-auto custom-scrollbar-always px-7"
+      <div className="relative flex flex-col items-center gap-4">
+        <section
+          data-testid="onboarding-modal"
+          data-current-step={currentStep}
+          className={cn(
+            "flex flex-col gap-6 overflow-hidden rounded-2xl border border-white/10 bg-base-secondary shadow-2xl",
+            modalWidthClassName("lg"),
+            MODAL_MAX_WIDTH_VIEWPORT,
+            "max-h-[90vh]",
+          )}
         >
+          <header className="flex flex-col gap-3 px-7 pt-7 shrink-0">
+            <OnboardingProgressBar
+              currentStep={progressStep}
+              totalSteps={progressTotal}
+            />
+          </header>
+
           <div
-            data-testid="onboarding-slide-rail"
-            data-current-step={currentStep}
-            className="relative overflow-clip"
+            data-testid="onboarding-scroll-area"
+            className="flex-1 min-h-0 overflow-y-auto custom-scrollbar-always px-7"
           >
-            <Slide index={0} currentStep={currentStep}>
-              <ChooseAgentStep
-                selectedAgentId={selectedAgentId}
-                onSelect={setSelectedAgentId}
-                onNext={goNext}
-              />
-            </Slide>
-            <Slide index={1} currentStep={currentStep}>
-              <CheckBackendStep onBack={goBack} onNext={goNext} />
-            </Slide>
-            <Slide index={2} currentStep={currentStep}>
-              <SetupLlmStep onBack={goBack} onNext={goNext} />
-            </Slide>
-            <Slide index={3} currentStep={currentStep}>
-              <SayHelloStep onBack={goBack} onLaunched={onClose} />
-            </Slide>
+            <div
+              data-testid="onboarding-slide-rail"
+              data-current-step={currentStep}
+              className="relative overflow-clip"
+            >
+              <Slide index={0} currentStep={currentStep}>
+                <ChooseAgentStep
+                  selectedAgentId={selectedAgentId}
+                  onSelect={setSelectedAgentId}
+                  onNext={goNext}
+                />
+              </Slide>
+              <Slide index={1} currentStep={currentStep}>
+                <CheckBackendStep onBack={goBack} onNext={goNext} />
+              </Slide>
+              <Slide index={2} currentStep={currentStep}>
+                <SetupLlmStep onBack={goBack} onNext={goNext} />
+              </Slide>
+              <Slide index={3} currentStep={currentStep}>
+                <SayHelloStep onBack={goBack} onLaunched={onClose} />
+              </Slide>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <button
+          type="button"
+          data-testid="onboarding-skip"
+          onClick={onClose}
+          className="rounded-md px-3 py-2 text-sm text-[var(--oh-muted)] transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
+        >
+          {t(I18nKey.ONBOARDING$SKIP)}
+        </button>
+      </div>
     </ModalBackdrop>
   );
 }

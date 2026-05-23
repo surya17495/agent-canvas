@@ -6,6 +6,7 @@ import { AgentStatus } from "#/components/features/controls/agent-status";
 import { Tools } from "../../controls/tools";
 import { ChangeAgentButton } from "../change-agent-button";
 import { ChatInputModel } from "./chat-input-model";
+import { SwitchProfileButton } from "../switch-profile-button";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -15,7 +16,7 @@ import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
 import { CodePillIcon } from "#/icons/code-pill";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
-import { useConversationId } from "#/hooks/use-conversation-id";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
 import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -37,7 +38,6 @@ import { ContextMenu } from "#/ui/context-menu";
 import { Divider } from "#/ui/divider";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { cn } from "#/utils/utils";
-import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 
 interface ChatInputActionsProps {
   disabled: boolean;
@@ -60,9 +60,15 @@ export function ChatInputActions({
   const unifiedPauseMutation = useUnifiedPauseConversation();
   const pauseConversationMutation = usePauseConversation();
   const resumeConversationMutation = useResumeConversation();
-  const { conversationId } = useConversationId();
+  // Optional because the chat input also renders on the home page (no
+  // conversation route yet). Conversation-scoped actions below guard on this.
+  const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
-  const isCloud = useActiveBackend().backend.kind === "cloud";
+  const { backend } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
+  const llmDestinationLabel = t(
+    isCloud ? I18nKey.SETTINGS$LLM_SETTINGS : I18nKey.SETTINGS$LLM_PROFILES,
+  );
   const webSocketStatus = useUnifiedWebSocketStatus();
   const { curAgentState } = useAgentState();
   const { conversationMode, setConversationMode } = useConversationStore();
@@ -104,7 +110,7 @@ export function ChatInputActions({
     shouldShowAgentTools,
     shouldShowHooks,
   } = useConversationNameContextMenu({
-    conversationId,
+    conversationId: conversationId ?? undefined,
     executionStatus: conversation?.execution_status,
     showOptions: true,
     onContextMenuToggle: setIsOverflowOpen,
@@ -168,11 +174,13 @@ export function ChatInputActions({
   }, [isCloud]);
 
   const handlePauseAgent = () => {
+    if (!conversationId) return;
     // Pause the conversation (agent execution)
     pauseConversationMutation.mutate({ conversationId });
   };
 
   const handleResumeAgentClick = () => {
+    if (!conversationId) return;
     // Resume the conversation (agent execution)
     resumeConversationMutation.mutate({ conversationId });
   };
@@ -259,11 +267,6 @@ export function ChatInputActions({
     setIsOverflowOpen(false);
   };
 
-  const contextMenuListItemClassName = cn(
-    "cursor-pointer p-0 h-auto hover:bg-transparent",
-    CONTEXT_MENU_ICON_TEXT_CLASSNAME,
-  );
-
   React.useLayoutEffect(() => {
     if (!isOverflowOpen || !overflowTriggerRef.current) {
       return;
@@ -310,13 +313,11 @@ export function ChatInputActions({
                 current === "tools" ? null : "tools",
               )
             }
-            className={contextMenuListItemClassName}
           >
             <ToolsContextMenuIconText
               icon={<Wrench width={16} height={16} strokeWidth={2} />}
               text={t(I18nKey.MICROAGENTS_MODAL$TOOLS)}
               rightIcon={<CarretRightFillIcon width={10} height={10} />}
-              className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
             />
           </ContextMenuListItem>
           <div
@@ -349,7 +350,6 @@ export function ChatInputActions({
               )
             }
             isDisabled={isAgentSwitcherDisabled}
-            className={contextMenuListItemClassName}
           >
             <ToolsContextMenuIconText
               icon={<CodePillIcon className="h-[11px] w-[11px]" />}
@@ -359,7 +359,6 @@ export function ChatInputActions({
                   : t(I18nKey.COMMON$PLAN)
               }
               rightIcon={<CarretRightFillIcon width={10} height={10} />}
-              className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
             />
           </ContextMenuListItem>
           {!isAgentSwitcherDisabled && (
@@ -374,7 +373,7 @@ export function ChatInputActions({
             >
               <ContextMenu
                 testId="overflow-agent-submenu"
-                className="overflow-visible min-w-[195px]"
+                className="overflow-visible min-w-[195px] gap-0"
               >
                 <ContextMenuListItem
                   testId="overflow-agent-code"
@@ -384,12 +383,10 @@ export function ChatInputActions({
                     setConversationMode("code");
                     closeOverflowMenus();
                   }}
-                  className={contextMenuListItemClassName}
                 >
                   <ToolsContextMenuIconText
                     icon={<CodePillIcon className="h-[11px] w-[11px]" />}
                     text={t(I18nKey.COMMON$CODE)}
-                    className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
                   />
                 </ContextMenuListItem>
                 <ContextMenuListItem
@@ -398,7 +395,6 @@ export function ChatInputActions({
                     handlePlanClick(event);
                     closeOverflowMenus();
                   }}
-                  className={contextMenuListItemClassName}
                 >
                   <ToolsContextMenuIconText
                     icon={
@@ -409,7 +405,6 @@ export function ChatInputActions({
                       />
                     }
                     text={t(I18nKey.COMMON$PLAN)}
-                    className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
                   />
                 </ContextMenuListItem>
               </ContextMenu>
@@ -426,13 +421,11 @@ export function ChatInputActions({
                 current === "model" ? null : "model",
               )
             }
-            className={contextMenuListItemClassName}
           >
             <ToolsContextMenuIconText
               icon={<Cpu width={16} height={16} strokeWidth={2} aria-hidden />}
               text="Model"
               rightIcon={<CarretRightFillIcon width={10} height={10} />}
-              className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
             />
           </ContextMenuListItem>
           <div
@@ -446,27 +439,27 @@ export function ChatInputActions({
           >
             <ContextMenu
               testId="overflow-model-submenu"
-              className="overflow-visible min-w-[220px] max-w-[320px]"
+              className="overflow-visible min-w-[220px] max-w-[320px] gap-0"
             >
               <li className="text-sm">
-                <div className="p-2 leading-5 text-white break-all">
+                <div className="p-2 leading-5 text-[var(--oh-foreground)] break-all">
                   {conversation?.llm_model}
                 </div>
               </li>
-              <Divider />
+              <Divider inset="menu" />
               <li className="text-sm">
                 <NavigationLink
                   to="/settings"
                   onClick={closeOverflowMenus}
-                  className="flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-white hover:bg-[var(--oh-interactive-hover)] transition-colors"
+                  className="group flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors"
                 >
                   <SettingsGearIcon
                     width={16}
                     height={16}
-                    className="shrink-0"
+                    className="shrink-0 text-[var(--oh-muted)] transition-colors group-hover:text-[var(--oh-foreground)]"
                     aria-hidden
                   />
-                  <span>{t(I18nKey.SETTINGS$LLM_SETTINGS)}</span>
+                  <span>{llmDestinationLabel}</span>
                 </NavigationLink>
               </li>
             </ContextMenu>
@@ -498,7 +491,7 @@ export function ChatInputActions({
             </div>
           )}
           <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
-            <ChatInputModel />
+            {isCloud ? <ChatInputModel /> : <SwitchProfileButton />}
           </div>
 
           {hasOverflowItems && (
@@ -530,6 +523,7 @@ export function ChatInputActions({
                 typeof document !== "undefined" &&
                 overflowPortalStyle &&
                 ReactDOM.createPortal(
+                  // portal position computed from DOM bounding rect at runtime
                   <div style={overflowPortalStyle}>{overflowMenu}</div>,
                   document.body,
                 )}
@@ -541,7 +535,7 @@ export function ChatInputActions({
         ref={rightSectionRef}
         className="ml-auto flex shrink-0 items-center gap-2"
       >
-        {showAgentStatusInline && (
+        {showAgentStatusInline && conversationId && (
           <AgentStatus
             handleStop={handlePauseAgent}
             handleResumeAgent={handleResumeAgentClick}

@@ -1,19 +1,30 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { AxiosError } from "axios";
+import { X } from "lucide-react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { I18nKey } from "#/i18n/declaration";
-import { MarketplaceEntry } from "#/constants/mcp-marketplace";
+import type { McpCatalogEntry as MarketplaceEntry } from "@openhands/extensions/mcps";
+import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { MCPServerConfig } from "#/types/mcp-server";
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  modalWidthClassName,
+} from "#/components/shared/modals/modal-body";
+import { cn } from "#/utils/utils";
+
+const ICON_BUTTON_CLASS =
+  "rounded-md p-1 text-white hover:bg-tertiary cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed";
 
 interface InstallServerModalProps {
   entry: MarketplaceEntry;
   onClose: () => void;
+  onSuccess?: (entry: MarketplaceEntry) => void;
 }
 
 interface FieldState {
@@ -45,6 +56,7 @@ function makeInitialState(entry: MarketplaceEntry): FieldState {
 export function InstallServerModal({
   entry,
   onClose,
+  onSuccess,
 }: InstallServerModalProps) {
   const { t } = useTranslation("openhands");
   const { mutate: addMcpServer, isPending: isAdding } = useAddMcpServer();
@@ -68,6 +80,7 @@ export function InstallServerModal({
     addMcpServer(payload, {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
+        onSuccess?.(entry);
         onClose();
       },
       onError: (err: unknown) => {
@@ -264,23 +277,32 @@ export function InstallServerModal({
         data-testid="mcp-install-modal"
         data-marketplace-id={entry.id}
         onSubmit={handleSubmit}
-        className="bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] w-[520px] max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
+        className={cn(
+          "bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] max-h-[85vh] overflow-y-auto custom-scrollbar",
+          modalWidthClassName("md"),
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
       >
-        <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg"
-            style={{
-              backgroundColor: entry.iconBg,
-              color: entry.iconColor ?? "#FFFFFF",
-            }}
-          >
-            {entry.logo}
-          </span>
-          <div className="flex flex-col flex-1">
-            <h2 className="text-lg font-semibold">{entry.name}</h2>
-            <p className="text-xs text-tertiary-alt">{entry.description}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <McpLogoBadge entry={entry} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <h2 className="text-lg font-semibold text-content-2">
+                {entry.name}
+              </h2>
+              <p className="text-xs text-tertiary-alt">{entry.description}</p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            className={ICON_BUTTON_CLASS}
+            aria-label={t(I18nKey.BUTTON$CLOSE)}
+            data-testid="close-mcp-install-modal"
+          >
+            <X size={20} aria-hidden />
+          </button>
         </div>
 
         {entry.installHint && (
@@ -309,26 +331,24 @@ export function InstallServerModal({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          <BrandButton
-            type="submit"
-            variant="primary"
-            isDisabled={isPending}
-            testId="mcp-install-submit"
-            className="w-full text-center"
-          >
-            {isPending
-              ? t(I18nKey.SETTINGS$SAVING)
-              : t(I18nKey.MCP$INSTALL_BUTTON)}
-          </BrandButton>
+        <div className="flex justify-end gap-2 mt-2">
           <BrandButton
             type="button"
             variant="secondary"
             onClick={onClose}
             testId="mcp-install-cancel"
-            className="w-full text-center"
           >
             {t(I18nKey.BUTTON$CANCEL)}
+          </BrandButton>
+          <BrandButton
+            type="submit"
+            variant="primary"
+            isDisabled={isPending}
+            testId="mcp-install-submit"
+          >
+            {isPending
+              ? t(I18nKey.SETTINGS$SAVING)
+              : t(I18nKey.MCP$INSTALL_BUTTON)}
           </BrandButton>
         </div>
       </form>
