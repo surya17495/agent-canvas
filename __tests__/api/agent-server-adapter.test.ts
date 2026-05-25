@@ -32,6 +32,9 @@ const {
 
 vi.mock("#/api/agent-server-config", () => ({
   getAgentServerBaseUrl: vi.fn(() => "http://127.0.0.1:8000"),
+  resolveBrowserReachableAgentServerBaseUrl: vi.fn((baseUrl: string) =>
+    baseUrl.replace(/\/+$/, ""),
+  ),
   getAgentServerSessionApiKey: vi.fn(() => null),
   getAgentServerWorkingDir: mockGetAgentServerWorkingDir,
   getConfiguredWorkerUrls: vi.fn(() => []),

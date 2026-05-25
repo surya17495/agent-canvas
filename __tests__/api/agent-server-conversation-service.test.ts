@@ -74,6 +74,9 @@ vi.mock("@openhands/typescript-client/clients", async () => {
 vi.mock("#/api/agent-server-config", () => ({
   DEFAULT_WORKING_DIR: "workspace/project",
   getAgentServerBaseUrl: vi.fn(() => "http://localhost:54928"),
+  resolveBrowserReachableAgentServerBaseUrl: vi.fn((baseUrl: string) =>
+    baseUrl.replace(/\/+$/, ""),
+  ),
   getAgentServerSessionApiKey: vi.fn(() => "test-api-key"),
   getAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
   buildConversationWorkingDir: vi.fn(
