@@ -32,6 +32,11 @@ const fetchConversationData = async (
   };
 };
 
+/**
+ * Stop a running conversation.
+ * - Cloud mode: Pauses the sandbox (waits for current LLM call to finish).
+ * - Local mode: Interrupts immediately (cancels in-flight requests).
+ */
 export const pauseConversation = async (conversationId: string) => {
   const { conversationUrl, sessionApiKey, sandboxId } =
     await fetchConversationData(conversationId);
@@ -46,9 +51,12 @@ export const pauseConversation = async (conversationId: string) => {
     return { success: true };
   }
 
+  // In local mode, use /interrupt instead of /pause so in-flight LLM
+  // requests are cancelled immediately rather than waiting for the
+  // current call to finish.
   return new ConversationClient(
     getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-  ).pauseConversation(conversationId);
+  ).interruptConversation(conversationId);
 };
 
 /**
@@ -73,37 +81,53 @@ export const resumeConversation = async (conversationId: string) => {
   ).runConversation(conversationId);
 };
 
-export const updateConversationExecutionStatusInCache = (
+/**
+ * Patch arbitrary fields on a cached AppConversation in both the single-item
+ * and paginated list query caches.  Prefer this over the narrower
+ * `updateConversationExecutionStatusInCache` when you need to update more than
+ * one field atomically (e.g. `execution_status` + `sandbox_status` together).
+ */
+export const patchConversationInCache = (
   queryClient: QueryClient,
   conversationId: string,
-  execution_status: ExecutionStatusValue,
+  patch: Partial<AppConversation>,
 ): void => {
-  queryClient.setQueryData<AppConversation | null>(
-    ["user", "conversation", conversationId],
-    (oldData) => {
-      if (!oldData) return oldData;
-      return { ...oldData, execution_status };
-    },
+  // useUserConversation stores data under a 5-part key that includes the active
+  // backend id and org id. Use setQueriesData with prefix matching so the
+  // update reaches whichever (backend, org) variant is currently mounted.
+  queryClient.setQueriesData<AppConversation | null>(
+    { queryKey: ["user", "conversation", conversationId] },
+    (oldData) => (oldData ? { ...oldData, ...patch } : oldData),
   );
 
   queryClient.setQueriesData<{
-    pages: Array<{
-      items: Array<{ id: string; execution_status: ExecutionStatusValue }>;
-    }>;
+    pages: Array<{ items: AppConversation[] }>;
   }>({ queryKey: ["user", "conversations"] }, (oldData) => {
     if (!oldData) return oldData;
-
     return {
       ...oldData,
       pages: oldData.pages.map((page) => ({
         ...page,
         items: page.items.map((conv) =>
-          conv.id === conversationId ? { ...conv, execution_status } : conv,
+          conv.id === conversationId ? { ...conv, ...patch } : conv,
         ),
       })),
     };
   });
 };
+
+export const updateConversationExecutionStatusInCache = (
+  queryClient: QueryClient,
+  conversationId: string,
+  execution_status: ExecutionStatusValue,
+): void =>
+  patchConversationInCache(queryClient, conversationId, { execution_status });
+
+export const updateConversationLlmModelInCache = (
+  queryClient: QueryClient,
+  conversationId: string,
+  llm_model: string,
+): void => patchConversationInCache(queryClient, conversationId, { llm_model });
 
 export const invalidateConversationQueries = (
   queryClient: QueryClient,

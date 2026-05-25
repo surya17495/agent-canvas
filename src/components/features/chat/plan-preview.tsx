@@ -67,11 +67,11 @@ export function PlanPreview({
   }
 
   return (
-    <div className="bg-[#25272d] border border-[#597FF4] rounded-[12px] w-full mt-2">
+    <div className="bg-[var(--oh-surface)] border border-[#597FF4] rounded-[12px] w-full mt-2">
       {/* Header */}
-      <div className="border-b border-[#525252] flex h-[41px] items-center px-2 gap-1">
-        <LessonPlanIcon width={18} height={18} color="#9299aa" />
-        <Typography.Text className="font-medium text-[11px] text-white tracking-[0.11px] leading-4">
+      <div className="border-b border-[var(--oh-border)] flex h-[41px] items-center px-2 gap-1">
+        <LessonPlanIcon width={18} height={18} color="var(--oh-muted)" />
+        <Typography.Text className="font-normal text-[11px] text-white tracking-[0.11px] leading-4">
           {t(I18nKey.COMMON$PLAN_MD)}
         </Typography.Text>
         <div className="flex-1" />
@@ -81,7 +81,7 @@ export function PlanPreview({
           className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-pointer"
           data-testid="plan-preview-view-button"
         >
-          <Typography.Text className="font-medium text-[11px] text-white tracking-[0.11px] leading-4">
+          <Typography.Text className="font-normal text-[11px] text-white tracking-[0.11px] leading-4">
             {t(I18nKey.COMMON$VIEW)}
           </Typography.Text>
           <ArrowUpRight className="text-white" size={18} />
@@ -116,7 +116,7 @@ export function PlanPreview({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-[#525252] flex h-[54px] items-center justify-start px-4">
+      <div className="border-t border-[var(--oh-border)] flex h-[54px] items-center justify-start px-4">
         <button
           type="button"
           onClick={handleBuildClick}
@@ -129,9 +129,9 @@ export function PlanPreview({
           )}
           data-testid="plan-preview-build-button"
         >
-          <Typography.Text className="font-medium text-[14px] text-black leading-5">
+          <Typography.Text className="font-normal text-[14px] text-black leading-5">
             {t(I18nKey.COMMON$BUILD)}{" "}
-            <Typography.Text className="font-medium text-black">
+            <Typography.Text className="font-normal text-black">
               ⌘↩
             </Typography.Text>
           </Typography.Text>

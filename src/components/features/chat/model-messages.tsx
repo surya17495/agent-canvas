@@ -3,6 +3,7 @@ import { Trans } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useModelStore } from "#/stores/model-store";
 import { I18nKey } from "#/i18n/declaration";
+import InfoCircleIcon from "#/icons/info-circle.svg?react";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import { GenericEventMessage } from "./generic-event-message";
 
@@ -25,7 +26,7 @@ function ProfileRow({ profile }: ProfileRowProps) {
         <span className="text-neutral-300">
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
-        <span className="font-semibold text-neutral-200 text-sm">
+        <span className="font-normal text-neutral-200 text-sm">
           {profile.name}
         </span>
       </button>
@@ -70,7 +71,13 @@ export function ModelMessages({
             <GenericEventMessage
               key={entry.id}
               title={
-                <span>
+                <span className="inline-flex items-center gap-1.5">
+                  <InfoCircleIcon
+                    width={14}
+                    height={14}
+                    className="shrink-0 text-neutral-400"
+                    aria-hidden
+                  />
                   <Trans
                     i18nKey={I18nKey.MODEL$SWITCHED_TO_PROFILE}
                     values={{ name: entry.switchedTo }}

@@ -2,14 +2,22 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ServerClient } from "@openhands/typescript-client/clients";
+import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  modalWidthClassName,
+} from "#/components/shared/modals/modal-body";
+import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import type { Backend, BackendKind } from "#/api/backend-registry/types";
+import { cn } from "#/utils/utils";
 import { BackendStatusDot } from "./backend-status-dot";
 import { DeviceFlowAuth } from "./device-flow-auth";
 
@@ -30,12 +38,80 @@ function inferKindFromHost(host: string): BackendKind {
   return "local";
 }
 
+/**
+ * Returns true for hostnames that represent a local / private-network address.
+ * Used by normalizeHost to choose http:// instead of https://.
+ */
+function isLocalAddress(hostname: string): boolean {
+  // Strip IPv6 bracket notation: [::1] → ::1
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  // IPv6 loopback, any-address, and named loopback
+  if (h === "localhost" || h === "::1" || h === "::" || h === "0.0.0.0")
+    return true;
+  // 127.x.x.x loopback range + IPv4-mapped loopback (::ffff:127.x.x.x)
+  if (/^127\./.test(h) || /^::ffff:127\./i.test(h)) return true;
+  // RFC 1918 private ranges
+  if (/^10\./.test(h)) return true;
+  if (/^192\.168\./.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  // IPv6 link-local (fe80::/10) and unique local (fc00::/7)
+  if (/^fe[89ab][0-9a-f]:/i.test(h)) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(h)) return true;
+  // mDNS / Bonjour (.local)
+  if (h.endsWith(".local")) return true;
+  // Single-label hostnames (no dots, no colons) are local network names.
+  // Colons are excluded so bare IPv6 addresses don't accidentally match.
+  if (!h.includes(".") && !h.includes(":")) return true;
+  return false;
+}
+
 function normalizeHost(host: string): string {
   const trimmed = host.trim().replace(/\/+$/, "");
   if (!trimmed) return "";
+  // Already has an explicit scheme — respect it.
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  // Extract the pure hostname for scheme selection, handling three cases:
+  //   [::1]:8080  → bracket IPv6 notation → extract ::1
+  //   ::1         → bare IPv6 (multiple colons, no bracket) → whole string
+  //   host:port   → regular host:port → part before the colon
+  const bracketMatch = trimmed.match(/^\[([^\]]+)\]/);
+  const hostname = bracketMatch
+    ? bracketMatch[1]
+    : (trimmed.match(/:/g) ?? []).length > 1
+      ? trimmed
+      : trimmed.split(":")[0];
+  const scheme = isLocalAddress(hostname) ? "http" : "https";
+  return `${scheme}://${trimmed}`;
 }
+
+/**
+ * Returns true when `host` represents a reachable backend URL.
+ *
+ * Rules (applied in order):
+ *   1. Must be non-empty after trimming.
+ *   2. Must contain no whitespace — spaces can never appear in a host/port.
+ *   3. After normalisation (bare hosts get `https://` prepended), must parse
+ *      as a valid http or https URL with a non-empty hostname.
+ */
+function isValidHostUrl(host: string): boolean {
+  const trimmed = host.trim();
+  if (!trimmed) return false;
+  // Spaces anywhere in the input are an immediate rejection.
+  if (/\s/.test(trimmed)) return false;
+  const normalized = normalizeHost(trimmed);
+  if (!normalized) return false;
+  try {
+    const url = new URL(normalized);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+const DEFAULT_OPENHANDS_CLOUD_HOST = "https://app.all-hands.dev";
 
 /**
  * Live status row for the edit form: shows a connection dot, a
@@ -100,10 +176,10 @@ function BackendStatusBadge({
           {statusLabel}
         </span>
         <span className="text-tertiary-alt">·</span>
-        <span className="text-gray-300">{kindLabel}</span>
+        <span className="text-[var(--oh-text-tertiary)]">{kindLabel}</span>
         {version ? (
           <span
-            className="text-xs text-gray-400"
+            className="text-xs text-[var(--oh-muted)]"
             data-testid={`${testIdRoot}-version`}
           >
             {t(I18nKey.BACKEND$VERSION_LABEL, { version })}
@@ -119,7 +195,7 @@ function BackendStatusBadge({
           <span className="font-semibold text-red-300">
             {t(I18nKey.BACKEND$HEALTH_FAILED_TITLE)}
           </span>
-          <span className="text-xs text-gray-300">
+          <span className="text-xs text-[var(--oh-text-tertiary)]">
             {t(I18nKey.BACKEND$HEALTH_FAILED_DETAIL, {
               count: consecutiveFailures,
             })}
@@ -183,35 +259,45 @@ export function BackendForm({
   const { t } = useTranslation("openhands");
   const { addBackend, updateBackend } = useActiveBackendContext();
 
-  const initialKind: BackendKind =
-    backend?.kind ?? (mode === "edit" ? "local" : "cloud");
-
   const [name, setName] = React.useState(backend?.name ?? "");
   const [host, setHost] = React.useState(backend?.host ?? "");
   const [apiKey, setApiKey] = React.useState(backend?.apiKey ?? "");
-  const [kind, setKind] = React.useState<BackendKind>(initialKind);
-  // In add mode, infer the kind from the host; in edit mode, the user
-  // already chose one, so don't re-infer over their choice.
-  const [touchedKind, setTouchedKind] = React.useState(mode === "edit");
 
-  // Auto-infer kind from host when user hasn't explicitly selected a kind via radio
-  React.useEffect(() => {
-    if (!touchedKind && host) {
-      setKind(inferKindFromHost(host));
-    }
-  }, [host, touchedKind]);
+  // Inline validation: only show errors after the user has left a field.
+  const [nameTouched, setNameTouched] = React.useState(false);
+  const [hostTouched, setHostTouched] = React.useState(false);
+
+  // Kind is inferred from the host on every change.
+  const kind: BackendKind = inferKindFromHost(host);
 
   const testIdRoot =
     explicitTestIdRoot ?? (mode === "edit" ? "edit-backend" : "add-backend");
 
   const canSubmit =
     name.trim().length > 0 &&
-    host.trim().length > 0 &&
+    isValidHostUrl(host) &&
     (kind === "local" || apiKey.trim().length > 0);
+
+  // Error messages — only surfaced after the user has blurred the field.
+  const nameError =
+    nameTouched && !name.trim() ? t(I18nKey.BACKEND$NAME_REQUIRED) : undefined;
+  const hostError = hostTouched
+    ? !host.trim()
+      ? t(I18nKey.BACKEND$HOST_REQUIRED)
+      : !isValidHostUrl(host)
+        ? t(I18nKey.BACKEND$HOST_INVALID)
+        : undefined
+    : undefined;
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      // Mark all validated fields as touched so inline errors become visible
+      // (e.g. user pressed Enter before filling required fields).
+      setNameTouched(true);
+      setHostTouched(true);
+      return;
+    }
 
     const payload = {
       name: name.trim(),
@@ -223,12 +309,6 @@ export function BackendForm({
     if (mode === "edit" && backend) {
       updateBackend(backend.id, payload);
     } else {
-      // Adding a backend is a pure save — we do NOT auto-switch the
-      // active selection. The user picks the new backend from the
-      // dropdown when they're ready. Auto-switching would write
-      // `(backendId, null)` for a cloud backend, which the dropdown
-      // can't render once orgs load and therefore drifts from the API
-      // layer.
       addBackend(payload);
     }
 
@@ -248,8 +328,11 @@ export function BackendForm({
         label={t(I18nKey.BACKEND$NAME_LABEL)}
         value={name}
         onChange={setName}
+        onBlur={() => setNameTouched(true)}
         placeholder="Production"
         className="w-full"
+        showRequiredTag
+        error={nameError}
       />
 
       <SettingsInput
@@ -259,134 +342,47 @@ export function BackendForm({
         label={t(I18nKey.BACKEND$HOST_LABEL)}
         value={host}
         onChange={setHost}
-        placeholder="https://app.all-hands.dev"
+        onBlur={() => setHostTouched(true)}
+        placeholder={DEFAULT_OPENHANDS_CLOUD_HOST}
+        className="w-full"
+        showRequiredTag
+        error={hostError}
+      />
+
+      <SettingsInput
+        testId={`${testIdRoot}-api-key`}
+        name={`${testIdRoot}-api-key`}
+        type="password"
+        label={t(I18nKey.BACKEND$KEY_LABEL)}
+        value={apiKey}
+        onChange={setApiKey}
+        placeholder=""
         className="w-full"
       />
 
-      {/* Device Flow auth for cloud backends in add mode - always visible */}
-      {mode === "add" && kind === "cloud" && (
-        <div className="flex flex-col gap-3">
-          <DeviceFlowAuth
-            host={host}
-            onSuccess={setApiKey}
-            testIdRoot={testIdRoot}
-            isDisabled={host.trim().length === 0}
-          />
-
-          {/* Divider with "or" */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 border-t border-gray-600" />
-            <span className="text-xs text-gray-500 uppercase">
-              {t(I18nKey.BACKEND$LOGIN_OR)}
-            </span>
-            <div className="flex-1 border-t border-gray-600" />
-          </div>
-
-          {/* Manual API key section */}
-          <div className="flex flex-col gap-2">
-            <SettingsInput
-              testId={`${testIdRoot}-api-key`}
-              name={`${testIdRoot}-api-key`}
-              type="password"
-              label={t(I18nKey.BACKEND$KEY_LABEL)}
-              value={apiKey}
-              onChange={setApiKey}
-              placeholder=""
-              className="w-full"
-            />
-            <p className="text-xs text-gray-400">
-              {t(I18nKey.BACKEND$KEY_DOCS_HINT)}{" "}
-              <a
-                href="https://docs.openhands.dev/openhands/usage/settings/api-keys-settings"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
-              >
-                {t(I18nKey.BACKEND$KEY_DOCS_LINK)}
-              </a>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Regular API key input for non-cloud or edit mode */}
-      {(mode === "edit" || kind !== "cloud") && (
-        <SettingsInput
-          testId={`${testIdRoot}-api-key`}
-          name={`${testIdRoot}-api-key`}
-          type="password"
-          label={t(I18nKey.BACKEND$KEY_LABEL)}
-          value={apiKey}
-          onChange={setApiKey}
-          placeholder=""
-          className="w-full"
-        />
-      )}
-
-      {mode === "edit" && backend ? (
+      {mode === "edit" && backend && (
         <BackendStatusBadge backend={backend} testIdRoot={testIdRoot} />
-      ) : (
-        <fieldset className="flex flex-col">
-          <legend className="text-sm mb-3">
-            {t(I18nKey.BACKEND$KIND_LABEL)}
-          </legend>
-          <div className="flex gap-6">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name={`${testIdRoot}-kind`}
-                checked={kind === "local"}
-                onChange={() => {
-                  setKind("local");
-                  setTouchedKind(true);
-                }}
-                data-testid={`${testIdRoot}-kind-local`}
-              />
-              {t(I18nKey.BACKEND$KIND_LOCAL)}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name={`${testIdRoot}-kind`}
-                checked={kind === "cloud"}
-                onChange={() => {
-                  setKind("cloud");
-                  setTouchedKind(true);
-                }}
-                data-testid={`${testIdRoot}-kind-cloud`}
-              />
-              {t(I18nKey.BACKEND$KIND_CLOUD)}
-            </label>
-          </div>
-          <p className="text-xs text-gray-400 mt-3">
-            {kind === "cloud"
-              ? t(I18nKey.BACKEND$KEY_HELPER_CLOUD)
-              : t(I18nKey.BACKEND$KEY_HELPER_LOCAL)}
-          </p>
-        </fieldset>
       )}
 
       {renderActions ? (
         renderActions({ canSubmit, testIdRoot })
       ) : (
-        <div className="grid grid-cols-2 gap-2 mt-2 w-full">
-          <BrandButton
-            type="submit"
-            variant="primary"
-            isDisabled={!canSubmit}
-            testId={`${testIdRoot}-submit`}
-            className="w-full text-center"
-          >
-            {t(I18nKey.BACKEND$SAVE)}
-          </BrandButton>
+        <div className="flex justify-end gap-2 mt-2 w-full">
           <BrandButton
             type="button"
             variant="secondary"
             onClick={onSubmitted}
             testId={`${testIdRoot}-cancel`}
-            className="w-full text-center"
           >
             {t(I18nKey.BUTTON$CANCEL)}
+          </BrandButton>
+          <BrandButton
+            type="submit"
+            variant="primary"
+            isDisabled={!canSubmit}
+            testId={`${testIdRoot}-submit`}
+          >
+            {t(I18nKey.BACKEND$SAVE)}
           </BrandButton>
         </div>
       )}
@@ -394,10 +390,200 @@ export function BackendForm({
   );
 }
 
+// ── Add-mode two-column layout ──────────────────────────────────────
+
 /**
- * Modal wrapper around `BackendForm`. Used by both the dropdown's
- * "Add backend" trigger and the manage-backends modal's edit /
- * add-inline buttons.
+ * Left column of the "Add a Backend" modal: manual connection via
+ * Host + API Key. Designed for self-hosted agent servers and
+ * self-hosted OpenHands Cloud with API key auth.
+ */
+function ManualConnectionColumn({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation("openhands");
+  const { addBackend } = useActiveBackendContext();
+
+  const [name, setName] = React.useState("");
+  const [host, setHost] = React.useState("");
+  const [apiKey, setApiKey] = React.useState("");
+
+  const kind: BackendKind = inferKindFromHost(host);
+  const canSubmit =
+    name.trim().length > 0 &&
+    isValidHostUrl(host) &&
+    (kind === "local" || apiKey.trim().length > 0);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    addBackend({
+      name: name.trim(),
+      host: normalizeHost(host),
+      apiKey: apiKey.trim(),
+      kind,
+    });
+    onClose();
+  };
+
+  return (
+    <form
+      data-testid="add-backend-form"
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4 flex-1 min-w-0"
+    >
+      <div className="flex flex-col gap-1">
+        <SettingsInput
+          testId="add-backend-name"
+          name="add-backend-name"
+          type="text"
+          label={t(I18nKey.BACKEND$NAME_LABEL)}
+          value={name}
+          onChange={setName}
+          placeholder="e.g. My Server"
+          className="w-full"
+        />
+        <p className="text-xs text-[var(--oh-muted)]">
+          {t(I18nKey.BACKEND$NAME_HELPER)}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <SettingsInput
+          testId="add-backend-host"
+          name="add-backend-host"
+          type="text"
+          label={t(I18nKey.BACKEND$HOST_LABEL)}
+          value={host}
+          onChange={setHost}
+          placeholder="http://localhost:8000"
+          className="w-full"
+        />
+        <p
+          className="text-xs text-[var(--oh-muted)]"
+          data-testid="add-backend-host-helper"
+        >
+          {t(I18nKey.BACKEND$HOST_HELPER)}
+        </p>
+      </div>
+
+      <SettingsInput
+        testId="add-backend-api-key"
+        name="add-backend-api-key"
+        type="password"
+        label={t(I18nKey.BACKEND$KEY_LABEL)}
+        value={apiKey}
+        onChange={setApiKey}
+        placeholder="sk-••••••••••"
+        className="w-full"
+      />
+
+      <BrandButton
+        type="submit"
+        variant="secondary"
+        isDisabled={!canSubmit}
+        testId="add-backend-submit"
+        className="w-full text-center"
+      >
+        {t(I18nKey.BACKEND$CONNECT)}
+      </BrandButton>
+    </form>
+  );
+}
+
+/**
+ * Right column of the "Add a Backend" modal: one-click OAuth login
+ * with OpenHands Cloud. Includes an "Advanced" disclosure for
+ * users who self-host OpenHands Cloud and need to override the host.
+ */
+function CloudLoginColumn({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation("openhands");
+  const { addBackend } = useActiveBackendContext();
+
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+  const [customHost, setCustomHost] = React.useState("");
+
+  const effectiveHost = customHost.trim() || DEFAULT_OPENHANDS_CLOUD_HOST;
+
+  const handleLoginSuccess = (apiKey: string) => {
+    addBackend({
+      name: "OpenHands Cloud",
+      host: normalizeHost(effectiveHost),
+      apiKey,
+      kind: "cloud",
+    });
+    onClose();
+  };
+
+  return (
+    <div className="flex flex-1 min-w-0 flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-1">
+        <OpenHandsLogoWhite width={56} height={56} aria-hidden />
+
+        <h4
+          className="text-lg font-medium text-white"
+          data-testid="add-backend-cloud-title"
+        >
+          {t(I18nKey.BACKEND$CLOUD_TITLE)}
+        </h4>
+      </div>
+
+      <p className="text-center text-sm leading-relaxed text-[var(--oh-muted)]">
+        {t(I18nKey.BACKEND$CLOUD_DESCRIPTION)}
+      </p>
+
+      <DeviceFlowAuth
+        host={effectiveHost}
+        onSuccess={handleLoginSuccess}
+        testIdRoot="add-backend"
+      />
+
+      <div className="w-full">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          aria-expanded={advancedOpen}
+          data-testid="add-backend-advanced-toggle"
+          className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-[var(--oh-muted)] transition-colors hover:text-content-2"
+        >
+          <span>{t(I18nKey.BACKEND$ADVANCED)}</span>
+          <ChevronDownSmallIcon
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted transition-transform",
+              advancedOpen && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </button>
+        <div
+          className={cn(
+            "pt-2",
+            !advancedOpen && "pointer-events-none invisible",
+          )}
+          aria-hidden={!advancedOpen}
+        >
+          <SettingsInput
+            testId="add-backend-cloud-host"
+            name="add-backend-cloud-host"
+            type="text"
+            label={t(I18nKey.BACKEND$HOST_LABEL)}
+            value={customHost}
+            onChange={setCustomHost}
+            placeholder={DEFAULT_OPENHANDS_CLOUD_HOST}
+            className="w-full"
+          />
+          <p className="mt-1 text-xs text-[var(--oh-muted)]">
+            {t(I18nKey.BACKEND$LOGIN_CLOUD_HINT)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal wrappers ──────────────────────────────────────────────────
+
+/**
+ * Modal wrapper. In **add** mode it renders a two-column layout
+ * (manual connection | OR | Cloud login). In **edit** mode it wraps
+ * the standard `BackendForm`.
  */
 export function BackendFormModal({
   mode,
@@ -406,32 +592,76 @@ export function BackendFormModal({
 }: BackendFormModalProps) {
   const { t } = useTranslation("openhands");
 
-  const titleKey =
-    mode === "edit" ? I18nKey.BACKEND$EDIT_TITLE : I18nKey.BACKEND$ADD_TITLE;
-  const testIdRoot = mode === "edit" ? "edit-backend" : "add-backend";
+  if (mode === "add") {
+    return (
+      <ModalBackdrop
+        onClose={onClose}
+        closeOnEscape={false}
+        aria-label={t(I18nKey.BACKEND$ADD_TITLE)}
+      >
+        <div
+          data-testid="add-backend-modal"
+          className={cn(
+            "relative rounded-xl border border-[var(--oh-border)] bg-base-secondary",
+            modalWidthClassName("xl"),
+            MODAL_MAX_WIDTH_VIEWPORT,
+          )}
+        >
+          <ModalCloseButton onClose={onClose} testId="add-backend-close" />
+          {/* Header */}
+          <div className="px-6 pt-6 pb-2 pr-12">
+            <h2 className="text-lg font-semibold">
+              {t(I18nKey.BACKEND$ADD_TITLE)}
+            </h2>
+          </div>
 
+          {/* Two-column body */}
+          <div className="flex gap-6 px-6 pb-6 pt-2">
+            {/* Left: manual connection */}
+            <div className="flex-1 min-w-0">
+              <ManualConnectionColumn onClose={onClose} />
+            </div>
+
+            {/* Vertical OR divider */}
+            <div className="flex shrink-0 flex-col items-center">
+              <div className="flex-1 w-px bg-[var(--oh-border)]" />
+              <span className="py-3 text-xs uppercase text-[var(--oh-muted)]">
+                {t(I18nKey.BACKEND$LOGIN_OR)}
+              </span>
+              <div className="flex-1 w-px bg-[var(--oh-border)]" />
+            </div>
+
+            {/* Right: cloud login */}
+            <div className="flex-1 min-w-0">
+              <CloudLoginColumn onClose={onClose} />
+            </div>
+          </div>
+        </div>
+      </ModalBackdrop>
+    );
+  }
+
+  // Edit mode — single-column form (unchanged)
+  const testIdRoot = "edit-backend";
   return (
     <ModalBackdrop
       onClose={onClose}
       closeOnEscape={false}
-      aria-label={t(titleKey)}
+      aria-label={t(I18nKey.BACKEND$EDIT_TITLE)}
     >
       <div
         data-testid={`${testIdRoot}-modal`}
-        className="bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-tertiary"
-        style={{ width: "480px" }}
+        className={cn(
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)]",
+          modalWidthClassName("md"),
+        )}
       >
-        <div className="flex flex-col gap-1">
-          <h3 className="text-xl font-bold">{t(titleKey)}</h3>
-          {mode === "add" ? (
-            <p className="text-xs text-gray-400">
-              {t(I18nKey.BACKEND$ADD_SUBTITLE)}
-            </p>
-          ) : null}
-        </div>
-
+        <ModalCloseButton onClose={onClose} testId={`${testIdRoot}-close`} />
+        <h2 className="pr-6 text-lg font-semibold">
+          {t(I18nKey.BACKEND$EDIT_TITLE)}
+        </h2>
         <BackendForm
-          mode={mode}
+          mode="edit"
           backend={backend}
           onSubmitted={onClose}
           testIdRoot={testIdRoot}

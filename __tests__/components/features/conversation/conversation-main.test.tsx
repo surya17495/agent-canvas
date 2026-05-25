@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
@@ -11,6 +12,7 @@ const chatInterfaceUnmount = vi.fn();
 
 vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: () => mockIsMobile,
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH: 767,
 }));
 
 vi.mock("#/hooks/use-resizable-panels", () => ({
@@ -71,6 +73,14 @@ vi.mock(
 
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 
+function renderConversationMain() {
+  return render(
+    <SidebarMobileNavProvider>
+      <ConversationMain />
+    </SidebarMobileNavProvider>,
+  );
+}
+
 describe("ConversationMain - Layout Transition Stability", () => {
   beforeEach(() => {
     mockIsMobile = false;
@@ -81,24 +91,28 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
   it("renders ChatInterface at desktop width", () => {
     mockIsMobile = false;
-    render(<ConversationMain />);
+    renderConversationMain();
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
   it("renders ChatInterface at mobile width", () => {
     mockIsMobile = true;
-    render(<ConversationMain />);
+    renderConversationMain();
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
   it("does not unmount ChatInterface when crossing from desktop to mobile", () => {
     mockIsMobile = false;
-    const { rerender } = render(<ConversationMain />);
+    const { rerender } = renderConversationMain();
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
 
     // Cross the breakpoint to mobile
     mockIsMobile = true;
-    rerender(<ConversationMain />);
+    rerender(
+      <SidebarMobileNavProvider>
+        <ConversationMain />
+      </SidebarMobileNavProvider>,
+    );
 
     // ChatInterface must NOT have been unmounted and remounted
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
@@ -107,43 +121,34 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
   it("does not unmount ChatInterface when crossing from mobile to desktop", () => {
     mockIsMobile = true;
-    const { rerender } = render(<ConversationMain />);
+    const { rerender } = renderConversationMain();
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
 
     // Cross the breakpoint to desktop
     mockIsMobile = false;
-    rerender(<ConversationMain />);
+    rerender(
+      <SidebarMobileNavProvider>
+        <ConversationMain />
+      </SidebarMobileNavProvider>,
+    );
 
     // ChatInterface must NOT have been unmounted and remounted
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
-  it("does not give the right pane inner content min-w-max so its content stays visible at narrow widths", () => {
-    // Repro for the bug where dragging the divider very far to the right made
-    // the right pane appear blank: `min-w-max` made the inner div wider than
-    // its `overflow-hidden` wrapper, pushing right-aligned tab content out of
-    // view.
-    mockIsMobile = false;
-    mockIsRightPanelShown = true;
-    mockLeftWidth = 80;
-
-    render(<ConversationMain />);
-
-    const tabsHeader = screen.getByTestId("tabs-pane-header");
-    const tabsInnerWrapper = tabsHeader.parentElement!;
-
-    expect(tabsInnerWrapper.className).not.toMatch(/(^|\s)min-w-max(\s|$)/);
-  });
-
   it("survives rapid back-and-forth resize without unmounting ChatInterface", () => {
     mockIsMobile = false;
-    const { rerender } = render(<ConversationMain />);
+    const { rerender } = renderConversationMain();
 
     // Simulate rapid resize back and forth across the breakpoint
     for (const mobile of [true, false, true, false, true]) {
       mockIsMobile = mobile;
-      rerender(<ConversationMain />);
+      rerender(
+        <SidebarMobileNavProvider>
+          <ConversationMain />
+        </SidebarMobileNavProvider>,
+      );
     }
 
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();

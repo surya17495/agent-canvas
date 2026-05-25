@@ -2,10 +2,12 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { AxiosError } from "axios";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { I18nKey } from "#/i18n/declaration";
-import { MarketplaceEntry } from "#/constants/mcp-marketplace";
+import type { McpCatalogEntry as MarketplaceEntry } from "@openhands/extensions/mcps";
+import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { MCPServerConfig } from "#/types/mcp-server";
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
@@ -14,6 +16,7 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 interface InstallServerModalProps {
   entry: MarketplaceEntry;
   onClose: () => void;
+  onSuccess?: (entry: MarketplaceEntry) => void;
 }
 
 interface FieldState {
@@ -45,6 +48,7 @@ function makeInitialState(entry: MarketplaceEntry): FieldState {
 export function InstallServerModal({
   entry,
   onClose,
+  onSuccess,
 }: InstallServerModalProps) {
   const { t } = useTranslation("openhands");
   const { mutate: addMcpServer, isPending: isAdding } = useAddMcpServer();
@@ -68,6 +72,7 @@ export function InstallServerModal({
     addMcpServer(payload, {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
+        onSuccess?.(entry);
         onClose();
       },
       onError: (err: unknown) => {
@@ -264,27 +269,23 @@ export function InstallServerModal({
         data-testid="mcp-install-modal"
         data-marketplace-id={entry.id}
         onSubmit={handleSubmit}
-        className="bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-tertiary w-[520px] max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
+        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] w-[520px] max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
       >
-        <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg"
-            style={{
-              backgroundColor: entry.iconBg,
-              color: entry.iconColor ?? "#FFFFFF",
-            }}
-          >
-            {entry.logo}
-          </span>
+        <ModalCloseButton
+          onClose={onClose}
+          testId="mcp-install-modal-close"
+          disabled={isPending}
+        />
+        <div className="flex items-start gap-3 pr-6">
+          <McpLogoBadge entry={entry} />
           <div className="flex flex-col flex-1">
             <h2 className="text-lg font-semibold">{entry.name}</h2>
-            <p className="text-xs text-tertiary-alt">{entry.description}</p>
+            <p className="text-xs text-tertiary-light">{entry.description}</p>
           </div>
         </div>
 
         {entry.installHint && (
-          <p className="text-xs text-content-2">{entry.installHint}</p>
+          <p className="text-xs text-tertiary-light">{entry.installHint}</p>
         )}
 
         {entry.docsUrl && (
@@ -292,7 +293,7 @@ export function InstallServerModal({
             href={entry.docsUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-primary hover:underline self-start"
+            className="text-xs text-[var(--oh-muted)] hover:text-white hover:underline self-start transition-colors"
           >
             {t(I18nKey.MCP$VIEW_DOCS)}
           </a>
@@ -309,26 +310,24 @@ export function InstallServerModal({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          <BrandButton
-            type="submit"
-            variant="primary"
-            isDisabled={isPending}
-            testId="mcp-install-submit"
-            className="w-full text-center"
-          >
-            {isPending
-              ? t(I18nKey.SETTINGS$SAVING)
-              : t(I18nKey.MCP$INSTALL_BUTTON)}
-          </BrandButton>
+        <div className="flex justify-end gap-2 mt-2">
           <BrandButton
             type="button"
             variant="secondary"
             onClick={onClose}
             testId="mcp-install-cancel"
-            className="w-full text-center"
           >
             {t(I18nKey.BUTTON$CANCEL)}
+          </BrandButton>
+          <BrandButton
+            type="submit"
+            variant="primary"
+            isDisabled={isPending}
+            testId="mcp-install-submit"
+          >
+            {isPending
+              ? t(I18nKey.SETTINGS$SAVING)
+              : t(I18nKey.MCP$INSTALL_BUTTON)}
           </BrandButton>
         </div>
       </form>

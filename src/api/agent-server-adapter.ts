@@ -1,7 +1,8 @@
-import { SkillsClient } from "@openhands/typescript-client/clients";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { Settings, SettingsValue } from "#/types/settings";
+import { ACP_PROVIDERS } from "#/constants/acp-providers";
+import { getAgentServerClientOptions } from "./agent-server-client-options";
 import { isAgentServerToolAvailable } from "./agent-server-compatibility";
 import {
   getAgentServerWorkingDir,
@@ -10,12 +11,12 @@ import {
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
 import { buildAuthHeaders } from "./backend-registry/auth";
 import {
-  GetSkillsResponse,
+  GetHooksResponse,
   PluginSpec,
   AppConversation,
   AppConversationPage,
+  SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
-import { getAgentServerClientOptions } from "./agent-server-client-options";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 
@@ -25,6 +26,8 @@ export interface DirectConversationInfo {
   created_at: string;
   updated_at: string;
   execution_status?: string | null;
+  /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
+  sandbox_status?: string | null;
   metrics?: {
     accumulated_cost?: number | null;
     max_budget_per_task?: number | null;
@@ -38,6 +41,16 @@ export interface DirectConversationInfo {
     } | null;
   } | null;
   agent?: {
+    /**
+     * Pydantic discriminator from the SDK union. ``"ACPAgent"`` means the
+     * conversation runs an ACP CLI subprocess (model selection lives on
+     * the subprocess via ``acp_model``, not on ``agent.llm``); ``"Agent"``
+     * means the conversation drives an LLM directly through litellm.
+     * Used by ``toAppConversation`` to null out ``llm_model`` for ACP
+     * conversations so the chat UI doesn't expose LLM-switch affordances
+     * that would silently no-op against the running ACP subprocess.
+     */
+    kind?: string | null;
     llm?: {
       model?: string | null;
     } | null;
@@ -45,10 +58,31 @@ export interface DirectConversationInfo {
   workspace?: {
     working_dir?: string | null;
   } | null;
+  /**
+   * Arbitrary string-keyed conversation tags surfaced by the agent-server
+   * (see ``ConversationInfo.tags``). Canvas only consumes one key today —
+   * ``ACP_SERVER_TAG_KEY`` ("acpserver") — but the field is typed as a
+   * generic record so future readers don't need another wire-shape change.
+   * Keys are constrained to ``^[a-z0-9]+$`` by the agent-server validator;
+   * values are opaque strings.
+   */
+  tags?: Record<string, string> | null;
 }
 
-const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
+// Module qualname for the Canvas-UI tool. The agent-server imports this via
+// tool_module_qualnames; the host directory is exposed via OH_EXTRA_PYTHON_PATH
+// (see scripts/dev-safe.mjs).
+const CANVAS_UI_TOOL_NAME = "canvas_ui";
+const CANVAS_UI_TOOL_MODULE = "canvas_ui_tool";
+
+const DEFAULT_TOOL_NAMES = [
+  "terminal",
+  "file_editor",
+  "task_tracker",
+  CANVAS_UI_TOOL_NAME,
+];
 const BROWSER_TOOL_SET_NAME = "browser_tool_set";
+const TASK_TOOL_SET_NAME = "task_tool_set";
 const DEFAULT_BUILT_IN_TOOL_NAMES = ["FinishTool", "ThinkTool"];
 const SWITCH_LLM_TOOL_NAME = "SwitchLLMTool";
 
@@ -56,11 +90,152 @@ function browserToolsEnabled() {
   return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
 }
 
+/**
+ * Shape of `VITE_RUNTIME_SERVICES_INFO` (set by the dev launchers in
+ * scripts/dev-*.mjs). All URLs are written from the agent's point of view,
+ * not the browser's. The block is rendered into the agent's system prompt
+ * via `AgentContext.system_message_suffix` so the agent knows what's
+ * reachable from inside its sandbox without having to probe.
+ */
+interface RuntimeServicesInfo {
+  mode?: string;
+  agent_host_alias?: string;
+  services?: {
+    agent_server?: { description?: string; url_from_agent?: string };
+    ingress?: { description?: string; url_from_agent?: string };
+    frontend?: {
+      kind?: "vite" | "static";
+      description?: string;
+      url_from_agent?: string;
+    };
+    // `vite` is the legacy key name for the frontend entry, accepted for
+    // one release while older dev-stack launchers may still emit it.
+    vite?: { description?: string; url_from_agent?: string };
+    automation?: {
+      description?: string;
+      url_from_agent?: string;
+      api_prefix?: string;
+      docs_url?: string;
+      openapi_url?: string;
+      auth_env_var?: string;
+    };
+  };
+}
+
+function parseRuntimeServicesInfo(): RuntimeServicesInfo | null {
+  const raw = import.meta.env.VITE_RUNTIME_SERVICES_INFO?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as RuntimeServicesInfo;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    // Malformed JSON: ignore and fall back to no runtime info, rather than
+    // tearing down conversation creation over a misconfigured dev env var.
+    return null;
+  }
+}
+
+/**
+ * Render the runtime services info into a markdown block suitable for
+ * appending to the system prompt via `AgentContext.system_message_suffix`.
+ *
+ * Returns `undefined` when no runtime info is configured, so callers can
+ * safely omit the field on production builds (where the launcher doesn't
+ * set `VITE_RUNTIME_SERVICES_INFO`).
+ */
+export function buildRuntimeServicesSystemSuffix(): string | undefined {
+  const info = parseRuntimeServicesInfo();
+  if (!info?.services) return undefined;
+
+  const lines: string[] = [];
+  lines.push("<RUNTIME_SERVICES>");
+  if (info.mode) {
+    lines.push(
+      `You are running inside an agent-canvas dev stack started in '${info.mode}' mode.`,
+    );
+  } else {
+    lines.push("You are running inside an agent-canvas dev stack.");
+  }
+  lines.push(
+    "The following services are reachable from your sandbox. URLs are written",
+    "from your point of view (i.e., as you should curl/fetch them).",
+    "",
+  );
+
+  const { agent_server, ingress, automation } = info.services;
+  // Accept `frontend` (current key) or `vite` (legacy key) for the
+  // frontend service entry. The legacy fallback can be removed once all
+  // launchers in this repo emit `frontend`.
+  const frontend = info.services.frontend ?? info.services.vite;
+
+  if (agent_server?.url_from_agent) {
+    lines.push(
+      `* Agent Server (you): ${agent_server.url_from_agent}`,
+      `    ${agent_server.description ?? "The agent-server hosting your tool calls."}`,
+    );
+  }
+  if (ingress?.url_from_agent) {
+    lines.push(
+      `* Ingress: ${ingress.url_from_agent}`,
+      `    ${ingress.description ?? "Unified entry point for browser-facing traffic."}`,
+    );
+  }
+  if (frontend?.url_from_agent) {
+    lines.push(
+      `* Frontend: ${frontend.url_from_agent}`,
+      `    ${frontend.description ?? "Frontend dev server."}`,
+    );
+  }
+  if (automation?.url_from_agent) {
+    lines.push(
+      `* Automation backend: ${automation.url_from_agent}`,
+      `    ${automation.description ?? "OpenHands Automations service."}`,
+    );
+    if (automation.docs_url) {
+      lines.push(`    Docs:    ${automation.docs_url}`);
+    }
+    if (automation.openapi_url) {
+      lines.push(`    OpenAPI: ${automation.openapi_url}`);
+    }
+    if (automation.auth_env_var) {
+      lines.push(
+        `    Auth:    header 'X-API-Key: $${automation.auth_env_var}'`,
+      );
+    }
+  } else {
+    lines.push(
+      "* Automation backend: not running in this dev mode (skip /api/automation calls).",
+    );
+  }
+
+  // Anchor the "don't guess" warning to the actual agent-server URL for
+  // this stack instead of a hardcoded port. The agent-server listens on
+  // different ports across dev modes, and baking the wrong port into the
+  // system prompt is exactly the kind of confusion this block is meant to
+  // prevent.
+  const agentServerUrl = agent_server?.url_from_agent;
+  lines.push(
+    "",
+    "Trust this block over guessing: do not assume any other URLs are running.",
+  );
+  if (agentServerUrl) {
+    lines.push(
+      `In particular, ${agentServerUrl} inside your sandbox is the Agent Server`,
+      "you are running inside of — NOT the automation backend.",
+    );
+  }
+  lines.push("</RUNTIME_SERVICES>");
+
+  return lines.join("\n");
+}
+
 export function toConversationUrl(conversationId: string): string {
   // Local-format conversation URL — points at whichever local agent-server
   // is actually serving the conversation (the bundled one when the active
   // selection is cloud).
-  return `${getEffectiveLocalBackend().host}/api/conversations/${conversationId}`;
+  const { host } = getAgentServerClientOptions();
+  return `${host}/api/conversations/${conversationId}`;
 }
 
 // TODO(i18n): extract "Conversation" once we add CONVERSATION$DEFAULT_TITLE
@@ -74,18 +249,37 @@ export function toAppConversation(
   info: DirectConversationInfo,
 ): AppConversation {
   const metadata = getStoredConversationMetadata(info.id);
+  // ACPAgent conversations carry a dummy ``llm`` on the SDK side (the real
+  // model lives on the ACP subprocess via ``acp_model``), so surfacing
+  // ``agent.llm.model`` as the conversation's "active LLM" would lie to
+  // every consumer downstream — most visibly the chat header's
+  // SwitchProfileButton, which would otherwise let the user switch
+  // profiles on a Claude-Code conversation while the running subprocess
+  // keeps its own model. Null at the boundary so no consumer has to
+  // re-derive the rule. Mirrors OpenHands PR #14401.
+  const isAcp = info.agent?.kind === "ACPAgent";
+  // Only surface ``acp_server`` for ACP conversations even if the wire
+  // payload accidentally carries an ``acpserver`` tag on an OpenHands
+  // conversation — the chip is identity info for the ACP CLI subprocess,
+  // and showing it on a non-ACP conversation would be a lie.
+  const acpServer = isAcp ? (info.tags?.[ACP_SERVER_TAG_KEY] ?? null) : null;
   return {
     id: info.id,
     created_by_user_id: null,
     selected_repository: metadata?.selected_repository ?? null,
     selected_branch: metadata?.selected_branch ?? null,
     git_provider: metadata?.git_provider ?? null,
+    selected_workspace: metadata?.selected_workspace ?? null,
     title: info.title?.trim()
       ? info.title
       : getDefaultConversationTitle(info.id),
     trigger: null,
     pr_number: [],
-    llm_model: info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model,
+    agent_kind: isAcp ? "acp" : "openhands",
+    acp_server: acpServer,
+    llm_model: isAcp
+      ? null
+      : (info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model),
     metrics: info.metrics
       ? {
           accumulated_cost: info.metrics.accumulated_cost ?? null,
@@ -113,8 +307,9 @@ export function toAppConversation(
     execution_status:
       (info.execution_status as AppConversation["execution_status"]) ??
       ExecutionStatus.IDLE,
+    sandbox_status: (info.sandbox_status as SandboxStatus | null) ?? null,
     conversation_url: toConversationUrl(info.id),
-    session_api_key: getEffectiveLocalBackend().apiKey || null,
+    session_api_key: getAgentServerClientOptions().apiKey ?? null,
     sandbox_id: null,
     workspace: {
       working_dir: info.workspace?.working_dir ?? getAgentServerWorkingDir(),
@@ -136,11 +331,44 @@ export function toConversationPage(data: {
 
 type SettingsRecord = Record<string, unknown>;
 
-const AGENT_SETTINGS_METADATA_KEYS = new Set([
-  "schema_version",
-  "agent_kind",
-  "agent",
-]);
+interface AgentToolSpec {
+  name: string;
+  params: SettingsRecord;
+}
+
+type AgentSettingsPayload = SettingsRecord & {
+  llm?: SettingsRecord;
+  agent_context: SettingsRecord;
+  tools?: AgentToolSpec[];
+  include_default_tools?: string[];
+};
+
+interface LocalWorkspacePayload {
+  kind: "LocalWorkspace";
+  working_dir: string;
+}
+
+interface InitialMessagePayload {
+  role: "user";
+  content: Array<{ type: "text"; text: string }>;
+  run: true;
+}
+
+type ConversationSettingsPayload = SettingsRecord & {
+  workspace: LocalWorkspacePayload;
+  initial_message?: InitialMessagePayload;
+};
+
+const ACP_SETTINGS_KEYS = [
+  "acp_command",
+  "acp_args",
+  "acp_env",
+  "acp_model",
+  "acp_session_mode",
+  "acp_prompt_timeout",
+] as const;
+
+export const ACP_SERVER_TAG_KEY = "acpserver";
 
 const CONVERSATION_SETTINGS_METADATA_KEYS = new Set([
   "schema_version",
@@ -195,15 +423,61 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
   }
 }
 
-function getAgentTools() {
-  const tools = DEFAULT_TOOL_NAMES.map((name) => ({ name, params: {} }));
-  if (
-    browserToolsEnabled() &&
-    isAgentServerToolAvailable(BROWSER_TOOL_SET_NAME)
-  ) {
-    tools.push({ name: BROWSER_TOOL_SET_NAME, params: {} });
+function isToolRecord(
+  value: unknown,
+): value is { name: string; params?: unknown } {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { name?: unknown }).name === "string"
+  );
+}
+
+function shouldIncludeTool(name: string, agentSettings: SettingsRecord) {
+  if (name === BROWSER_TOOL_SET_NAME) {
+    return browserToolsEnabled() && isAgentServerToolAvailable(name);
   }
-  return tools;
+
+  if (name === TASK_TOOL_SET_NAME) {
+    return (
+      agentSettings.enable_sub_agents === true &&
+      isAgentServerToolAvailable(name)
+    );
+  }
+
+  return true;
+}
+
+function getAgentTools(agentSettings: SettingsRecord): AgentToolSpec[] {
+  const tools = new Map<string, AgentToolSpec>();
+
+  for (const name of DEFAULT_TOOL_NAMES) {
+    tools.set(name, { name, params: {} });
+  }
+
+  for (const name of [BROWSER_TOOL_SET_NAME, TASK_TOOL_SET_NAME]) {
+    if (shouldIncludeTool(name, agentSettings)) {
+      tools.set(name, { name, params: {} });
+    }
+  }
+
+  const configuredTools = agentSettings.tools;
+  if (
+    Array.isArray(configuredTools) &&
+    configuredTools.every((tool) => isToolRecord(tool))
+  ) {
+    for (const tool of configuredTools) {
+      if (shouldIncludeTool(tool.name, agentSettings)) {
+        tools.set(tool.name, {
+          name: tool.name,
+          params: toRecord(tool.params),
+        });
+      }
+    }
+  }
+
+  return Array.from(tools.values());
 }
 
 function getBuiltInToolNames(agentSettings: SettingsRecord) {
@@ -226,7 +500,7 @@ function getBuiltInToolNames(agentSettings: SettingsRecord) {
 function buildInitialMessage(
   query?: string,
   conversationInstructions?: string,
-) {
+): InitialMessagePayload | null {
   const parts = [query?.trim(), conversationInstructions?.trim()].filter(
     Boolean,
   );
@@ -237,37 +511,74 @@ function buildInitialMessage(
   return {
     role: "user",
     content: [{ type: "text", text: parts.join("\n\n") }],
+    run: true,
   };
 }
 
-function buildCondenserConfig(
-  llm: SettingsRecord,
-  rawCondenser: unknown,
-): SettingsRecord | undefined {
-  const condenser = toRecord(rawCondenser);
-
-  if (condenser.enabled !== true) {
-    return undefined;
-  }
-
-  const condenserLlm = {
-    ...llm,
-    usage_id: "condenser",
+function buildAgentContext(agentSettings: SettingsRecord): SettingsRecord {
+  const runtimeServicesSuffix = buildRuntimeServicesSystemSuffix();
+  return {
+    ...toRecord(agentSettings.agent_context),
+    load_public_skills: shouldLoadPublicSkills(),
+    load_user_skills: true,
+    ...(runtimeServicesSuffix
+      ? { system_message_suffix: runtimeServicesSuffix }
+      : {}),
   };
-
-  const config: SettingsRecord = {
-    kind: "LLMSummarizingCondenser",
-    llm: condenserLlm,
-  };
-
-  if (typeof condenser.max_size === "number") {
-    config.max_size = condenser.max_size;
-  }
-
-  return config;
 }
 
-function buildConfiguredAgentSettings(settings: Settings): SettingsRecord {
+function isAcpAgent(settings: Settings): boolean {
+  const agentSettings = toRecord(settings.agent_settings);
+  return agentSettings.agent_kind === "acp";
+}
+
+function getAcpServerTag(settings: Settings): string | undefined {
+  const agentSettings = toRecord(settings.agent_settings);
+  const value = agentSettings.acp_server;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
+  const cmd = agentSettings.acp_command;
+  const isEmpty = Array.isArray(cmd) && cmd.length === 0;
+  const noCommand = cmd === undefined;
+  if (!isEmpty && !noCommand) {
+    return cmd;
+  }
+
+  const serverKey =
+    typeof agentSettings.acp_server === "string"
+      ? agentSettings.acp_server
+      : undefined;
+  const provider = ACP_PROVIDERS.find(({ key }) => key === serverKey);
+  return provider ? [...provider.default_command] : cmd;
+}
+
+function buildConfiguredAcpAgentSettings(
+  settings: Settings,
+): AgentSettingsPayload {
+  const agentSettings = toRecord(settings.agent_settings);
+  const payload: AgentSettingsPayload = {
+    agent_kind: "acp",
+    agent_context: buildAgentContext(agentSettings),
+  };
+
+  for (const key of ACP_SETTINGS_KEYS) {
+    const value =
+      key === "acp_command"
+        ? resolveAcpCommand(agentSettings)
+        : agentSettings[key];
+    if (value !== undefined && value !== null) {
+      payload[key] = value;
+    }
+  }
+
+  return payload;
+}
+
+function buildConfiguredOpenHandsAgentSettings(
+  settings: Settings,
+): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = toRecord(agentSettings.llm);
 
@@ -288,40 +599,33 @@ function buildConfiguredAgentSettings(settings: Settings): SettingsRecord {
     delete llm.base_url;
   }
 
-  const condenser = buildCondenserConfig(llm, agentSettings.condenser);
-  const includeDefaultTools = getBuiltInToolNames(agentSettings);
-
-  AGENT_SETTINGS_METADATA_KEYS.forEach((key) => delete agentSettings[key]);
-  delete agentSettings.enable_switch_llm_tool;
-
   const mcpConfig = toRecord(agentSettings.mcp_config);
   if (Object.keys(mcpConfig).length === 0 || !("mcpServers" in mcpConfig)) {
     delete agentSettings.mcp_config;
   }
 
-  if (condenser) {
-    agentSettings.condenser = condenser;
-  } else {
-    delete agentSettings.condenser;
+  const includeDefaultTools = getBuiltInToolNames(agentSettings);
+  delete agentSettings.enable_switch_llm_tool;
+  delete agentSettings.acp_server;
+  for (const key of ACP_SETTINGS_KEYS) {
+    delete agentSettings[key];
   }
 
   return {
     ...agentSettings,
     llm,
-    tools: getAgentTools(),
+    agent_context: buildAgentContext(agentSettings),
+    tools: getAgentTools(agentSettings),
     include_default_tools: includeDefaultTools,
   };
 }
 
-function createAgentFromSettings(agentSettings: SettingsRecord) {
-  return {
-    kind: "Agent",
-    ...agentSettings,
-    agent_context: {
-      load_public_skills: shouldLoadPublicSkills(),
-      load_user_skills: true,
-    },
-  };
+function buildConfiguredAgentSettings(
+  settings: Settings,
+): AgentSettingsPayload {
+  return isAcpAgent(settings)
+    ? buildConfiguredAcpAgentSettings(settings)
+    : buildConfiguredOpenHandsAgentSettings(settings);
 }
 
 function buildConfiguredConversationSettings(options: {
@@ -330,7 +634,7 @@ function buildConfiguredConversationSettings(options: {
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   workingDir?: string;
-}): SettingsRecord {
+}): ConversationSettingsPayload {
   const { settings, query, conversationInstructions, plugins, workingDir } =
     options;
   const conversationSettings = toRecord(settings.conversation_settings);
@@ -340,7 +644,7 @@ function buildConfiguredConversationSettings(options: {
     (key) => delete conversationSettings[key],
   );
 
-  return {
+  const payload: ConversationSettingsPayload = {
     ...conversationSettings,
     workspace: {
       kind: "LocalWorkspace",
@@ -357,19 +661,33 @@ function buildConfiguredConversationSettings(options: {
         }
       : {}),
   };
+
+  return payload;
 }
 
-/**
- * A secret looked up from the agent-server at runtime.
- * This allows secrets configured in Settings > Secrets to be available
- * to conversations without exposing values to the frontend.
- */
 interface LookupSecret {
   kind: "LookupSecret";
   url: string;
   headers?: Record<string, string>;
   description?: string;
 }
+
+type StartConversationPayload = Record<string, unknown> & {
+  agent_settings: AgentSettingsPayload;
+  workspace: LocalWorkspacePayload;
+  confirmation_policy: SettingsRecord;
+  security_analyzer?: SettingsRecord;
+  initial_message?: InitialMessagePayload;
+  max_iterations: number;
+  stuck_detection: true;
+  autotitle: true;
+  worktree: true;
+  secrets_encrypted?: true;
+  conversation_id?: string;
+  secrets?: Record<string, LookupSecret>;
+  tags?: Record<string, string>;
+  tool_module_qualnames?: Record<string, string>;
+};
 
 export interface StartConversationOptions {
   settings: Settings;
@@ -378,41 +696,25 @@ export interface StartConversationOptions {
   plugins?: PluginSpec[];
   conversationId?: string;
   workingDir?: string;
-  /**
-   * Pre-fetched agent settings with encrypted secrets.
-   * If provided, these will be used instead of settings.agent_settings.
-   */
   encryptedAgentSettings?: Record<string, SettingsValue>;
-  /**
-   * Pre-fetched conversation settings with encrypted secrets.
-   * If provided, these will be used instead of settings.conversation_settings.
-   */
   encryptedConversationSettings?: Record<string, SettingsValue>;
-  /**
-   * Whether the secrets in agent/conversation settings are encrypted.
-   * If true, the server will decrypt them before use.
-   */
   secretsEncrypted?: boolean;
-  /**
-   * Custom secrets to include in the conversation.
-   * Each entry maps a secret name to metadata (description).
-   * The actual values are fetched at runtime via LookupSecret.
-   */
   customSecrets?: Array<{ name: string; description?: string }>;
 }
 
 export function buildStartConversationRequest(
   options: StartConversationOptions,
-) {
-  // Use encrypted settings if provided, otherwise fall back to regular settings
+): StartConversationPayload {
   const sourceAgentSettings = options.encryptedAgentSettings
     ? { ...options.settings, agent_settings: options.encryptedAgentSettings }
     : options.settings;
 
+  const acpMode = isAcpAgent(sourceAgentSettings);
   const agentSettings = buildConfiguredAgentSettings(sourceAgentSettings);
-  const agent = createAgentFromSettings(agentSettings);
+  const acpServerTag = acpMode
+    ? getAcpServerTag(sourceAgentSettings)
+    : undefined;
 
-  // For conversation settings, merge encrypted settings if provided
   const sourceConversationOptions = options.encryptedConversationSettings
     ? {
         ...options,
@@ -427,8 +729,8 @@ export function buildStartConversationRequest(
     sourceConversationOptions,
   );
 
-  const payload: Record<string, unknown> = {
-    agent,
+  const payload: StartConversationPayload = {
+    agent_settings: agentSettings,
     workspace: conversationSettings.workspace,
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
@@ -441,7 +743,10 @@ export function buildStartConversationRequest(
     worktree: true,
   };
 
-  // Add secrets_encrypted flag if secrets are encrypted
+  if (acpServerTag) {
+    payload.tags = { [ACP_SERVER_TAG_KEY]: acpServerTag };
+  }
+
   if (options.secretsEncrypted) {
     payload.secrets_encrypted = true;
   }
@@ -468,18 +773,17 @@ export function buildStartConversationRequest(
     payload.hook_config = conversationSettings.hook_config;
   }
 
-  if (conversationSettings.tool_module_qualnames) {
-    payload.tool_module_qualnames = conversationSettings.tool_module_qualnames;
-  }
+  payload.tool_module_qualnames = {
+    [CANVAS_UI_TOOL_NAME]: CANVAS_UI_TOOL_MODULE,
+    ...((conversationSettings.tool_module_qualnames as
+      | Record<string, string>
+      | undefined) ?? {}),
+  };
 
   if (conversationSettings.agent_definitions) {
     payload.agent_definitions = conversationSettings.agent_definitions;
   }
 
-  // Add custom secrets as LookupSecret entries.
-  // The agent-server fetches the value at runtime from
-  // `/api/settings/secrets/{name}` on its own host, so the URL stays
-  // host-relative; auth headers come from the active local backend.
   if (options.customSecrets && options.customSecrets.length > 0) {
     const backend = getEffectiveLocalBackend();
     const headers = buildAuthHeaders(backend);
@@ -500,19 +804,18 @@ export function buildStartConversationRequest(
     }
 
     payload.secrets = secrets;
+
+    if (acpMode) {
+      payload.agent_settings.agent_context = {
+        ...payload.agent_settings.agent_context,
+        secrets,
+      };
+    }
   }
 
   return payload;
 }
 
-/**
- * Build a start conversation request using encrypted settings from the server.
- * This is the recommended way to start conversations from the frontend,
- * as it ensures secrets are never exposed in plaintext to the browser.
- *
- * Also fetches custom secrets from the settings store and adds them as
- * LookupSecret entries so they're available to the conversation at runtime.
- */
 export async function buildStartConversationRequestWithEncryptedSettings(options: {
   settings: Settings;
   query?: string;
@@ -521,10 +824,8 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationId?: string;
   workingDir?: string;
 }): Promise<Record<string, unknown>> {
-  // Import SecretsService dynamically to avoid circular dependencies
   const { SecretsService } = await import("./secrets-service");
 
-  // Fetch settings with encrypted secrets and custom secrets list in parallel
   const [settingsResult, customSecrets] = await Promise.all([
     SettingsService.getSettingsForConversation(),
     SecretsService.getSecrets(),
@@ -542,21 +843,6 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   });
 }
 
-export async function loadSkillsForConversation(
-  conversation: AppConversation | null | undefined,
-): Promise<GetSkillsResponse> {
-  const projectDir =
-    conversation?.workspace?.working_dir ?? getAgentServerWorkingDir();
-
-  const response = await new SkillsClient(
-    getAgentServerClientOptions(),
-  ).getSkills({
-    load_public: shouldLoadPublicSkills(),
-    load_user: true,
-    load_project: true,
-    load_org: false,
-    project_dir: projectDir,
-  });
-
-  return { skills: response.skills ?? [] };
+export function emptyHooksResponse(): GetHooksResponse {
+  return { hooks: [] };
 }

@@ -1,8 +1,20 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useNavigation } from "#/context/navigation-context";
-import { useConversationId } from "#/hooks/use-conversation-id";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import {
+  consumePendingTaskDraft,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { flushPendingTaskAttachments } from "#/utils/flush-pending-task-attachments";
+import {
+  clearPendingTaskMessageLink,
+  consumeScheduledPendingTaskMessageReassign,
+  linkPendingTaskMessages,
+  schedulePendingTaskMessageReassign,
+} from "#/utils/pending-task-message-link";
 
 /**
  * Hook that polls V1 conversation start tasks and navigates when ready.
@@ -20,12 +32,14 @@ import { useConversationId } from "#/hooks/use-conversation-id";
  * Note: This hook does NOT fetch conversation data. It only handles task polling and navigation.
  */
 export const useTaskPolling = () => {
-  const { conversationId } = useConversationId();
+  // Optional: the chat input shell renders on the home page too; polling
+  // simply no-ops when there's no conversation id yet.
+  const { conversationId } = useOptionalConversationId();
   const { navigate } = useNavigation();
 
   // Check if this is a task ID (format: "task-{uuid}")
-  const isTask = conversationId.startsWith("task-");
-  const taskId = isTask ? conversationId.replace("task-", "") : null;
+  const isTask = !!conversationId && conversationId.startsWith("task-");
+  const taskId = isTask ? conversationId!.replace("task-", "") : null;
 
   // Poll the task if this is a task ID
   const taskQuery = useQuery({
@@ -50,19 +64,74 @@ export const useTaskPolling = () => {
     retry: false,
   });
 
+  const handledReadyTaskIdRef = useRef<string | null>(null);
+
+  // Reassign optimistic pending messages before paint on the real conversation
+  // route. Doing this in the ready handler before navigate leaves a frame where
+  // the URL still points at `task-{uuid}` but pending is keyed to the real id.
+  useLayoutEffect(() => {
+    if (!conversationId) {
+      return;
+    }
+
+    const pendingReassign =
+      consumeScheduledPendingTaskMessageReassign(conversationId);
+    if (!pendingReassign) {
+      return;
+    }
+
+    useOptimisticUserMessageStore
+      .getState()
+      .reassignPendingMessages(
+        pendingReassign.fromConversationId,
+        pendingReassign.toConversationId,
+      );
+    clearPendingTaskMessageLink(pendingReassign.toConversationId);
+  }, [conversationId]);
+
   // Navigate to conversation ID when task is ready
   useEffect(() => {
     const task = taskQuery.data;
-    if (task?.status === "READY" && task.app_conversation_id) {
-      // Replace the URL with the actual conversation ID
-      navigate(`/conversations/${task.app_conversation_id}`, { replace: true });
+    if (
+      !taskId ||
+      task?.status !== "READY" ||
+      !task.app_conversation_id ||
+      handledReadyTaskIdRef.current === taskId
+    ) {
+      return;
     }
-  }, [taskQuery.data, navigate]);
+
+    handledReadyTaskIdRef.current = taskId;
+
+    void (async () => {
+      await flushPendingTaskAttachments(taskId, task.app_conversation_id!);
+
+      const taskConversationId = `task-${taskId}`;
+      linkPendingTaskMessages(task.app_conversation_id!, taskConversationId);
+      schedulePendingTaskMessageReassign(
+        taskConversationId,
+        task.app_conversation_id!,
+      );
+
+      const pendingDraft = consumePendingTaskDraft(taskId);
+      if (pendingDraft) {
+        setConversationState(task.app_conversation_id!, {
+          draftMessage: pendingDraft,
+        });
+      }
+
+      navigate(`/conversations/${task.app_conversation_id}`, { replace: true });
+    })();
+  }, [taskQuery.data, navigate, taskId]);
+
+  useEffect(() => {
+    handledReadyTaskIdRef.current = null;
+  }, [taskId]);
 
   return {
     isTask,
     taskId,
-    conversationId: isTask ? null : conversationId,
+    conversationId: isTask ? null : (conversationId ?? null),
     task: taskQuery.data,
     taskStatus: taskQuery.data?.status,
     taskDetail: taskQuery.data?.detail,

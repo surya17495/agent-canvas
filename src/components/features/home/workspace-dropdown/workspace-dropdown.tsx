@@ -3,9 +3,11 @@ import { useCombobox } from "downshift";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "#/utils/utils";
+import { formControlFieldClassName } from "#/utils/form-control-classes";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
 import RepoIcon from "#/icons/repo.svg?react";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 
 import { ClearButton } from "../shared/clear-button";
 import { ToggleButton } from "../shared/toggle-button";
@@ -19,6 +21,7 @@ export interface WorkspaceDropdownProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  disabledTooltip?: string | null;
   /**
    * Whether to surface the "Manage Workspaces" entry in the sticky footer.
    * Defaults to `workspaces.length > 0` when omitted; pass an explicit value
@@ -37,6 +40,7 @@ export function WorkspaceDropdown({
   placeholder,
   className,
   disabled = false,
+  disabledTooltip,
   showManage,
   onChange,
   onAddClick,
@@ -128,7 +132,7 @@ export function WorkspaceDropdown({
         <button
           type="button"
           data-testid="add-workspaces-button"
-          className="flex items-center w-full px-2 py-2 text-sm text-white hover:bg-[#5C5D62] rounded-md transition-colors duration-150 font-normal"
+          className="flex items-center w-full px-2 py-2 text-sm text-white hover:bg-[var(--oh-interactive-hover)] rounded-md transition-colors duration-150 font-normal"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -146,7 +150,7 @@ export function WorkspaceDropdown({
           <button
             type="button"
             data-testid="manage-workspaces-button"
-            className="flex items-center w-full px-2 py-2 text-sm text-white hover:bg-[#5C5D62] rounded-md transition-colors duration-150 font-normal"
+            className="flex items-center w-full px-2 py-2 text-sm text-white hover:bg-[var(--oh-interactive-hover)] rounded-md transition-colors duration-150 font-normal"
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -166,9 +170,9 @@ export function WorkspaceDropdown({
     [onAddClick, onManageClick, t, closeMenu, workspaces.length, showManage],
   );
 
-  return (
+  const control = (
     <div className={cn("relative", className)}>
-      <div className="relative">
+      <div className="group relative text-[var(--oh-muted)] hover:text-white">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           <RepoIcon width={16} height={16} />
         </div>
@@ -177,11 +181,10 @@ export function WorkspaceDropdown({
             disabled,
             placeholder: placeholder ?? t(I18nKey.HOME$WORKSPACE_PLACEHOLDER),
             className: cn(
-              "w-full px-3 py-2 border border-[#727987] rounded-sm shadow-none h-[42px] min-h-[42px] max-h-[42px]",
-              "bg-[#454545] text-[#A3A3A3] placeholder:text-[#A3A3A3]",
-              "focus:outline-none focus:ring-0 focus:border-[#727987]",
-              "disabled:bg-[#363636] disabled:cursor-not-allowed disabled:opacity-60",
-              "pl-7 pr-16 text-sm font-normal leading-5",
+              formControlFieldClassName,
+              "text-inherit shadow-none pl-7 pr-16 text-sm font-normal leading-5",
+              "placeholder:text-[var(--oh-muted)]",
+              "disabled:cursor-not-allowed disabled:opacity-60",
             ),
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
               setInputValue(e.target.value);
@@ -196,7 +199,6 @@ export function WorkspaceDropdown({
             isOpen={isOpen}
             disabled={disabled}
             getToggleButtonProps={getToggleButtonProps}
-            iconClassName="w-10 h-10"
           />
         </div>
       </div>
@@ -217,5 +219,15 @@ export function WorkspaceDropdown({
         itemKey={(item) => item.id}
       />
     </div>
+  );
+
+  if (!disabledTooltip) {
+    return control;
+  }
+
+  return (
+    <StyledTooltip content={disabledTooltip} placement="top">
+      <span className="block">{control}</span>
+    </StyledTooltip>
   );
 }

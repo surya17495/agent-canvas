@@ -104,9 +104,23 @@ export type SkillInfo = {
   allowed_tools?: string[] | null;
   is_agentskills_format?: boolean;
   disable_model_invocation?: boolean;
+  content?: string;
 };
 
 export type SettingsScope = "personal";
+
+/**
+ * Agent kind stored on ``Settings.agent_settings.agent_kind``.
+ *
+ * - ``"openhands"`` (default): the conversation runs through OpenHands' built-in
+ *   LLM-driven Agent. The other agent_settings fields (``llm``, ``condenser``,
+ *   ``mcp_config``, ``tools``) apply.
+ * - ``"acp"``: the conversation is driven by an external ACP subprocess
+ *   (Claude Code / Codex / Gemini CLI / Custom). The LLM / condenser / MCP
+ *   settings are inert; ``acp_command`` / ``acp_args`` / ``acp_model`` /
+ *   ``acp_env`` / ``acp_server`` apply instead.
+ */
+export type AgentKind = "openhands" | "acp";
 
 export type Settings = {
   llm_model: string;

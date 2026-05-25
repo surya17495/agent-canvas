@@ -1,4 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
+import { seedLocalStorage } from "./support/seed-local-storage";
 
 /**
  * Visual snapshot tests for the Skills page (/skills).
@@ -78,9 +79,7 @@ async function dismissConsentModal(page: Page) {
  * Wire up the base routes every skills test needs.
  */
 async function setupMocks(page: Page) {
-  await page.addInitScript(() => {
-    window.localStorage.setItem("openhands-onboarded", "true");
-  });
+  await seedLocalStorage(page);
 }
 
 /**
@@ -215,6 +214,8 @@ test.describe("Skills Page Visual Snapshots", () => {
       timeout: 5_000,
     });
 
+    const filter = page.getByTestId("skills-type-filter");
+    await filter.getByTestId("dropdown-trigger").click();
     await page.getByTestId("skills-type-filter-agentskills").click();
     await page.waitForTimeout(300);
 

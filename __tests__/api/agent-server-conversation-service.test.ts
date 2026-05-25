@@ -1,6 +1,7 @@
 import {
   ConversationClient,
   FileClient,
+  ProfilesClient,
   SettingsClient,
 } from "@openhands/typescript-client/clients";
 import axios from "axios";
@@ -23,8 +24,11 @@ const {
   mockFileClient,
   mockSettingsClient,
   mockSwitchProfile,
+  mockSwitchLLM,
   mockGetSettings,
   mockGetSettingsForConversation,
+  mockGetProfile,
+  mockActivateProfile,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -33,8 +37,11 @@ const {
   mockFileClient: vi.fn(),
   mockSettingsClient: vi.fn(),
   mockSwitchProfile: vi.fn(),
+  mockSwitchLLM: vi.fn(),
   mockGetSettings: vi.fn(),
   mockGetSettingsForConversation: vi.fn(),
+  mockGetProfile: vi.fn(),
+  mockActivateProfile: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", async () => {
@@ -48,6 +55,12 @@ vi.mock("@openhands/typescript-client/clients", async () => {
     }),
     FileClient: vi.fn(function FileClientMock() {
       return mockFileClient();
+    }),
+    ProfilesClient: vi.fn(function ProfilesClientMock() {
+      return {
+        getProfile: mockGetProfile,
+        activateProfile: mockActivateProfile,
+      };
     }),
     SettingsClient: vi.fn(function SettingsClientMock() {
       return mockSettingsClient();
@@ -84,8 +97,12 @@ describe("AgentServerConversationService", () => {
     mockHttpGet.mockReset();
     mockHttpPost.mockReset();
     mockHttpDelete.mockReset();
+    mockGetProfile.mockReset();
+    mockActivateProfile.mockReset();
+    mockSwitchLLM.mockReset();
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
+    vi.mocked(ProfilesClient).mockClear();
     vi.mocked(SettingsClient).mockClear();
 
     mockConversationClient.mockReturnValue({
@@ -110,6 +127,7 @@ describe("AgentServerConversationService", () => {
       sendEvent: vi.fn(),
       updateConversation: vi.fn(),
       switchProfile: mockSwitchProfile,
+      switchLLM: mockSwitchLLM,
     });
     mockFileClient.mockReturnValue({
       downloadTextFile: async (path: string) => {
@@ -369,6 +387,69 @@ describe("AgentServerConversationService", () => {
       );
     });
 
+    it("preserves sandbox_status from batchGetAppConversations response", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-paused",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            sandbox_status: "PAUSED",
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-paused",
+        ]);
+
+      expect(conversation?.sandbox_status).toBe("PAUSED");
+    });
+
+    it("preserves sandbox_status from searchConversations response", async () => {
+      const searchSpy = vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "conv-paused-search",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            sandbox_status: "PAUSED",
+          },
+        ],
+        next_page_id: null,
+      });
+      // Only searchConversations is called by the service method under test,
+      // so we don't need to reproduce the full client mock object.
+      mockConversationClient.mockReturnValue({
+        searchConversations: searchSpy,
+      });
+
+      const result =
+        await AgentServerConversationService.searchConversations(10);
+
+      expect(result.items[0]?.sandbox_status).toBe("PAUSED");
+    });
+
+    it("passes sandbox_status null through when field is absent", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-no-status",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-no-status",
+        ]);
+
+      expect(conversation?.sandbox_status).toBeNull();
+    });
+
     it("sanitizes malformed optional conversation fields", async () => {
       mockHttpGet.mockResolvedValue({
         data: [
@@ -411,6 +492,66 @@ describe("AgentServerConversationService", () => {
         "/workspace/project/agent-canvas",
       );
     });
+
+    it("extracts the acpserver tag from the wire payload for the sidebar chip", async () => {
+      // The agent-server stamps ``tags.acpserver`` at conversation create
+      // time (see ``buildStartConversationRequest``); the read path
+      // must surface it so the conversation card can render the human
+      // ACP-agent badge ("Claude Code" / "Codex" / "Gemini CLI").
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-acp",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+            tags: { acpserver: "claude-code" },
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-acp",
+        ]);
+
+      expect(conversation?.agent_kind).toBe("acp");
+      expect(conversation?.acp_server).toBe("claude-code");
+    });
+
+    it("drops non-string tag values while preserving the well-typed ones", async () => {
+      // The wire field is server-validated to ``Record[str, str]`` but a
+      // misbehaving server (or a future schema drift) shouldn't crash the
+      // parser — we drop non-string values and keep the rest so the
+      // sidebar still gets whatever good keys made it through.
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-malformed-tags",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+            tags: {
+              acpserver: "codex",
+              numeric: 42,
+              nested: { inner: "x" },
+              listy: ["a", "b"],
+              nully: null,
+            },
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-malformed-tags",
+        ]);
+
+      // ``acp_server`` is the surfaced field on AppConversation; tags is
+      // only on DirectConversationInfo. Asserting both via this read
+      // path keeps the test honest end-to-end.
+      expect(conversation?.acp_server).toBe("codex");
+    });
   });
 
   describe("switchProfile", () => {
@@ -424,20 +565,45 @@ describe("AgentServerConversationService", () => {
       __resetActiveStoreForTests();
     });
 
-    it("switches profiles through the local agent-server client", async () => {
-      mockSwitchProfile.mockResolvedValue(undefined);
+    it("swaps the conversation's LLM via /switch_llm when a conversationId is provided", async () => {
+      const llmConfig = {
+        model: "litellm_proxy/claude-haiku",
+        api_key: "encrypted-key",
+        base_url: "encrypted-url",
+      };
+      mockGetProfile.mockResolvedValue({
+        name: "haiku",
+        config: llmConfig,
+        api_key_set: true,
+      });
+      mockSwitchLLM.mockResolvedValue(undefined);
 
       await AgentServerConversationService.switchProfile("conv-1", "haiku");
 
-      expect(mockSwitchProfile).toHaveBeenCalledWith("conv-1", "haiku");
-      expect(ConversationClient).toHaveBeenCalledWith({
-        host: "http://localhost:54928",
-        apiKey: "test-api-key",
-        workingDir: "/workspace/project/agent-canvas",
+      expect(mockGetProfile).toHaveBeenCalledWith("haiku", {
+        exposeSecrets: "encrypted",
       });
+      expect(mockSwitchLLM).toHaveBeenCalledWith("conv-1", llmConfig);
+      // Per-convo path: global default is left untouched.
+      expect(mockActivateProfile).not.toHaveBeenCalled();
     });
 
-    it("rejects profile switching on cloud backends before creating a client", async () => {
+    it("activates the profile globally when called without a conversationId", async () => {
+      mockActivateProfile.mockResolvedValue({
+        name: "haiku",
+        message: "ok",
+        llm_applied: true,
+      });
+
+      await AgentServerConversationService.switchProfile(null, "haiku");
+
+      expect(mockActivateProfile).toHaveBeenCalledWith("haiku");
+      // Home-page path: don't touch any conversation's LLM.
+      expect(mockGetProfile).not.toHaveBeenCalled();
+      expect(mockSwitchLLM).not.toHaveBeenCalled();
+    });
+
+    it("rejects profile switching on cloud backends before any network call", async () => {
       const cloudBackend: Backend = {
         id: "prod",
         name: "Production",
@@ -453,7 +619,9 @@ describe("AgentServerConversationService", () => {
       ).rejects.toThrow(
         "LLM profile switching is only supported for local agent-server backends.",
       );
-      expect(mockSwitchProfile).not.toHaveBeenCalled();
+      expect(mockActivateProfile).not.toHaveBeenCalled();
+      expect(mockGetProfile).not.toHaveBeenCalled();
+      expect(mockSwitchLLM).not.toHaveBeenCalled();
     });
   });
 
@@ -519,7 +687,7 @@ describe("AgentServerConversationService", () => {
       });
     });
 
-    it("routes readConversationFile to the SaaS file endpoint with the file_path query param", async () => {
+    it("routes readConversationFile to the cloud file endpoint with the file_path query param", async () => {
       // Arrange
       vi.mocked(axios.post).mockResolvedValue({ data: "# PLAN content" });
 

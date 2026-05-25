@@ -5,6 +5,7 @@ import { useAutomationDetail } from "#/hooks/query/use-automation-detail";
 import {
   useToggleAutomation,
   useDeleteAutomation,
+  useDispatchAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -21,11 +22,13 @@ import { NotFoundState } from "#/components/features/automations/detail/not-foun
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
+import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
 
 export default function AutomationDetail() {
   const { automationId } = useParams();
   const { navigate } = useNavigation();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const {
     data: healthData,
@@ -58,6 +61,7 @@ export default function AutomationDetail() {
 
   const toggleMutation = useToggleAutomation();
   const deleteMutation = useDeleteAutomation();
+  const dispatchMutation = useDispatchAutomation();
 
   const is404 =
     isError && isAxiosError(error) && error.response?.status === 404;
@@ -65,7 +69,7 @@ export default function AutomationDetail() {
   // Show loading state while checking health
   if (isHealthLoading) {
     return (
-      <div className="min-h-full bg-surface">
+      <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
           <DetailSkeleton />
         </div>
@@ -76,7 +80,7 @@ export default function AutomationDetail() {
   // Show backend not configured state if health check failed
   if (!isBackendHealthy) {
     return (
-      <div className="min-h-full bg-surface">
+      <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
           <BackendNotConfigured onRetry={refetchHealth} />
         </div>
@@ -86,7 +90,7 @@ export default function AutomationDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-full bg-surface">
+      <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
           <DetailSkeleton />
         </div>
@@ -96,7 +100,7 @@ export default function AutomationDetail() {
 
   if (is404) {
     return (
-      <div className="min-h-full bg-surface">
+      <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
           <NotFoundState />
         </div>
@@ -106,7 +110,7 @@ export default function AutomationDetail() {
 
   if (isError || !automation) {
     return (
-      <div className="min-h-full bg-surface">
+      <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
           <ErrorState onRetry={() => refetch()} />
         </div>
@@ -129,15 +133,26 @@ export default function AutomationDetail() {
     });
   };
 
+  const handleRunNow = () => {
+    dispatchMutation.mutate(automation.id);
+  };
+
+  // Edit is a local-backend-only feature in MVP — cloud automations
+  // are managed elsewhere and we don't yet surface them here.
+  const canEdit = active.backend.kind === "local";
+
   return (
-    <div className="min-h-full bg-surface">
+    <div className="min-h-full">
       <div className="p-6 max-w-4xl mx-auto">
         <div className="flex flex-col gap-4">
           <BackLink />
           <DetailHeader
             automation={automation}
             onToggle={handleToggle}
+            onEdit={canEdit ? () => setShowEditModal(true) : undefined}
             onDelete={() => setShowDeleteModal(true)}
+            onRunNow={handleRunNow}
+            isRunningNow={dispatchMutation.isPending}
           />
           {automation.prompt && <PromptSection prompt={automation.prompt} />}
           <ConfigurationSection automation={automation} />
@@ -155,6 +170,13 @@ export default function AutomationDetail() {
             onConfirm={handleDelete}
             onCancel={() => setShowDeleteModal(false)}
           />
+          {canEdit && (
+            <EditAutomationModal
+              automation={automation}
+              isOpen={showEditModal}
+              onClose={() => setShowEditModal(false)}
+            />
+          )}
         </div>
       </div>
     </div>

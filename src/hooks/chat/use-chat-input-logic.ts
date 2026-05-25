@@ -5,7 +5,7 @@ import {
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useConversationId } from "#/hooks/use-conversation-id";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useDraftPersistence } from "./use-draft-persistence";
 
 /**
@@ -13,29 +13,46 @@ import { useDraftPersistence } from "./use-draft-persistence";
  */
 export const useChatInputLogic = () => {
   const chatInputRef = useRef<HTMLDivElement | null>(null);
-  const { conversationId } = useConversationId();
+  // Optional because the chat input also renders on the home page, where no
+  // conversation route is mounted yet. Draft persistence is conversation-
+  // scoped, so it no-ops when this is undefined.
+  const { conversationId } = useOptionalConversationId();
 
   const {
-    messageToSend,
+    messageToSend: rawMessageToSend,
     hasRightPanelToggled,
     setMessageToSend,
     setIsRightPanelShown,
   } = useConversationStore();
 
-  // Draft persistence - saves to localStorage, restores on mount
+  // Draft persistence - saves to localStorage/sessionStorage, restores on mount
   const { saveDraft, clearDraft } = useDraftPersistence(
     conversationId,
     chatInputRef,
   );
 
-  // Save current input value when drawer state changes
+  // On the home page (no conversationId) the right-panel / messageToSend
+  // mechanism is not relevant.  More importantly, a stale messageToSend value
+  // in the Zustand store causes useAutoResize to overwrite the just-restored
+  // sessionStorage draft with an empty string (see useAutoResize value effect).
+  // Returning null here keeps value=undefined in useAutoResize so it never
+  // touches the element content on the home page.
+  const messageToSend = conversationId ? rawMessageToSend : null;
+
+  // Save current input value when drawer state changes (conversation view only)
   useEffect(() => {
+    if (!conversationId) return;
     if (chatInputRef.current) {
       const currentText = getTextContent(chatInputRef.current);
       setMessageToSend(currentText);
       setIsRightPanelShown(hasRightPanelToggled);
     }
-  }, [hasRightPanelToggled, setMessageToSend, setIsRightPanelShown]);
+  }, [
+    conversationId,
+    hasRightPanelToggled,
+    setMessageToSend,
+    setIsRightPanelShown,
+  ]);
 
   // Helper function to check if contentEditable is truly empty
   const checkIsContentEmpty = useCallback(

@@ -15,11 +15,9 @@ export function PromptSection({ prompt }: PromptSectionProps) {
       icon={<TerminalIcon className="size-4" />}
       title={t(I18nKey.AUTOMATIONS$DETAIL$PROMPT)}
     >
-      <div className="rounded-xl bg-muted-overlay">
-        <p className="whitespace-pre-wrap text-sm leading-6 text-content">
-          {prompt}
-        </p>
-      </div>
+      <p className="whitespace-pre-wrap text-sm leading-6 text-content">
+        {prompt}
+      </p>
     </SectionCard>
   );
 }

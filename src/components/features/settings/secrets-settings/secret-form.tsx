@@ -6,6 +6,10 @@ import { useCreateSecret } from "#/hooks/mutation/use-create-secret";
 import { useUpdateSecret } from "#/hooks/mutation/use-update-secret";
 import { SettingsInput } from "../settings-input";
 import { cn } from "#/utils/utils";
+import {
+  formControlMultilineFieldClassName,
+  formControlSettingsFieldClassName,
+} from "#/utils/form-control-classes";
 import { BrandButton } from "../brand-button";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { OptionalTag } from "../optional-tag";
@@ -120,7 +124,7 @@ export function SecretForm({
         name="secret-name"
         type="text"
         label="Name"
-        className="w-full max-w-[350px]"
+        className="w-full min-w-0"
         required
         defaultValue={mode === "edit" && selectedSecret ? selectedSecret : ""}
         placeholder={t("SECRETS$API_KEY_EXAMPLE")}
@@ -130,7 +134,7 @@ export function SecretForm({
       {error && <p className="text-red-500 text-sm">{error}</p>}
 
       {mode === "add" && (
-        <label className="flex flex-col gap-2.5 w-full max-w-[680px]">
+        <label className="flex flex-col gap-2.5 w-full min-w-0">
           <span className="text-sm">{t(I18nKey.FORM$VALUE)}</span>
           <textarea
             data-testid="value-input"
@@ -138,15 +142,16 @@ export function SecretForm({
             required
             className={cn(
               "resize-none",
-              "bg-tertiary border border-[#717888] rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
-              "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+              formControlMultilineFieldClassName,
+              "placeholder:italic",
+              "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)] disabled:cursor-not-allowed",
             )}
             rows={8}
           />
         </label>
       )}
 
-      <label className="flex flex-col gap-2.5 w-full max-w-[680px]">
+      <label className="flex flex-col gap-2.5 w-full min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm">{t(I18nKey.FORM$DESCRIPTION)}</span>
           <OptionalTag />
@@ -156,9 +161,8 @@ export function SecretForm({
           name="secret-description"
           defaultValue={secretDescription}
           className={cn(
-            "resize-none",
-            "bg-tertiary border border-[#717888] rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
-            "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+            formControlSettingsFieldClassName,
+            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
           )}
         />
       </label>

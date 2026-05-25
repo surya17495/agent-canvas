@@ -60,6 +60,19 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      {
+        name: "suppress-chrome-devtools-well-known",
+        apply: "serve",
+        configureServer(server) {
+          server.middlewares.use(
+            "/.well-known/appspecific/com.chrome.devtools.json",
+            (_req, res) => {
+              res.statusCode = 204;
+              res.end();
+            },
+          );
+        },
+      },
       !process.env.VITEST && !isLibraryBuild && reactRouter(),
       svgr(),
       tailwindcss(),
@@ -189,6 +202,12 @@ export default defineConfig(({ mode }) => {
         "framer-motion",
         "rehype-raw",
         "rehype-sanitize",
+        // ``shell-quote`` is a CJS module used by ``src/utils/acp-command.ts``
+        // for the Settings → Agent textarea. With ``noDiscovery: true`` above,
+        // omitting it from this list means Vite serves the raw CJS file to
+        // the browser and dev crashes with ``ReferenceError: exports is not
+        // defined`` on the first import of agent-settings.tsx.
+        "shell-quote",
         "unist-util-visit",
         "uuid",
         "zustand",
@@ -287,6 +306,21 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: !INSECURE_SKIP_VERIFY,
         },
+        "/docs": {
+          target: API_URL,
+          changeOrigin: true,
+          secure: !INSECURE_SKIP_VERIFY,
+        },
+        "/redoc": {
+          target: API_URL,
+          changeOrigin: true,
+          secure: !INSECURE_SKIP_VERIFY,
+        },
+        "/openapi.json": {
+          target: API_URL,
+          changeOrigin: true,
+          secure: !INSECURE_SKIP_VERIFY,
+        },
         "/sockets": {
           target: WS_URL,
           ws: true,
@@ -306,6 +340,19 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       setupFiles: ["vitest.setup.ts"],
       exclude: [...configDefaults.exclude, "tests"],
+      // The full suite runs many DOM-heavy tests in parallel, which can
+      // push individual `userEvent`-driven tests past Vitest's 5000ms
+      // default on busy machines (the skills-settings and i18n
+      // namespace tests are the typical victims). Bumping the global
+      // timeout keeps these tests deterministic without changing any
+      // production behavior.
+      testTimeout: 30000,
+      hookTimeout: 30000,
+      server: {
+        deps: {
+          inline: ["@openhands/typescript-client"],
+        },
+      },
       coverage: {
         reporter: ["text", "json", "html", "lcov", "text-summary"],
         reportsDirectory: "coverage",

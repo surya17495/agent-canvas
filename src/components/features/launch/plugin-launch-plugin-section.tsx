@@ -35,14 +35,14 @@ export function PluginLaunchPluginSection({
   }
 
   return (
-    <div className="rounded-lg border border-tertiary bg-tertiary">
+    <div className="rounded-lg border border-[var(--oh-border)] bg-tertiary">
       <button
         type="button"
         onClick={onToggle}
         className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-base-tertiary rounded-t-lg cursor-pointer"
         data-testid={`plugin-section-${originalIndex}`}
       >
-        <Typography.Text className="text-base font-medium">
+        <Typography.Text className="text-base font-normal">
           {getPluginDisplayName(plugin)}
         </Typography.Text>
         {isExpanded ? (
@@ -53,7 +53,7 @@ export function PluginLaunchPluginSection({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-tertiary px-4 pb-3">
+        <div className="border-t border-[var(--oh-border-subtle)] px-4 pb-3">
           {plugin.ref && (
             <div className="mb-2 text-sm text-white">
               {t(I18nKey.LAUNCH$PLUGIN_REF)} {plugin.ref}

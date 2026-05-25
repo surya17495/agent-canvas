@@ -10,7 +10,9 @@ export interface Automation {
   trigger: AutomationTrigger;
   enabled: boolean;
   repository?: string;
-  model?: string;
+  /** LLM/model profile name used for automation runs. */
+  model?: string | null;
+
   created_at: string;
   updated_at: string;
   prompt: string | null;
@@ -37,6 +39,14 @@ export interface AutomationRun {
   id: string;
   status: AutomationRunStatus;
   conversation_id: string | null;
+  /**
+   * ID of the bash command that ran the automation inside the agent-server
+   * sandbox. Used to fetch run logs from
+   * `/api/bash/bash_events/{bash_command_id}` and the matching
+   * `BashOutput` events. Null when the run failed before a command was
+   * dispatched (e.g. sandbox provisioning errors).
+   */
+  bash_command_id: string | null;
   error_detail: string | null;
   started_at: string;
   completed_at: string | null;

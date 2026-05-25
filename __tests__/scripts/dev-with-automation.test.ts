@@ -1,13 +1,21 @@
+// @vitest-environment node
+// These tests load `scripts/dev-with-automation.mjs` and `scripts/dev-safe.mjs`,
+// which construct file:// URLs relative to their own location via
+// `new URL("../tools", import.meta.url)`. jsdom's URL constructor ignores
+// file:// base URLs (it falls back to its document base, e.g.
+// http://localhost:3000/), breaking that resolution; the Node environment
+// has the standard WHATWG URL behavior that honors the file:// base.
 import net from "node:net";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, afterEach } from "vitest";
 import {
+  buildAgentServerAutomationEnv,
   buildAutomationCommand,
   buildConfig,
   DEFAULT_AUTOMATION_REPO,
@@ -81,9 +89,7 @@ describe("buildAutomationCommand", () => {
     });
 
     expect(cmd.command).toBe("uvx");
-    expect(cmd.args).toContain(
-      `git+${DEFAULT_AUTOMATION_REPO}@abc123def456`,
-    );
+    expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@abc123def456`);
     expect(cmd.source).toBe("git (abc123def456)");
   });
 
@@ -93,9 +99,7 @@ describe("buildAutomationCommand", () => {
     });
 
     expect(cmd.command).toBe("uvx");
-    expect(cmd.args).toContain(
-      `${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`,
-    );
+    expect(cmd.args).toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("PyPI (1.0.0)");
   });
 
@@ -106,11 +110,19 @@ describe("buildAutomationCommand", () => {
     });
 
     expect(cmd.command).toBe("uvx");
-    expect(cmd.args).toContain(
-      `git+${DEFAULT_AUTOMATION_REPO}@main`,
-    );
+    expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@main`);
     expect(cmd.args).not.toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("git (main)");
+  });
+});
+
+describe("buildAgentServerAutomationEnv", () => {
+  it("exposes the local automation API key under the name agents use in curl commands", () => {
+    expect(
+      buildAgentServerAutomationEnv({ localApiKey: "automation-local-key" }),
+    ).toEqual({
+      OPENHANDS_AUTOMATION_API_KEY: "automation-local-key",
+    });
   });
 });
 
@@ -131,9 +143,8 @@ describe("buildConfig", () => {
   });
 
   /**
-   * Build an env that points the persisted session-api-key file at a
-   * fresh temp dir, so tests don't write to the user's real
-   * ~/.openhands/agent-canvas/session-api-key.txt.
+   * Build an env that points persisted dev API key files at a fresh temp dir,
+   * so tests don't write to the user's real ~/.openhands/agent-canvas files.
    */
   function envWithIsolatedKeyPath(
     extra: Record<string, string> = {},
@@ -142,6 +153,7 @@ describe("buildConfig", () => {
     keyDirs.push(dir);
     return {
       OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      OH_AUTOMATION_API_KEY_PATH: path.join(dir, "automation-api-key.txt"),
       ...extra,
     };
   }
@@ -268,16 +280,32 @@ describe("buildConfig", () => {
   });
 
   it("passes verbose flag through", async () => {
-    const config = await buildConfig({ verbose: true }, envWithIsolatedKeyPath());
+    const config = await buildConfig(
+      { verbose: true },
+      envWithIsolatedKeyPath(),
+    );
 
     expect(config.verbose).toBe(true);
   });
 
-  it("auto-generates random local API key by default", async () => {
+  it("uses a persisted generated local automation API key by default", async () => {
     const config = await buildConfig({}, envWithIsolatedKeyPath());
 
     // Default is a 64-char hex string (256-bit random key)
     expect(config.localApiKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("reuses the persisted local automation API key across restarts", async () => {
+    const env = envWithIsolatedKeyPath();
+    const first = await buildConfig({}, env);
+
+    // Simulate a fresh process invocation (the file on disk should be
+    // what makes the key stable).
+    resetPersistedSessionApiKeyCache();
+
+    const second = await buildConfig({}, env);
+
+    expect(second.localApiKey).toBe(first.localApiKey);
   });
 
   it("respects custom AUTOMATION_LOCAL_API_KEY from env", async () => {
@@ -297,7 +325,7 @@ describe("buildConfig", () => {
     expect(config.sessionApiKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("reuses the persisted session API key across calls (parity for dev:docker and dev:dangerously-dockerless restarts)", async () => {
+  it("reuses the persisted session API key across calls (stable across restarts)", async () => {
     const env = envWithIsolatedKeyPath();
     const first = await buildConfig({}, env);
 
@@ -317,41 +345,56 @@ describe("buildConfig", () => {
   });
 
   it("reads sessionApiKey from VITE_SESSION_API_KEY as fallback", async () => {
-    const config = await buildConfig({}, { VITE_SESSION_API_KEY: "vite-session-key" });
+    const config = await buildConfig(
+      {},
+      { VITE_SESSION_API_KEY: "vite-session-key" },
+    );
 
     expect(config.sessionApiKey).toBe("vite-session-key");
   });
 
   it("SESSION_API_KEY takes precedence over VITE_SESSION_API_KEY", async () => {
-    const config = await buildConfig({}, {
-      SESSION_API_KEY: "session-key",
-      VITE_SESSION_API_KEY: "vite-key",
-    });
+    const config = await buildConfig(
+      {},
+      {
+        SESSION_API_KEY: "session-key",
+        VITE_SESSION_API_KEY: "vite-key",
+      },
+    );
 
     expect(config.sessionApiKey).toBe("session-key");
   });
 
   it("reads sessionApiKey from OH_SESSION_API_KEYS_0 (agent-server V1 env)", async () => {
-    const config = await buildConfig({}, { OH_SESSION_API_KEYS_0: "v1-session-key" });
+    const config = await buildConfig(
+      {},
+      { OH_SESSION_API_KEYS_0: "v1-session-key" },
+    );
 
     expect(config.sessionApiKey).toBe("v1-session-key");
   });
 
   it("SESSION_API_KEY takes precedence over OH_SESSION_API_KEYS_0", async () => {
-    const config = await buildConfig({}, {
-      SESSION_API_KEY: "v0-key",
-      OH_SESSION_API_KEYS_0: "v1-key",
-    });
+    const config = await buildConfig(
+      {},
+      {
+        SESSION_API_KEY: "v0-key",
+        OH_SESSION_API_KEYS_0: "v1-key",
+      },
+    );
 
     expect(config.sessionApiKey).toBe("v0-key");
   });
 
   it("SESSION_API_KEY takes precedence over all other session key env vars", async () => {
-    const config = await buildConfig({}, {
-      SESSION_API_KEY: "v0-key",
-      OH_SESSION_API_KEYS_0: "v1-key",
-      VITE_SESSION_API_KEY: "vite-key",
-    });
+    const config = await buildConfig(
+      {},
+      {
+        SESSION_API_KEY: "v0-key",
+        OH_SESSION_API_KEYS_0: "v1-key",
+        VITE_SESSION_API_KEY: "vite-key",
+      },
+    );
 
     expect(config.sessionApiKey).toBe("v0-key");
   });
@@ -369,7 +412,7 @@ describe("default constants", () => {
   });
 
   it("has expected default automation version", () => {
-    expect(DEFAULT_AUTOMATION_VERSION).toBe("1.0.0a2");
+    expect(DEFAULT_AUTOMATION_VERSION).toBe("1.0.0a3");
   });
 
   it("has expected default backend port", () => {
@@ -407,23 +450,98 @@ describe("dev-with-automation CLI", () => {
     expect(output).toContain("--static");
     expect(output).toContain("--dynamic");
     expect(output).toContain("OH_AUTOMATION_GIT_REF");
+    expect(output).toContain("OH_AGENT_SERVER_LOCAL_PATH");
     expect(output).toContain("AUTOMATION_LOCAL_API_KEY");
     expect(output).toContain("OPENHANDS_AUTOMATION_API_KEY");
     expect(output).toContain("SECRETS:");
   });
 
-  it("exits promptly when uvx is missing", async () => {
-    const child = spawn(
-      process.execPath,
-      ["scripts/dev-with-automation.mjs"],
-      {
-        cwd: repoRoot,
-        env: {
-          PATH: "",
-        },
-        stdio: ["ignore", "pipe", "pipe"],
+  it("fails fast with a clear error when OH_AGENT_SERVER_LOCAL_PATH is invalid", async () => {
+    // Arrange: an absolute but empty directory — `validateLocalAgentServerPath`
+    // requires the four workspace subdirs (openhands-agent-server, openhands-sdk,
+    // openhands-tools, openhands-workspace) and must reject this.
+    const emptyDir = mkdtempSync(path.join(tmpdir(), "bad-sdk-"));
+
+    // Stub a no-op `uvx` on PATH so `checkPrerequisites` passes even on CI
+    // runners that don't have uv installed. The prerequisite check must
+    // succeed so the LOCAL_PATH validation guard (the actual subject of this
+    // test, which runs immediately after) is exercised.
+    const isWindows = process.platform === "win32";
+    const stubBinDir = mkdtempSync(path.join(tmpdir(), "stub-bin-"));
+    if (isWindows) {
+      writeFileSync(path.join(stubBinDir, "uvx.cmd"), "@exit /b 0\r\n");
+    } else {
+      writeFileSync(path.join(stubBinDir, "uvx"), "#!/bin/sh\nexit 0\n", {
+        mode: 0o755,
+      });
+    }
+
+    // Act: spawn `dev-with-automation.mjs` with that path set. Stubbed `uvx`
+    // is prepended to PATH so the prerequisite check passes; the validation
+    // guard must trip *after* those checks but *before* port allocation, so
+    // we can assert on both the error message and the absence of side effects.
+    const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
+      cwd: repoRoot,
+      env: {
+        PATH: `${stubBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        HOME: process.env.HOME ?? "",
+        OH_AGENT_SERVER_LOCAL_PATH: emptyDir,
+        // Windows needs these for `where.exe` to resolve the stub and npm
+        ...(isWindows
+          ? {
+              PATHEXT: process.env.PATHEXT ?? ".CMD;.EXE;.BAT;.COM",
+              SystemRoot: process.env.SystemRoot ?? "",
+              USERPROFILE: process.env.USERPROFILE ?? "",
+            }
+          : {}),
       },
-    );
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    const exitResult = await Promise.race([
+      once(child, "exit").then(([code, signal]) => ({
+        code,
+        signal,
+        timedOut: false,
+      })),
+      delay(10_000).then(() => ({ code: null, signal: null, timedOut: true })),
+    ]);
+
+    if (exitResult.timedOut) {
+      child.kill("SIGKILL");
+    }
+
+    try {
+      // Assert: process exits non-zero, surfaces the validator's error, and
+      // never reaches `buildConfig` (no `[ports] Allocating ports...` log).
+      expect(exitResult.timedOut).toBe(false);
+      expect(exitResult.code).toBe(1);
+      expect(output).toContain(
+        "OH_AGENT_SERVER_LOCAL_PATH is missing expected workspace package",
+      );
+      expect(output).not.toContain("Allocating ports");
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
+      rmSync(stubBinDir, { recursive: true, force: true });
+    }
+  });
+
+  it("exits promptly when uvx is missing", async () => {
+    const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
+      cwd: repoRoot,
+      env: {
+        PATH: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
     let output = "";
     child.stdout.on("data", (chunk) => {

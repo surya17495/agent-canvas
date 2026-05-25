@@ -4,13 +4,13 @@ import { cn } from "#/utils/utils";
 const typographyVariants = cva("", {
   variants: {
     variant: {
-      h1: "text-[32px] text-white font-bold leading-5",
-      h2: "text-xl font-semibold leading-6 -tracking-[0.02em] text-white",
-      h3: "text-sm font-semibold text-gray-300",
+      h1: "text-[32px] text-white font-medium leading-5",
+      h2: "text-xl font-medium leading-6 -tracking-[0.02em] text-white",
+      h3: "text-sm font-medium text-[var(--oh-text-tertiary)]",
       span: "text-sm font-normal text-white leading-5.5",
       p: "text-sm font-normal text-white leading-5.5",
       codeBlock:
-        "font-mono text-sm leading-relaxed text-gray-300 whitespace-pre-wrap",
+        "font-mono text-sm leading-relaxed text-[var(--oh-text-tertiary)] whitespace-pre-wrap",
     },
   },
   defaultVariants: {

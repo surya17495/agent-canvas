@@ -1,7 +1,7 @@
 /**
  * Static-frontend Development Stack
  *
- * Mirrors the dockerless automation stack but serves a production build of the
+ * Same as the default automation stack but serves a production build of the
  * frontend via `scripts/static-server.mjs` instead of the Vite dev server.
  * Designed for slow / flaky network situations (e.g. plane wifi)
  * where Vite's ~1000 individual module requests per page load are the
@@ -24,12 +24,12 @@
  *   └─────────────┘    └───────────────┘         └──────────────────┘
  *
  * Usage:
- *   npm run dev:dangerously-dockerless
- *   npm run dev:dangerously-dockerless -- --port 12000
- *   npm run dev:dangerously-dockerless -- --skip-build  # reuse an existing build/
- *   npm run dev:dangerously-dockerless -- --automation-ref feat/my-branch
+ *   npm run dev:static
+ *   npm run dev:static -- --port 12000
+ *   npm run dev:static -- --skip-build  # reuse an existing build/
+ *   npm run dev:static -- --automation-ref feat/my-branch
  *
- * Environment variables (all optional, same as dev:automation):
+ * Environment variables (all optional, same as dev):
  *   - PORT: Ingress port (default: 8000)
  *   - OH_AUTOMATION_GIT_REF: Git ref for automation (default: main)
  *   - OH_AGENT_SERVER_GIT_REF: Git ref for agent-server
@@ -51,7 +51,16 @@ import {
   isPortBusy,
   releaseStaleConversationLeases,
 } from "./dev-safe.mjs";
-import { buildAutomationCommand, buildConfig } from "./dev-with-automation.mjs";
+import {
+  getProcessTreeSpawnOptions,
+  isProcessRunning,
+  signalProcessTree,
+} from "./dev-process-utils.mjs";
+import {
+  buildAgentServerAutomationEnv,
+  buildAutomationCommand,
+  buildConfig,
+} from "./dev-with-automation.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -135,12 +144,12 @@ function showHelp() {
   console.log(`
 Agent Canvas Static-frontend Development Stack
 
-Runs the dockerless automation stack, but serves a production build of the
+Runs the automation stack, but serves a production build of the
 frontend via scripts/static-server.mjs. Use this when a remote or flaky network
 makes Vite's per-module requests painful (e.g. ngrok or plane wifi).
 
 USAGE:
-  npm run dev:dangerously-dockerless [-- options]
+  npm run dev:static [-- options]
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
@@ -205,12 +214,16 @@ const processes = new Map();
 let shuttingDown = false;
 
 function spawnService(name, command, args, options = {}) {
-  const proc = spawn(command, args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, ...options.env },
-    cwd: options.cwd,
-    shell: process.platform === "win32",
-  });
+  const proc = spawn(
+    command,
+    args,
+    getProcessTreeSpawnOptions({
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...options.env },
+      cwd: options.cwd,
+      shell: process.platform === "win32",
+    }),
+  );
 
   const color = options.color || c.reset;
 
@@ -287,7 +300,10 @@ function startAgentServer(config) {
     OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString(),
   });
 
-  const agentServerEnv = buildAgentServerEnv(safeConfig);
+  const agentServerEnv = {
+    ...buildAgentServerEnv(safeConfig),
+    ...buildAgentServerAutomationEnv(config),
+  };
 
   spawnService(
     "agent-server",
@@ -385,6 +401,12 @@ function startStaticServer(config) {
       `/ready=http://localhost:${config.agentServerPort}`,
       "--route",
       `/alive=http://localhost:${config.agentServerPort}`,
+      "--route",
+      `/docs=http://localhost:${config.agentServerPort}`,
+      "--route",
+      `/redoc=http://localhost:${config.agentServerPort}`,
+      "--route",
+      `/openapi.json=http://localhost:${config.agentServerPort}`,
     ],
     {
       cwd: config.canvasPath,
@@ -419,6 +441,12 @@ function startIngress(config) {
       `/ready=http://localhost:${config.agentServerPort}`,
       "--route",
       `/alive=http://localhost:${config.agentServerPort}`,
+      "--route",
+      `/docs=http://localhost:${config.agentServerPort}`,
+      "--route",
+      `/redoc=http://localhost:${config.agentServerPort}`,
+      "--route",
+      `/openapi.json=http://localhost:${config.agentServerPort}`,
       "--default",
       `http://localhost:${config.vitePort}`,
     ],
@@ -442,13 +470,14 @@ function shutdown() {
 
   for (const [name, proc] of processes) {
     logService(name, "Stopping...", c.dim);
-    proc.kill("SIGTERM");
+    signalProcessTree(proc, "SIGTERM");
   }
 
   setTimeout(() => {
-    for (const [, proc] of processes) {
-      if (!proc.killed) {
-        proc.kill("SIGKILL");
+    for (const [name, proc] of processes) {
+      if (isProcessRunning(proc)) {
+        logService(name, "Force stopping...", c.dim);
+        signalProcessTree(proc, "SIGKILL");
       }
     }
     process.exit(0);
@@ -494,7 +523,7 @@ function printBanner(config) {
     `${c.dim}Frontend served from: ${join(config.canvasPath, "build")}${c.reset}`,
   );
   console.log(
-    `${c.dim}Edit sources, then re-run \`npm run dev:dangerously-dockerless\` to rebuild.${c.reset}`,
+    `${c.dim}Edit sources, then re-run \`npm run dev:static\` to rebuild.${c.reset}`,
   );
   console.log(`${c.dim}Press Ctrl+C to stop${c.reset}`);
   console.log("");
@@ -548,7 +577,7 @@ async function main() {
     logError(
       `Port ${config.agentServerPort} is already in use — another ` +
         `agent-server is running. Stop it (e.g. quit \`npm run dev\`) ` +
-        `before running dev:dangerously-dockerless.`,
+        `before running dev:static.`,
     );
     process.exit(1);
   }

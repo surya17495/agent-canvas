@@ -277,6 +277,28 @@ export interface InvokeSkillAction extends ActionBase<"InvokeSkillAction"> {
   name: string;
 }
 
+export interface SwitchLLMAction extends ActionBase<"SwitchLLMAction"> {
+  /**
+   * Name of the saved LLM profile to use for future agent steps.
+   */
+  profile_name: string;
+  /**
+   * Brief reason why this profile is a better fit for the next step.
+   */
+  reason: string;
+}
+
+/**
+ * Frontend-injected custom tool. Emitted over the existing WebSocket as a
+ * regular ActionEvent; intercepted client-side by handleCanvasUIAction.
+ * The Python definition lives in tools/canvas_ui_tool.py.
+ */
+export interface CanvasUIAction extends ActionBase<"CanvasUIAction"> {
+  command: "navigate_to_file" | "open_tab" | "show_preview";
+  path?: string | null;
+  tab?: string | null;
+}
+
 export type Action =
   | MCPToolAction
   | FinishAction
@@ -299,4 +321,6 @@ export type Action =
   | BrowserCloseTabAction
   | GlobAction
   | GrepAction
-  | InvokeSkillAction;
+  | InvokeSkillAction
+  | SwitchLLMAction
+  | CanvasUIAction;

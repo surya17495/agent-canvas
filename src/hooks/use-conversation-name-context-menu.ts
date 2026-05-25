@@ -134,14 +134,11 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
-  const handleTogglePublic = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-
+  const handleTogglePublic = (nextIsPublic?: boolean) => {
     if (conversationId && conversation) {
       updatePublicFlag({
         conversationId,
-        isPublic: !conversation.public,
+        isPublic: nextIsPublic ?? !conversation.public,
       });
     }
     // Intentionally don't close the menu — let the user see the toggle flip.
@@ -150,7 +147,7 @@ export function useConversationNameContextMenu({
   const shareUrl = React.useMemo(() => {
     if (!conversationId) return "";
     // On cloud backends, the shareable URL must point at the cloud
-    // environment's host (e.g. the SaaS app domain) rather than the local
+    // environment's host (e.g. the cloud app domain) rather than the local
     // dev origin so the link works for anyone the user shares it with.
     const origin =
       backend.kind === "cloud"

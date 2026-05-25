@@ -9,6 +9,7 @@ import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
 import { useConversationStore } from "#/stores/conversation-store";
+import { cn } from "#/utils/utils";
 
 export interface CustomChatInputProps {
   disabled?: boolean;
@@ -17,7 +18,10 @@ export interface CustomChatInputProps {
   onSubmit: (message: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
-  onFilesPaste?: (files: File[]) => void;
+  onFilesPaste?: (
+    files: File[],
+    options?: import("#/hooks/chat/use-chat-attachment-upload").ChatAttachmentUploadOptions,
+  ) => void;
   className?: React.HTMLAttributes<HTMLDivElement>["className"];
   buttonClassName?: React.HTMLAttributes<HTMLButtonElement>["className"];
 }
@@ -39,6 +43,8 @@ export function CustomChatInput({
     clearAllFiles,
     setShouldHideSuggestions,
     setSubmittedMessage,
+    images,
+    files,
   } = useConversationStore();
 
   // Note: we intentionally do NOT disable the input when the conversation is
@@ -80,8 +86,9 @@ export function CustomChatInput({
 
   const syncCanSubmit = React.useCallback(() => {
     const text = chatInputRef.current?.innerText ?? "";
-    setCanSubmit(text.trim().length > 0);
-  }, [chatInputRef]);
+    const hasAttachments = images.length > 0 || files.length > 0;
+    setCanSubmit(text.trim().length > 0 || hasAttachments);
+  }, [chatInputRef, images, files]);
 
   const {
     fileInputRef,
@@ -97,6 +104,7 @@ export function CustomChatInput({
   const {
     gripRef,
     isGripVisible,
+    isGripDragging,
     handleTopEdgeClick,
     smartResize,
     handleGripMouseDown,
@@ -151,9 +159,9 @@ export function CustomChatInput({
   );
   useEffect(() => {
     syncCanSubmit();
-  }, [syncCanSubmit]);
+  }, [syncCanSubmit, images.length, files.length]);
   return (
-    <div className={`w-full ${className}`}>
+    <div className={cn("w-full", className)}>
       {/* Hidden file input */}
       <HiddenFileInput
         fileInputRef={fileInputRef}
@@ -165,6 +173,7 @@ export function CustomChatInput({
         <ChatInputGrip
           gripRef={gripRef}
           isGripVisible={isGripVisible}
+          isGripDragging={isGripDragging}
           handleTopEdgeClick={handleTopEdgeClick}
           handleGripMouseDown={handleGripMouseDown}
           handleGripTouchStart={handleGripTouchStart}

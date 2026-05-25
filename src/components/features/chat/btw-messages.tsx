@@ -1,17 +1,19 @@
+import { useTranslation } from "react-i18next";
 import CheckCircle from "#/icons/check-circle-solid.svg?react";
+import { I18nKey } from "#/i18n/declaration";
 import { useBtwStore } from "#/stores/btw-store";
 import { GenericEventMessage } from "./generic-event-message";
 
 function GotItButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation("openhands");
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-success bg-success/10 hover:bg-success/20 border border-success/30 transition-colors"
+      className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-normal text-success bg-success/10 hover:bg-success/20 border border-success/30 transition-colors"
     >
       <CheckCircle className="w-3.5 h-3.5 fill-success" />
-      {/* eslint-disable-next-line i18next/no-literal-string */}
-      <span>Got it</span>
+      <span>{t(I18nKey.CHAT_INTERFACE$BTW_GOT_IT)}</span>
     </button>
   );
 }
@@ -21,6 +23,7 @@ export interface BtwMessagesProps {
 }
 
 export function BtwMessages({ conversationId }: BtwMessagesProps) {
+  const { t } = useTranslation("openhands");
   const entriesById = useBtwStore((s) => s.entriesByConversation);
   const dismiss = useBtwStore((s) => s.dismiss);
   const entries = conversationId ? (entriesById[conversationId] ?? []) : [];
@@ -36,20 +39,21 @@ export function BtwMessages({ conversationId }: BtwMessagesProps) {
             key={entry.id}
             title={
               <span className="flex items-center gap-2">
-                {/* eslint-disable-next-line i18next/no-literal-string */}
-                <span className="opacity-60">BTW:</span>
+                <span className="opacity-60">
+                  {t(I18nKey.CHAT_INTERFACE$BTW_PREFIX)}
+                </span>
                 <span>{entry.question}</span>
                 {isPending && (
                   <span
                     data-testid="btw-spinner"
-                    className="inline-block w-3.5 h-3.5 ml-2 rounded-full border-2 border-neutral-500 border-t-transparent animate-spin"
+                    className="inline-block w-3.5 h-3.5 ml-2 rounded-full border-2 border-[var(--oh-border-input)] border-t-transparent animate-spin"
                   />
                 )}
               </span>
             }
             details={
               isPending
-                ? "Waiting for the agent's answer…"
+                ? t(I18nKey.CHAT_INTERFACE$BTW_WAITING_FOR_ANSWER)
                 : (entry.response ?? "")
             }
             initiallyExpanded={!isPending}

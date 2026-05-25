@@ -3,6 +3,11 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ProfileRow } from "./profile-row";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
+import {
+  settingsListContainerClassName,
+  settingsListDividerClassName,
+} from "#/utils/settings-list-classes";
 
 interface ProfilesBodyProps {
   isLoading: boolean;
@@ -47,14 +52,19 @@ export function ProfilesBody({
 
   if (profiles.length === 0) {
     return (
-      <p className="text-sm text-gray-400 italic">
+      <p className="text-sm text-[var(--oh-muted)] italic">
         {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
       </p>
     );
   }
 
   return (
-    <div className="border border-tertiary rounded-md divide-y divide-tertiary">
+    <div
+      className={cn(
+        settingsListContainerClassName,
+        settingsListDividerClassName,
+      )}
+    >
       {profiles.map((profile) => (
         <ProfileRow
           key={profile.name}

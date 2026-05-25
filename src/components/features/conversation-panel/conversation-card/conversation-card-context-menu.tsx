@@ -8,7 +8,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { ConversationNameContextMenuIconText } from "../../conversation/conversation-name-context-menu-icon-text";
 
 import EditIcon from "#/icons/u-edit.svg?react";
-import RobotIcon from "#/icons/u-robot.svg?react";
+import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
 import DownloadIcon from "#/icons/u-download.svg?react";
 import CreditCardIcon from "#/icons/u-credit-card.svg?react";
@@ -27,10 +27,13 @@ interface ConversationCardContextMenuProps {
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
+  /**
+   * Fixed coordinates for a portaled menu (conversation list overflow
+   * stacking). When set, theme/position switch to non-absolute layout.
+   */
+  floatingStyle?: React.CSSProperties;
+  ignoreOutsideClickRef?: React.RefObject<HTMLElement | null>;
 }
-
-const contextMenuListItemClassName =
-  "cursor-pointer p-0 h-auto hover:bg-transparent";
 
 export function ConversationCardContextMenu({
   onClose,
@@ -43,10 +46,15 @@ export function ConversationCardContextMenu({
   onDownloadViaVSCode,
   onDownloadConversation,
   position = "bottom",
+  floatingStyle,
+  ignoreOutsideClickRef,
 }: ConversationCardContextMenuProps) {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
-  const ref = useClickOutsideElement<HTMLUListElement>(onClose);
+  const ref = useClickOutsideElement<HTMLUListElement>(
+    onClose,
+    ignoreOutsideClickRef,
+  );
   const stopLabelKey =
     backend.kind === "cloud"
       ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
@@ -60,7 +68,7 @@ export function ConversationCardContextMenu({
         return !isLast ? (
           <React.Fragment key={sectionKey}>
             {filteredItems}
-            <Divider />
+            <Divider inset="menu" />
           </React.Fragment>
         ) : (
           <React.Fragment key={sectionKey}>{filteredItems}</React.Fragment>
@@ -71,13 +79,22 @@ export function ConversationCardContextMenu({
     [],
   );
 
+  const isPortaled = floatingStyle != null;
+
   return (
     <ContextMenu
       ref={ref}
       testId="context-menu"
-      position={position}
-      alignment="right"
-      className="mt-0"
+      style={isPortaled ? floatingStyle : undefined}
+      theme={isPortaled ? "popover" : "default"}
+      position={isPortaled ? "none" : position}
+      alignment={isPortaled ? "none" : "right"}
+      spacing={isPortaled ? "none" : "default"}
+      className={
+        isPortaled
+          ? "mt-0 min-w-[200px] w-max max-w-[min(280px,100vw-16px)]"
+          : "z-[200] mt-0"
+      }
     >
       {generateSection(
         [
@@ -86,7 +103,6 @@ export function ConversationCardContextMenu({
               key="edit-button"
               testId="edit-button"
               onClick={onEdit}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
                 icon={<EditIcon width={16} height={16} />}
@@ -104,7 +120,6 @@ export function ConversationCardContextMenu({
               key="show-agent-tools-button"
               testId="show-agent-tools-button"
               onClick={onShowAgentTools}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
                 icon={<ToolsIcon width={16} height={16} />}
@@ -117,10 +132,16 @@ export function ConversationCardContextMenu({
               key="show-skills-button"
               testId="show-skills-button"
               onClick={onShowSkills}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
-                icon={<RobotIcon width={16} height={16} />}
+                icon={
+                  <SkillsIcon
+                    width={16}
+                    height={16}
+                    className="stroke-[1.75]"
+                    aria-hidden
+                  />
+                }
                 text={t(I18nKey.CONVERSATION$SHOW_SKILLS)}
               />
             </ContextMenuListItem>
@@ -135,7 +156,6 @@ export function ConversationCardContextMenu({
               key="stop-button"
               testId="stop-button"
               onClick={onStop}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
                 icon={<CloseIcon width={16} height={16} />}
@@ -148,7 +168,6 @@ export function ConversationCardContextMenu({
               key="download-vscode-button"
               testId="download-vscode-button"
               onClick={onDownloadViaVSCode}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
                 icon={<DownloadIcon width={16} height={16} />}
@@ -161,7 +180,6 @@ export function ConversationCardContextMenu({
               key="download-trajectory-button"
               testId="download-trajectory-button"
               onClick={onDownloadConversation}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
                 icon={<DownloadIcon width={16} height={16} />}
@@ -179,7 +197,6 @@ export function ConversationCardContextMenu({
               key="display-cost-button"
               testId="display-cost-button"
               onClick={onDisplayCost}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
                 icon={<CreditCardIcon width={16} height={16} />}
@@ -192,7 +209,6 @@ export function ConversationCardContextMenu({
               key="delete-button"
               testId="delete-button"
               onClick={onDelete}
-              className={contextMenuListItemClassName}
             >
               <ConversationNameContextMenuIconText
                 icon={<DeleteIcon width={16} height={16} />}

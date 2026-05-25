@@ -26,12 +26,12 @@ import {
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConfig } from "#/hooks/query/use-config";
-import { useGetTrajectory } from "#/hooks/mutation/use-get-trajectory";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import type { MessageEvent } from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
+import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
 import { act } from "@testing-library/react";
@@ -42,7 +42,6 @@ vi.mock("#/hooks/use-send-message", () => ({
 }));
 
 vi.mock("#/hooks/query/use-config");
-vi.mock("#/hooks/mutation/use-get-trajectory");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
 vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: vi.fn(),
@@ -68,6 +67,10 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
 
 vi.mock("#/hooks/use-load-older-events", () => ({
   useLoadOlderEvents: vi.fn(),
+}));
+
+vi.mock("#/hooks/query/use-task-polling", () => ({
+  useTaskPolling: vi.fn(),
 }));
 
 vi.mock("#/hooks/use-agent-state", () => ({
@@ -109,6 +112,21 @@ beforeEach(() => {
   vi.mocked(useOptionalConversationId).mockReturnValue({
     conversationId: "test-conversation-id",
   });
+  vi.mocked(useTaskPolling).mockReturnValue({
+    isTask: false,
+    taskId: null,
+    conversationId: "test-conversation-id",
+    task: undefined,
+    taskStatus: undefined,
+    taskDetail: undefined,
+    taskError: null,
+    isLoadingTask: false,
+    repositoryInfo: {
+      selectedRepository: undefined,
+      selectedBranch: undefined,
+      gitProvider: undefined,
+    },
+  });
   // Default: pagination disabled (hasMore=false) so unrelated tests don't
   // accidentally trigger loadOlder via the on-mount auto-trigger effect.
   // Tests that exercise pagination override this.
@@ -132,6 +150,22 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
+    vi.mocked(useTaskPolling).mockReturnValue({
+      isTask: false,
+      taskId: null,
+      conversationId: "test-conversation-id",
+      task: undefined,
+      taskStatus: undefined,
+      taskDetail: undefined,
+      taskError: null,
+      isLoadingTask: false,
+      repositoryInfo: {
+        selectedRepository: undefined,
+        selectedBranch: undefined,
+        gitProvider: undefined,
+      },
+    });
+
     useOptimisticUserMessageStore.setState({
       pendingMessages: [],
     });
@@ -142,11 +176,6 @@ describe("ChatInterface - Chat Suggestions", () => {
 
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
-    });
-    (useGetTrajectory as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync: vi.fn(),
-      isLoading: false,
     });
     (
       useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
@@ -194,6 +223,58 @@ describe("ChatInterface - Chat Suggestions", () => {
     // Check if ChatSuggestions is not rendered with optimistic user message
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
   });
+
+  test("should hide chat suggestions while a cloud start task is provisioning", () => {
+    vi.mocked(useTaskPolling).mockReturnValue({
+      isTask: true,
+      taskId: "abc",
+      conversationId: null,
+      task: undefined,
+      taskStatus: "WORKING",
+      taskDetail: undefined,
+      taskError: null,
+      isLoadingTask: false,
+      repositoryInfo: {
+        selectedRepository: undefined,
+        selectedBranch: undefined,
+        gitProvider: undefined,
+      },
+    });
+
+    renderWithQueryClient(
+      <ChatInterface />,
+      queryClient,
+      "/task-abc",
+    );
+
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
+
+  test("should hide chat suggestions on a task route even when the task is READY", () => {
+    vi.mocked(useTaskPolling).mockReturnValue({
+      isTask: true,
+      taskId: "abc",
+      conversationId: null,
+      task: undefined,
+      taskStatus: "READY",
+      taskDetail: undefined,
+      taskError: null,
+      isLoadingTask: false,
+      repositoryInfo: {
+        selectedRepository: undefined,
+        selectedBranch: undefined,
+        gitProvider: undefined,
+      },
+    });
+
+    renderWithQueryClient(
+      <ChatInterface />,
+      queryClient,
+      "/task-abc",
+    );
+
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
 });
 
 describe("ChatInterface - Empty state", () => {
@@ -229,11 +310,6 @@ describe("ChatInterface - Scroll-up loads older events", () => {
 
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
-    });
-    (useGetTrajectory as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync: vi.fn(),
-      isLoading: false,
     });
     (
       useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
@@ -528,11 +604,6 @@ describe("ChatInterface - Pending message queue", () => {
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
-    });
-    (useGetTrajectory as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync: vi.fn(),
-      isLoading: false,
     });
     (
       useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>

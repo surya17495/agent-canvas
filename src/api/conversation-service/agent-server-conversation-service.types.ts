@@ -3,6 +3,17 @@ import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
 
+/**
+ * Lifecycle state of a cloud sandbox. Mirrors OpenHands' V1SandboxStatus.
+ * Local agent-server conversations do not carry this field (null).
+ */
+export type SandboxStatus =
+  | "PAUSED"
+  | "RUNNING"
+  | "STARTING"
+  | "MISSING"
+  | "ERROR";
+
 // Plugin specification for starting conversations with plugins
 export interface PluginSpec {
   source: string; // Plugin source: 'github:owner/repo', git URL, or local path
@@ -111,15 +122,50 @@ export interface AppConversation {
   title: string | null;
   trigger: ConversationTrigger | null;
   pr_number: number[];
+  /**
+   * High-level kind of the conversation's agent — ``"openhands"`` for an LLM-
+   * driven Agent, ``"acp"`` for an ACPAgent that delegates to an external
+   * ACP CLI subprocess. Consumers can use this to gate UI affordances that
+   * only make sense for one kind (e.g. the LLM-profile switcher in the chat
+   * header is a no-op for ACP conversations because model selection lives
+   * on the subprocess via ``acp_model``, not on ``llm_model``).
+   */
+  agent_kind?: "openhands" | "acp" | null;
+  /**
+   * For ACP conversations, the registry key of the ACP CLI server the
+   * conversation was launched against (e.g. ``"claude-code"``, ``"codex"``,
+   * ``"gemini-cli"``). Populated from ``info.tags.acpserver`` — see
+   * ``ACP_SERVER_TAG_KEY`` in ``agent-server-adapter.ts`` for the wire
+   * format and the rationale behind the snake_case-incompatible
+   * ``acpserver`` form. ``null`` for OpenHands conversations and for ACP
+   * conversations whose tag wasn't stamped (e.g. created via an older
+   * client or via the raw API). Consumers resolve the display name via
+   * ``getAcpProviderDisplayName(acp_server)`` and fall back to a generic
+   * "ACP" chip when the key is unknown or null.
+   */
+  acp_server?: string | null;
   llm_model: string | null;
   metrics: MetricsSnapshot | null;
   created_at: string;
   updated_at: string;
   execution_status: ExecutionStatus | null;
+  /**
+   * Cloud-only sandbox lifecycle status. Mirrors OpenHands' V1SandboxStatus.
+   * Absent / null for local agent-server conversations.
+   */
+  sandbox_status?: SandboxStatus | null;
   conversation_url: string | null;
   session_api_key: string | null;
   sandbox_id: string | null;
   workspace?: ConversationWorkspace | null;
+  /**
+   * The local workspace the user explicitly attached when creating this
+   * conversation. Client-side only — never round-tripped to the agent-server
+   * or cloud. Null/undefined for conversations created via "No workspace".
+   * Distinct from `workspace.working_dir` (the per-conversation worktree path
+   * the runtime actually operates in).
+   */
+  selected_workspace?: string | null;
   public?: boolean;
   sub_conversation_ids: string[];
 }

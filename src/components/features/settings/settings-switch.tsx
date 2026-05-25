@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import { StyledSwitchComponent } from "./styled-switch-component";
+import { ToggleSwitchVisual } from "#/ui/toggle-switch";
 
 interface SettingsSwitchProps {
   testId?: string;
@@ -49,7 +49,7 @@ export function SettingsSwitch({
   );
 
   const toggle = (
-    <StyledSwitchComponent isToggled={controlledIsToggled ?? isToggled} />
+    <ToggleSwitchVisual enabled={controlledIsToggled ?? isToggled} />
   );
 
   const label =
@@ -57,7 +57,7 @@ export function SettingsSwitch({
       <div className="flex items-center gap-1">
         <span className="text-sm">{children}</span>
         {isBeta && (
-          <span className="text-[11px] leading-4 text-[#0D0F11] font-[500] tracking-tighter bg-primary px-1 rounded-full">
+          <span className="text-[11px] leading-4 text-base font-[500] tracking-tighter bg-primary px-1 rounded-full">
             {t(I18nKey.BADGE$BETA)}
           </span>
         )}

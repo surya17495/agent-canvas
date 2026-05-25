@@ -2,6 +2,10 @@ import { useTranslation } from "react-i18next";
 
 import { I18nKey } from "#/i18n/declaration";
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
+import {
+  useWorkspaceMutationCounter,
+  withWorkspaceCacheBuster,
+} from "#/stores/use-workspace-mutation-counter";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { HighlightedSourceView } from "./highlighted-source-view";
 import type { ViewMode } from "./view-mode";
@@ -20,18 +24,24 @@ function getExtension(path: string): string {
 }
 
 /**
- * Renders the contents of a single workspace file. In `rich` mode we render
- * HTML / SVG / images / PDFs from the browser-renderable URL produced by the
- * file-content hook. In `plain` mode we always show the raw bytes as text (or
+ * Renders the contents of a single workspace file. In `rich` mode we point
+ * an iframe / <img> straight at the agent server's static workspace
+ * fileserver for HTML / SVG / images / PDFs, so relative asset references
+ * load naturally. In `plain` mode we always show the raw bytes as text (or
  * a fallback message for binaries).
  */
 export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   const { t } = useTranslation("openhands");
   const query = useWorkspaceFileContent(path);
+  // Subscribe to the workspace mutation counter so the iframe / <img> src
+  // changes after every agent-side edit, forcing a fresh fetch even when
+  // the *path* hasn't moved (e.g. agent rewrote `style.css` referenced by
+  // the currently-displayed `index.html`).
+  const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
 
   if (query.isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-[#9299AA]">
+      <div className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]">
         {t(I18nKey.FILES$LOADING_FILES)}
       </div>
     );
@@ -46,7 +56,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     // we have one; fall back to the generic translated string otherwise.
     return (
       <div
-        className="flex h-full w-full items-center justify-center text-sm text-[#9299AA]"
+        className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]"
         data-testid="file-content-viewer-error"
       >
         {(query.error as Error | undefined)?.message ??
@@ -56,6 +66,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   }
 
   const { kind, text, staticUrl, mimeType } = query.data;
+  const bustedStaticUrl = withWorkspaceCacheBuster(staticUrl, mutationCounter);
 
   // ----- Plain mode: raw source bytes, syntax-highlighted when we can
   // recognize the grammar (falls through to a `<pre>` otherwise). This
@@ -73,7 +84,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     }
     return (
       <div
-        className="flex h-full w-full items-center justify-center text-sm text-[#9299AA]"
+        className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]"
         data-testid="file-content-viewer-binary-fallback"
       >
         {t(I18nKey.FILES$BINARY_FALLBACK)}
@@ -85,11 +96,11 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   if (kind === "image") {
     return (
       <div
-        className="flex h-full w-full items-center justify-center bg-[#1F2125] p-4"
+        className="flex h-full w-full items-center justify-center bg-[var(--oh-surface)] p-4"
         data-testid="file-content-viewer-image"
       >
         <img
-          src={staticUrl}
+          src={bustedStaticUrl}
           alt={path}
           className="max-h-full max-w-full object-contain"
         />
@@ -109,7 +120,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     return (
       <iframe
         title={path}
-        src={staticUrl}
+        src={bustedStaticUrl}
         sandbox="allow-same-origin"
         data-testid="file-content-viewer-iframe"
         className="h-full w-full bg-white"
@@ -120,7 +131,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   if (kind === "binary") {
     return (
       <div
-        className="flex h-full w-full items-center justify-center text-sm text-[#9299AA]"
+        className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]"
         data-testid="file-content-viewer-binary-fallback"
       >
         {t(I18nKey.FILES$BINARY_FALLBACK)}
@@ -130,15 +141,17 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
 
   // Text-like content.
   if (mimeType === "text/html" || HTML_LIKE_EXTS.has(getExtension(path))) {
-    // Sandbox the preview iframe. The absence of `allow-scripts` means any
-    // `<script>` (or `onerror=…`, inline event handler, …) inside the
-    // previewed file is inert. This is exactly the safe-preview posture we
-    // want — users can look at their HTML without it executing in the
-    // canvas's context.
+    // Sandbox the preview iframe: `allow-same-origin` keeps the frame on
+    // the workspace fileserver's origin so relative `<link href="…">`,
+    // `<img src="…">`, etc. continue to resolve, while the absence of
+    // `allow-scripts` means any `<script>` (or `onerror=…`, inline event
+    // handler, …) inside the previewed file is inert. This is exactly
+    // the safe-preview posture we want — users can look at their HTML
+    // without it executing in the canvas's context.
     return (
       <iframe
         title={path}
-        src={staticUrl}
+        src={bustedStaticUrl}
         sandbox="allow-same-origin"
         data-testid="file-content-viewer-iframe"
         className="h-full w-full bg-white"
@@ -158,9 +171,9 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     return (
       <div
         data-testid="file-content-viewer-markdown"
-        className="h-full w-full overflow-auto bg-[#25272D] text-white custom-scrollbar-always"
+        className="h-full w-full overflow-auto bg-[var(--oh-surface)] text-white custom-scrollbar-always"
       >
-        <div className="prose prose-sm prose-invert max-w-none p-6 [--tw-prose-body:#fff] [--tw-prose-bold:#fff] [--tw-prose-headings:#fff] [--tw-prose-lead:#fff] [--tw-prose-counters:#fff] [--tw-prose-quotes:#fff] [--tw-prose-quote-borders:#3A3D44] [--tw-prose-bullets:#9299AA] [--tw-prose-hr:#3A3D44] [--tw-prose-captions:#9299AA] [--tw-prose-kbd:#fff]">
+        <div className="prose prose-sm prose-invert max-w-none p-6 [--tw-prose-body:#fff] [--tw-prose-bold:#fff] [--tw-prose-headings:#fff] [--tw-prose-lead:#fff] [--tw-prose-counters:#fff] [--tw-prose-quotes:#fff] [--tw-prose-quote-borders:var(--oh-border-subtle)] [--tw-prose-bullets:var(--oh-muted)] [--tw-prose-hr:var(--oh-border-subtle)] [--tw-prose-captions:var(--oh-muted)] [--tw-prose-kbd:#fff]">
           <MarkdownRenderer
             content={text ?? ""}
             includeStandard
@@ -191,7 +204,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   // blank.
   return (
     <div
-      className="flex h-full w-full items-center justify-center text-sm text-[#9299AA]"
+      className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]"
       data-testid="file-content-viewer-binary-fallback"
     >
       {t(I18nKey.FILES$BINARY_FALLBACK)}

@@ -58,7 +58,7 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
           !hasSuggestedTasks && "mb-[14px]",
         )}
       >
-        <h3 className="text-xs leading-4 text-white font-semibold py-[14px] pl-[14px]">
+        <h3 className="text-xs leading-4 text-white font-medium py-[14px] pl-[14px]">
           {t(I18nKey.TASKS$SUGGESTED_TASKS)}
         </h3>
       </div>
@@ -99,7 +99,7 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
           <button
             type="button"
             onClick={handleToggle}
-            className="text-xs leading-4 text-[#FAFAFA] font-normal cursor-pointer hover:underline"
+            className="text-xs leading-4 text-content-2 font-normal cursor-pointer hover:underline"
           >
             {isExpanded
               ? t(I18nKey.COMMON$VIEW_LESS)

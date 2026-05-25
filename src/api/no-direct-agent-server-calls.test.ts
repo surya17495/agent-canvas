@@ -12,7 +12,9 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
 function collectSourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const fullPath = join(dir, entry.name);
-    const relPath = relative(SRC_ROOT, fullPath);
+    // Normalize to forward slashes so the path matches ALLOWED_AD_HOC_HTTP_FILES
+    // entries on Windows where path.relative() returns backslash-separated paths.
+    const relPath = relative(SRC_ROOT, fullPath).replace(/\\/g, "/");
 
     if (entry.isDirectory()) {
       if (EXCLUDED_SEGMENTS.has(entry.name)) return [];
@@ -38,6 +40,18 @@ describe("agent-server API access", () => {
 
       if (/\bcreateHttpClient\s*\(/.test(source)) {
         fileViolations.push("uses createHttpClient directly");
+      }
+
+      if (
+        /from\s+["']@openhands\/typescript-client\/client\/http-client["']/.test(
+          source,
+        )
+      ) {
+        fileViolations.push("imports the low-level SDK HttpClient directly");
+      }
+
+      if (/\bnew\s+HttpClient\s*\(/.test(source)) {
+        fileViolations.push("constructs HttpClient directly");
       }
 
       if (

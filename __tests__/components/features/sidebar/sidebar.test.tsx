@@ -1,11 +1,41 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
+import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
+import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { useSidebarStore } from "#/stores/sidebar-store";
 import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
+import translations from "#/i18n/translation.json";
+
+// The global `useTranslation` mock in `vitest.setup.ts` returns the key
+// as-is. Override it here so `t(...)` resolves keys via the source-of-truth
+// `translation.json` (English values), letting the test assert real
+// user-facing labels rather than raw keys.
+vi.mock("react-i18next", async () => {
+  const actual = await vi.importActual("react-i18next");
+  return {
+    ...(actual as object),
+    useTranslation: () => ({
+      t: (key: string) => {
+        const entry = (translations as Record<string, Record<string, string>>)[
+          key
+        ];
+        return entry?.en ?? key;
+      },
+      i18n: { language: "en", exists: () => false },
+    }),
+  };
+});
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: { feature_flags: {} } }),
@@ -44,20 +74,6 @@ vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
 
 vi.mock("#/components/shared/buttons/openhands-logo-button", () => ({
   OpenHandsLogoButton: () => <div data-testid="logo-button" />,
-}));
-
-vi.mock("#/components/shared/buttons/new-project-button", () => ({
-  NewProjectButton: () => <div data-testid="new-project-button" />,
-}));
-
-vi.mock("#/components/shared/buttons/conversation-panel-button", () => ({
-  ConversationPanelButton: () => (
-    <div data-testid="conversation-panel-button" />
-  ),
-}));
-
-vi.mock("#/components/shared/buttons/automations-button", () => ({
-  AutomationsButton: () => <div data-testid="automations-button" />,
 }));
 
 vi.mock("#/components/features/sidebar/user-actions", () => ({
@@ -168,6 +184,18 @@ vi.mock("#/hooks/use-settings-nav-items", () => ({
   useSettingsNavItems: () => [],
 }));
 
+function getDesktopSidebar(collapsed?: boolean): HTMLElement {
+  const selector =
+    collapsed === undefined
+      ? "aside[data-collapsed]"
+      : `aside[data-collapsed="${collapsed ? "true" : "false"}"]`;
+  const sidebar = document.querySelector(selector);
+  if (!(sidebar instanceof HTMLElement)) {
+    throw new Error(`Desktop sidebar not found: ${selector}`);
+  }
+  return sidebar;
+}
+
 function renderSidebar(currentPath: string) {
   const navigate = vi.fn();
   const value: NavigationContextValue = {
@@ -180,7 +208,10 @@ function renderSidebar(currentPath: string) {
   const rendered = render(
     <QueryClientProvider client={new QueryClient()}>
       <NavigationProvider value={value}>
-        <Sidebar />
+        <SidebarMobileNavProvider>
+          <Sidebar />
+          <SidebarMobileMenuBar />
+        </SidebarMobileNavProvider>
       </NavigationProvider>
     </QueryClientProvider>,
   );
@@ -191,83 +222,80 @@ function renderSidebar(currentPath: string) {
 describe("Sidebar", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    // Zustand store is a module singleton; reset it so collapsed state from
+    // a prior test doesn't bleed into this one.
+    useSidebarStore.setState({ collapsed: false });
   });
 
   afterEach(() => {
     window.localStorage.clear();
+    useSidebarStore.setState({ collapsed: false });
   });
 
-  it.each([
-    ["/conversations"],
-    ["/automations"],
-    ["/automations/abc-123"],
-    ["/settings"],
-  ])(
-    "keeps the sidebar's default top padding on %s so spacing stays consistent with the conversations page",
-    (currentPath) => {
-      renderSidebar(currentPath);
+  it("opens and closes the mobile navigation drawer from the menu button", async () => {
+    renderSidebar("/conversations");
 
-      const sidebar = screen.getByRole("navigation").parentElement;
-      expect(sidebar?.className).toMatch(/(^|\s)md:pt-4(\s|$)/);
-      expect(sidebar?.className).not.toMatch(/(^|\s)md:pt-6\.5(\s|$)/);
-    },
-  );
+    expect(
+      screen.queryByTestId("sidebar-mobile-drawer"),
+    ).not.toBeInTheDocument();
 
-  it("renders sidebar nav links with the default text color (text-[#8C8C8C])", () => {
-    renderSidebar("/skills");
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    expect(drawer).toBeInTheDocument();
+    expect(
+      within(drawer).getByTestId("sidebar-conversation-list"),
+    ).toBeInTheDocument();
 
-    const conversationsLink = screen.getByTestId("sidebar-conversations-link");
-    expect(conversationsLink.className).toMatch(/(^|\s)text-\[#8C8C8C\](\s|$)/);
+    fireEvent.click(within(drawer).getByTestId("sidebar-mobile-drawer-close"));
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("sidebar-mobile-drawer"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("toggles between expanded and collapsed states and persists the choice", () => {
     const { unmount } = renderSidebar("/conversations");
 
-    const sidebar = screen.getByRole("navigation").parentElement;
-    expect(sidebar?.dataset.collapsed).toBe("false");
+    const sidebar = getDesktopSidebar(false);
+    expect(sidebar.dataset.collapsed).toBe("false");
 
     const toggle = screen.getByTestId("sidebar-collapse-toggle");
     fireEvent.click(toggle);
 
-    expect(sidebar?.dataset.collapsed).toBe("true");
+    expect(sidebar.dataset.collapsed).toBe("true");
 
     // The choice survives a remount via localStorage.
     unmount();
     renderSidebar("/conversations");
-    const remountedSidebar = screen.getByRole("navigation").parentElement;
-    expect(remountedSidebar?.dataset.collapsed).toBe("true");
+    expect(getDesktopSidebar(true).dataset.collapsed).toBe("true");
   });
 
   it("expands the sidebar when the toggle is clicked from the collapsed state", () => {
     // Arrange: simulate a user whose sidebar was previously collapsed.
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
     // Act
     fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
 
     // Assert: state flips back to expanded.
-    const sidebar = screen.getByRole("navigation").parentElement;
-    expect(sidebar?.dataset.collapsed).toBe("false");
+    expect(getDesktopSidebar(false).dataset.collapsed).toBe("false");
   });
 
   it("expands the sidebar when collapsed rail empty space is clicked", () => {
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
-    const sidebar = screen.getByRole("navigation").parentElement;
-    expect(sidebar?.dataset.collapsed).toBe("true");
-
-    if (!sidebar) {
-      throw new Error("Sidebar root not found");
-    }
+    const sidebar = getDesktopSidebar(true);
+    expect(sidebar.dataset.collapsed).toBe("true");
 
     fireEvent.click(sidebar);
     expect(sidebar.dataset.collapsed).toBe("false");
   });
 
   it("shows collapsed server/settings action icons when sidebar is collapsed", () => {
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
     expect(screen.getByTestId("collapsed-settings-link")).toBeInTheDocument();
@@ -278,7 +306,7 @@ describe("Sidebar", () => {
   });
 
   it("navigates to settings when collapsed settings icon is clicked", () => {
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     const { navigate } = renderSidebar("/conversations");
 
     fireEvent.click(screen.getByTestId("collapsed-settings-link"));
@@ -286,7 +314,7 @@ describe("Sidebar", () => {
   });
 
   it("opens the backend popover when hovering the collapsed backend icon", async () => {
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
     expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
@@ -301,11 +329,10 @@ describe("Sidebar", () => {
     // Bug: clicking a backend <li role='option'> bubbled up to the aside's
     // rail-collapse handler (which only bails on a/button/[role=button]),
     // so selecting a backend would expand the sidebar mid-switch.
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
-    const sidebar = screen.getByRole("navigation").parentElement;
-    if (!sidebar) throw new Error("Sidebar not found");
+    const sidebar = getDesktopSidebar(true);
     expect(sidebar.dataset.collapsed).toBe("true");
 
     const trigger = screen.getByTestId("collapsed-backend-selector-link");
@@ -326,7 +353,7 @@ describe("Sidebar", () => {
     // out of the popover toward the centred modal, mouseLeave closed the
     // popover, which unmounted BackendSelector and tore the modal down with
     // it. Modal state must live above the popover to survive its unmount.
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
     const trigger = screen.getByTestId("collapsed-backend-selector-link");
@@ -347,7 +374,7 @@ describe("Sidebar", () => {
   });
 
   it("keeps the Manage Backends modal open after the popover closes", async () => {
-    window.localStorage.setItem("openhands-sidebar-collapsed", "true");
+    useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
     const trigger = screen.getByTestId("collapsed-backend-selector-link");
@@ -367,6 +394,38 @@ describe("Sidebar", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not bubble mouse events to window when the collapsed backend icon is clicked, so the downshift-driven popover is not torn down mid-hover", () => {
+    // Bug: while the popover was open, left-clicking the tray icon closed
+    // the dropdown menu because downshift attaches its outside-click logic
+    // to window-level mousedown/mouseup. The tray icon is a sibling of the
+    // Dropdown (not one of its tracked elements), so the event reached
+    // downshift and was treated as "outside". The fix stops propagation on
+    // the button so neither event reaches the window listeners that close
+    // the menu.
+    useSidebarStore.setState({ collapsed: true });
+    const windowMouseDown = vi.fn();
+    const windowMouseUp = vi.fn();
+    window.addEventListener("mousedown", windowMouseDown);
+    window.addEventListener("mouseup", windowMouseUp);
+
+    try {
+      renderSidebar("/conversations");
+      const trigger = screen.getByTestId("collapsed-backend-selector-link");
+      const wrapper = trigger.parentElement;
+      if (!wrapper) throw new Error("Popover wrapper not found");
+      fireEvent.mouseEnter(wrapper);
+
+      fireEvent.mouseDown(trigger);
+      fireEvent.mouseUp(trigger);
+
+      expect(windowMouseDown).not.toHaveBeenCalled();
+      expect(windowMouseUp).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("mousedown", windowMouseDown);
+      window.removeEventListener("mouseup", windowMouseUp);
+    }
+  });
+
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {
     renderSidebar("/conversations");
 
@@ -378,5 +437,21 @@ describe("Sidebar", () => {
       const link = screen.getByTestId(testId);
       expect(link.querySelector("svg")).not.toBeNull();
     }
+  });
+
+  it("renders the renamed top-level nav labels", () => {
+    // Arrange
+    renderSidebar("/conversations");
+
+    // Act + Assert: each top-level nav link surfaces its new user-facing label.
+    expect(screen.getByTestId("sidebar-conversations-link")).toHaveTextContent(
+      "New Chat",
+    );
+    expect(screen.getByTestId("sidebar-skills-link")).toHaveTextContent(
+      "Customize",
+    );
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveTextContent(
+      "Automate",
+    );
   });
 });

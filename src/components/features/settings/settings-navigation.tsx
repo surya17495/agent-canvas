@@ -9,6 +9,8 @@ import { SettingsNavHeader } from "./settings-nav-header";
 import { SettingsNavDivider } from "./settings-nav-divider";
 import { SettingsNavLink } from "./settings-nav-link";
 import { SidebarNavLink } from "#/components/features/sidebar/sidebar-nav-link";
+import { navInteractiveTransitionClassName } from "#/components/features/sidebar/sidebar-layout";
+import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
@@ -16,11 +18,14 @@ interface SettingsNavigationProps {
   navigationItems: SettingsNavRenderedItem[];
 }
 
-export function SettingsNavigation({
-  isMobileMenuOpen,
-  onCloseMobileMenu,
+/**
+ * Desktop sidebar — sibling of the scrolling main column (same pattern as
+ * {@link ExtensionsNavigation}). Mobile drawer stays `position: fixed` outside
+ * this row in the layout.
+ */
+export function SettingsDesktopSidebar({
   navigationItems,
-}: SettingsNavigationProps) {
+}: Pick<SettingsNavigationProps, "navigationItems">) {
   const { t } = useTranslation("openhands");
   const desktopNavItems = navigationItems.filter(
     (item): item is Extract<SettingsNavRenderedItem, { type: "item" }> =>
@@ -28,31 +33,66 @@ export function SettingsNavigation({
   );
 
   return (
-    <>
-      <aside
-        data-testid="settings-navbar-desktop"
-        className="hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2"
-      >
-        <Typography.Text className="px-3 text-xs font-semibold uppercase tracking-wider text-[#A3A3A3]">
-          {t(I18nKey.SETTINGS$TITLE)}
-        </Typography.Text>
-        <div className="flex flex-col gap-0.5 pt-0.5">
-          {desktopNavItems.map((renderedItem) => (
-            <SidebarNavLink
-              key={renderedItem.item.to}
-              to={renderedItem.item.to}
-              label={t(renderedItem.item.text as I18nKey)}
-              end
-              testId={`sidebar-settings-${renderedItem.item.to}`}
-              icon={renderedItem.item.icon}
-            />
-          ))}
-        </div>
-      </aside>
+    <aside
+      data-testid="settings-navbar-desktop"
+      className={cn(
+        "hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2",
+        "md:sticky md:top-8 md:self-start md:pl-8",
+      )}
+    >
+      <Typography.Text className="px-2 text-sm font-normal text-white">
+        {t(I18nKey.SETTINGS$TITLE)}
+      </Typography.Text>
+      <div className="flex flex-col gap-0.5 pt-0.5">
+        {desktopNavItems.map((renderedItem) => (
+          <SidebarNavLink
+            key={renderedItem.item.to}
+            to={renderedItem.item.to}
+            label={t(renderedItem.item.text as I18nKey)}
+            end
+            testId={`sidebar-settings-${renderedItem.item.to}`}
+            icon={renderedItem.item.icon}
+            // Items marked ``disabledByAcp`` (LLM, Condenser, …) are greyed
+            // out and un-clickable while an ACP agent is active — those
+            // pages have nothing to configure while a separate sub-agent
+            // owns the LLM/condenser/MCP layers. The mobile drawer below
+            // already does this via ``SettingsNavLink``; do the same on
+            // desktop. The clientLoader-side redirect in ``routes/
+            // settings.tsx`` handles direct URL navigation.
+            disabled={renderedItem.disabled}
+            disabledReason={
+              renderedItem.disabled && renderedItem.disabledAgentName
+                ? t(I18nKey.SETTINGS$AGENT_DISABLED_TOOLTIP, {
+                    agentName: renderedItem.disabledAgentName,
+                  })
+                : undefined
+            }
+          />
+        ))}
+      </div>
+      <div className="px-2 pt-3">
+        <BackendSyncedSettingsBadge />
+      </div>
+    </aside>
+  );
+}
 
+/**
+ * Mobile overlay + drawer. Rendered outside the scrolling flex row so `position:
+ * fixed` does not interact with flex item sizing on desktop.
+ */
+export function SettingsMobileDrawer({
+  isMobileMenuOpen,
+  onCloseMobileMenu,
+  navigationItems,
+}: SettingsNavigationProps) {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <>
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
           onClick={onCloseMobileMenu}
         />
       )}
@@ -60,19 +100,22 @@ export function SettingsNavigation({
         data-testid="settings-navbar"
         className={cn(
           "flex flex-col gap-6 transition-transform duration-300 ease-in-out",
-          "fixed inset-0 z-50 w-full bg-[#050505] p-4 transform md:hidden",
+          "fixed inset-0 z-50 w-full bg-[var(--oh-surface-deep)] p-4 transform md:hidden",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 ml-1 sm:ml-4.5">
+          <div className="ml-1 flex items-center gap-2 sm:ml-4.5">
             <SettingsIcon width={16} height={16} />
             <Typography.H2>{t(I18nKey.SETTINGS$TITLE)}</Typography.H2>
           </div>
           <button
             type="button"
             onClick={onCloseMobileMenu}
-            className="md:hidden p-0.5 hover:bg-tertiary rounded-md transition-colors cursor-pointer"
+            className={cn(
+              "cursor-pointer rounded-md p-0.5 hover:bg-tertiary md:hidden",
+              navInteractiveTransitionClassName,
+            )}
             aria-label="Close navigation menu"
           >
             <CloseIcon width={32} height={32} />
@@ -99,11 +142,26 @@ export function SettingsNavigation({
                 key={renderedItem.item.to}
                 item={renderedItem.item}
                 onClick={onCloseMobileMenu}
+                disabled={renderedItem.disabled}
+                disabledAgentName={renderedItem.disabledAgentName}
               />
             );
           })}
         </div>
+
+        <div className="px-2 pt-3">
+          <BackendSyncedSettingsBadge />
+        </div>
       </nav>
+    </>
+  );
+}
+
+export function SettingsNavigation(props: SettingsNavigationProps) {
+  return (
+    <>
+      <SettingsDesktopSidebar navigationItems={props.navigationItems} />
+      <SettingsMobileDrawer {...props} />
     </>
   );
 }

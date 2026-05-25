@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LlmProfilesManager } from "./llm-profiles-manager";
 import { ProfileNameInput } from "./profile-name-input";
@@ -21,6 +21,8 @@ import {
 import { SdkSectionSaveControl } from "../sdk-settings/sdk-section-page";
 import { SettingsFormValues } from "#/utils/sdk-settings-schema";
 import { ArrowLeft } from "lucide-react";
+import { Typography } from "#/ui/typography";
+import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -41,6 +43,7 @@ interface EditingProfile {
 
 export function LlmSettingsLocalView() {
   const { t } = useTranslation("openhands");
+  const { setHideSectionHeader } = useSettingsSectionHeader();
   const saveProfile = useSaveLlmProfile();
   const { data: profilesData } = useLlmProfiles();
 
@@ -53,6 +56,11 @@ export function LlmSettingsLocalView() {
     null,
   );
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setHideSectionHeader(viewMode !== "list");
+    return () => setHideSectionHeader(false);
+  }, [viewMode, setHideSectionHeader]);
 
   // Get existing profile names for validation
   const existingNames = useMemo(
@@ -252,23 +260,40 @@ export function LlmSettingsLocalView() {
     );
   }
 
+  const profileEditorTitle =
+    viewMode === "edit"
+      ? t(I18nKey.SETTINGS$EDIT_LLM_PROFILE)
+      : t(I18nKey.SETTINGS$ADD_LLM_PROFILE);
+  const profileEditorDescription =
+    viewMode === "edit" && editingProfile
+      ? t(I18nKey.SETTINGS$PROFILE_LOADED, {
+          name: editingProfile.profile.name,
+        })
+      : t(I18nKey.SETTINGS$PROFILE_SAVE_HINT);
+
   // Create/Edit view: show form with profile name input
   return (
     <div className="flex flex-col gap-6">
       {/* Header with back button */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2">
         <button
           type="button"
           onClick={handleBackToList}
-          className="p-2 rounded-lg hover:bg-tertiary text-neutral-400 hover:text-white transition-colors"
-          aria-label={t(I18nKey.BUTTON$BACK)}
+          className="flex items-center gap-2 self-start rounded-lg p-2 text-[var(--oh-muted)] transition-colors hover:bg-tertiary hover:text-white"
           data-testid="back-to-profiles"
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={20} aria-hidden />
+          <span className="text-sm leading-5">{t(I18nKey.BUTTON$BACK)}</span>
         </button>
-        <h2 className="text-base font-semibold text-white">
-          {t(I18nKey.SETTINGS$BACK_TO_LLM_PROFILES_LIST)}
-        </h2>
+        <Typography.H2 testId="profile-editor-title">
+          {profileEditorTitle}
+        </Typography.H2>
+        <p
+          data-testid="profile-editor-description"
+          className="text-sm leading-5 text-tertiary-light"
+        >
+          {profileEditorDescription}
+        </p>
       </div>
 
       {/* Profile name input */}
@@ -279,7 +304,7 @@ export function LlmSettingsLocalView() {
         isRequired
       />
 
-      {/* LLM Settings Form - key ensures form remounts when switching profiles */}
+      {/* Profile form - key ensures form remounts when switching profiles */}
       <LlmSettingsScreen
         key={
           viewMode === "edit"
@@ -299,7 +324,7 @@ export function LlmSettingsLocalView() {
       />
 
       {/* Action buttons */}
-      <div className="flex justify-end gap-3 pt-4 border-t border-tertiary">
+      <div className="flex justify-start gap-3 pt-4 border-t border-[var(--oh-border)]">
         <BrandButton
           testId="cancel-profile-btn"
           type="button"

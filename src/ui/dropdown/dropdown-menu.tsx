@@ -1,4 +1,5 @@
 import React from "react";
+import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { DropdownOption } from "./types";
 
@@ -15,6 +16,7 @@ interface DropdownMenuProps {
   }) => object;
   footer?: React.ReactNode;
   openUpward?: boolean;
+  fitContent?: boolean;
 }
 
 export function DropdownMenu({
@@ -26,20 +28,22 @@ export function DropdownMenu({
   getItemProps,
   footer,
   openUpward = false,
+  fitContent = false,
 }: DropdownMenuProps) {
   return (
     <div
       className={cn(
-        "absolute z-50 w-full overflow-hidden text-white",
+        "absolute z-50 overflow-hidden text-white",
+        fitContent ? "min-w-full w-max" : "w-full",
         openUpward ? "bottom-full mb-1" : "mt-1",
-        "bg-tertiary rounded-[6px] context-menu-box-shadow py-[6px] px-1",
+        "bg-tertiary rounded-[6px] context-menu-box-shadow p-1",
         "max-h-60 overflow-auto",
         !isOpen && "hidden",
       )}
     >
       <ul {...getMenuProps({ className: "p-0" })}>
         {isOpen && filteredOptions.length === 0 && (
-          <li className="px-2 py-2 text-sm text-gray-400 italic">
+          <li className="px-2 py-2 text-sm text-[var(--oh-muted)] italic">
             {emptyMessage}
           </li>
         )}
@@ -55,8 +59,8 @@ export function DropdownMenu({
                   "text-white focus:outline-none font-normal",
                   "flex items-center gap-2",
                   selectedItem?.value === option.value
-                    ? "bg-[#C9B974] text-black"
-                    : "hover:bg-[#5C5D62]",
+                    ? "bg-[var(--oh-interactive-selected)] text-white"
+                    : "hover:bg-[var(--oh-interactive-hover)]",
                 ),
               })}
             >
@@ -67,7 +71,7 @@ export function DropdownMenu({
       </ul>
       {isOpen && footer ? (
         <>
-          <div className="my-1 h-[1px] w-full bg-[#5C5D62]" />
+          <Divider inset="menu" />
           <div className="p-0">{footer}</div>
         </>
       ) : null}

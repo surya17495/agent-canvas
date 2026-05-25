@@ -11,6 +11,7 @@ import { Provider } from "#/types/settings";
 import { GitRepository } from "#/types/git";
 import { useDebounce } from "#/hooks/use-debounce";
 import { cn } from "#/utils/utils";
+import { formControlFieldClassName } from "#/utils/form-control-classes";
 
 import { ClearButton } from "../shared/clear-button";
 import { ToggleButton } from "../shared/toggle-button";
@@ -277,7 +278,7 @@ export function GitRepoDropdown({
 
     return (
       <div>
-        <Typography.Text className="text-xs text-[#FAFAFA] font-semibold leading-4 pl-2">
+        <Typography.Text className="text-xs text-content-2 font-semibold leading-4 pl-2">
           {t(I18nKey.COMMON$MOST_RECENT)}
         </Typography.Text>
       </div>
@@ -286,10 +287,10 @@ export function GitRepoDropdown({
 
   return (
     <div className={cn("relative", className)}>
-      <div className="relative">
+      <div className="group relative text-[var(--oh-muted)] hover:text-white">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           {isLoadingState ? (
-            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <div className="animate-spin h-4 w-4 border-2 border-white/20 border-t-white rounded-full" />
           ) : (
             <RepoIcon width={16} height={16} />
           )}
@@ -299,11 +300,10 @@ export function GitRepoDropdown({
             disabled,
             placeholder,
             className: cn(
-              "w-full px-3 py-2 border border-[#727987] rounded-sm shadow-none h-[42px] min-h-[42px] max-h-[42px]",
-              "bg-[#454545] text-[#A3A3A3] placeholder:text-[#A3A3A3]",
-              "focus:outline-none focus:ring-0 focus:border-[#727987]",
-              "disabled:bg-[#363636] disabled:cursor-not-allowed disabled:opacity-60",
-              "pl-7 pr-16 text-sm font-normal leading-5", // Space for clear and toggle buttons
+              formControlFieldClassName,
+              "text-inherit shadow-none pl-7 pr-16 text-sm font-normal leading-5",
+              "placeholder:text-[var(--oh-muted)]",
+              "disabled:cursor-not-allowed disabled:opacity-60",
             ),
             // Direct onChange for cursor position preservation
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -322,7 +322,6 @@ export function GitRepoDropdown({
             isOpen={isOpen}
             disabled={disabled}
             getToggleButtonProps={getToggleButtonProps}
-            iconClassName="w-10 h-10"
           />
         </div>
       </div>

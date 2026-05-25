@@ -1,9 +1,10 @@
 import { test, expect, Page } from "@playwright/test";
+import { seedLocalStorage } from "./support/seed-local-storage";
 
 /**
  * Visual snapshot tests for the MCP page (/mcp).
  *
- * The MCP marketplace catalog is hardcoded in src/constants/mcp-marketplace.ts,
+ * The MCP marketplace catalog is imported from @openhands/extensions/mcps,
  * so it never requires an API call.  Installed servers are read from
  * settings.agent_settings.mcp_config (SDK format: { mcpServers: { ... } }).
  *
@@ -32,9 +33,7 @@ async function dismissConsentModal(page: Page) {
  * instead of trying to suppress it here.
  */
 async function setupMocks(page: Page) {
-  await page.addInitScript(() => {
-    window.localStorage.setItem("openhands-onboarded", "true");
-  });
+  await seedLocalStorage(page);
 
   await page.route("**/api/conversations/search**", async (route) => {
     await route.fulfill({

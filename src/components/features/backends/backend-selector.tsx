@@ -21,9 +21,13 @@ import {
   ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS,
   triggerEnvironmentSwitch,
 } from "#/components/features/backends/environment-switch-store";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { useConversationStore } from "#/stores/conversation-store";
 import { AddBackendModal } from "./add-backend-modal";
 import { BackendStatusDot } from "./backend-status-dot";
 import { ManageBackendsModal } from "./manage-backends-modal";
+import { cn } from "#/utils/utils";
+import { formControlTransitionClassName } from "#/utils/form-control-classes";
 
 const VALUE_SEPARATOR = "::";
 
@@ -73,7 +77,7 @@ function buildOptions(
         prefix,
       });
     } else {
-      // Personal-workspace rule (per the SaaS contract): the org whose
+      // Personal-workspace rule (per the cloud contract): the org whose
       // id matches the calling user's id is the user's personal
       // workspace. We resolve `user_id` once per backend (via /me on any
       // one org) and apply it across all orgs of that backend.
@@ -115,6 +119,12 @@ interface BackendSelectorProps {
   onOpenAddBackend?: () => void;
   /** Same as onOpenAddBackend but for the Manage Backends modal. */
   onOpenManageBackends?: () => void;
+  /**
+   * Whether the surrounding sidebar rail is in its collapsed variant. Passed
+   * down from `SidebarRailBody` so the mobile drawer (which always renders
+   * the expanded rail) can override the persisted desktop value.
+   */
+  sidebarCollapsed?: boolean;
 }
 
 export function BackendSelector({
@@ -124,6 +134,7 @@ export function BackendSelector({
   onSelectOption,
   onOpenAddBackend,
   onOpenManageBackends,
+  sidebarCollapsed = false,
 }: BackendSelectorProps = {}) {
   const { t } = useTranslation("openhands");
   const { backends, active, setActive } = useActiveBackendContext();
@@ -163,6 +174,17 @@ export function BackendSelector({
   const activeValue = makeOptionValue(active.backend.id, active.orgId);
   const activeOption = options.find((o) => o.value === activeValue);
   const isSettingsActive = Boolean(settingsMatch || settingsSubrouteMatch);
+  const settingsLabel = t(I18nKey.SIDEBAR$SETTINGS);
+  const isRightPanelShown = useConversationStore(
+    (state) => state.isRightPanelShown,
+  );
+  // When the sidebar rail is expanded, `placement="left"` hugs the main
+  // canvas and reads awkwardly; prefer above the control. When the rail is
+  // collapsed, keep left except on active conversation + open right drawer.
+  const settingsTooltipPlacement =
+    !sidebarCollapsed || (conversationMatch && isRightPanelShown)
+      ? "top"
+      : "left";
 
   const someCloudLoading = Object.values(cloudOrgs).some((c) => c.isLoading);
 
@@ -174,7 +196,7 @@ export function BackendSelector({
   // (UI says "Local", APIs hit cloud). When we detect the drift, snap
   // the selection onto the personal-workspace org (or, lacking a /me
   // result, the first org). The selection is recorded locally only;
-  // the SaaS request scope follows from the API key's bound org and the
+  // the cloud request scope follows from the API key's bound org and the
   // X-Org-Id header sent by `callCloudProxy`, so the cloud UI's
   // org choice is never mutated as a side effect.
   React.useEffect(() => {
@@ -220,13 +242,13 @@ export function BackendSelector({
   );
 
   const addBackendFooter = (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col">
       <button
         type="button"
         data-testid="add-backend-menu-item"
         onMouseDown={preventDropdownMenuClose}
         onClick={openAddBackendModal}
-        className="flex w-full items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer text-white hover:bg-[#5C5D62]"
+        className="flex w-full items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer text-white hover:bg-[var(--oh-interactive-hover)]"
       >
         <Plus width={16} height={16} className="text-white shrink-0" />
         {t(I18nKey.BACKEND$ADD)}
@@ -236,7 +258,7 @@ export function BackendSelector({
         data-testid="manage-backends-menu-item"
         onMouseDown={preventDropdownMenuClose}
         onClick={openManageBackendsModal}
-        className="flex w-full items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer text-white hover:bg-[#5C5D62]"
+        className="flex w-full items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer text-white hover:bg-[var(--oh-interactive-hover)]"
       >
         <Settings width={16} height={16} className="text-white shrink-0" />
         {t(I18nKey.BACKEND$MANAGE)}
@@ -259,6 +281,7 @@ export function BackendSelector({
         setTimeout(resolve, ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS);
       });
 
+      // @spec BM-002 — Switching backends keeps the user on the same page
       if (conversationMatch) navigate("/conversations");
       else if (automationDetailMatch) navigate("/automations");
 
@@ -304,23 +327,36 @@ export function BackendSelector({
             placeholder={active.backend.name}
             loading={someCloudLoading}
             options={options}
-            className="bg-transparent border-transparent hover:bg-[#1f1f1f99] focus-within:bg-[#1f1f1f99]"
+            className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-[var(--oh-surface-raised)] focus-within:bg-[var(--oh-surface-raised)] focus-within:border-transparent focus-within:ring-0"
           />
         </div>
         {!hideTrigger ? (
-          <button
-            type="button"
-            data-testid="backend-selector-settings-link"
-            aria-label={t(I18nKey.SIDEBAR$SETTINGS)}
-            onClick={() => navigate("/settings")}
-            className={
-              isSettingsActive
-                ? "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-[#1f1f1f99] text-white font-medium transition-colors"
-                : "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[#8C8C8C] hover:text-white hover:bg-[#1f1f1f99] transition-colors"
-            }
+          <StyledTooltip
+            content={settingsLabel}
+            placement={settingsTooltipPlacement}
+            offset={10}
           >
-            <Settings width={16} height={16} />
-          </button>
+            <button
+              type="button"
+              data-testid="backend-selector-settings-link"
+              data-active={isSettingsActive}
+              aria-label={settingsLabel}
+              onClick={() => navigate("/settings")}
+              className={
+                isSettingsActive
+                  ? cn(
+                      "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-white font-normal cursor-pointer",
+                      formControlTransitionClassName,
+                    )
+                  : cn(
+                      "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                      formControlTransitionClassName,
+                    )
+              }
+            >
+              <Settings width={16} height={16} />
+            </button>
+          </StyledTooltip>
         ) : null}
       </div>
       {addBackendModalOpen ? (

@@ -8,6 +8,10 @@ import { sanitizeQuery } from "#/utils/sanitize-query";
 import { PRODUCT_URL } from "#/utils/constants";
 import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  OH_STATUS_ERROR_COLOR,
+  OH_STATUS_SUCCESS_COLOR,
+} from "#/constants/status-colors";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -166,7 +170,7 @@ export const getFileExtension = (fileName: string): string => {
  * (`/api/v1/git/installations/search` → `/api/v1/git/repositories/search?installation_id=…`)
  * for the given provider/backend combo.
  *
- * Mirrors OpenHands' SaaS frontend (parameterized by `app_mode`):
+ * Mirrors OpenHands' cloud frontend (parameterized by `app_mode`):
  *   - bitbucket / bitbucket_data_center → always installation-based
  *   - github → installation-based ONLY when the active backend is cloud
  *   - gitlab / azure_devops / forgejo → direct (search) flow
@@ -627,7 +631,7 @@ export const getStatusClassName = (status: string) => {
   if (status === "in_progress") {
     return "bg-yellow-800 text-yellow-200";
   }
-  return "bg-gray-700 text-gray-300";
+  return "bg-tertiary text-[var(--oh-text-tertiary)]";
 };
 
 /**
@@ -727,7 +731,7 @@ export const isTaskPolling = (taskStatus: string | null | undefined): boolean =>
  *   isStartingStatus: false,
  *   isStopStatus: false,
  *   curAgentState: AgentState.RUNNING
- * }) // Returns "#BCFF8C"
+ * }) // Returns "var(--oh-status-success)"
  */
 export const getStatusColor = (options: {
   isPausing: boolean;
@@ -754,7 +758,7 @@ export const getStatusColor = (options: {
   // Show task status if we're polling a task
   if (isTask && taskStatus) {
     if (taskStatus === "ERROR") {
-      return "#FF684E";
+      return OH_STATUS_ERROR_COLOR;
     }
     return "#FFD600";
   }
@@ -766,9 +770,9 @@ export const getStatusColor = (options: {
     return "#ffffff";
   }
   if (curAgentState === AgentState.ERROR) {
-    return "#FF684E";
+    return OH_STATUS_ERROR_COLOR;
   }
-  return "#BCFF8C";
+  return OH_STATUS_SUCCESS_COLOR;
 };
 
 interface GetStatusTextArgs {

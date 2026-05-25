@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { I18nKey } from "#/i18n/declaration";
+import { useFilesTabStore } from "#/stores/files-tab-store";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
 import { useHasAttachedSource } from "#/hooks/use-has-attached-source";
@@ -11,6 +12,10 @@ import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edi
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
+import {
+  useWorkspaceMutationCounter,
+  withWorkspaceCacheBuster,
+} from "#/stores/use-workspace-mutation-counter";
 import { sortFilesByPriority } from "#/utils/file-priority";
 import { FileQuickRow } from "#/components/features/files-tab/file-quick-row";
 import { FileTreeView } from "#/components/features/files-tab/file-tree-view";
@@ -64,14 +69,19 @@ function FilesTab() {
   const filesQuery = useWorkspaceFiles();
   const paths = useMemo(() => filesQuery.data ?? [], [filesQuery.data]);
 
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const selectedPath = useFilesTabStore((s) => s.selectedPath);
+  const setSelectedPath = useFilesTabStore((s) => s.setSelectedPath);
 
   // Pre-fetch the selected file's content here too so the toolbar's
   // "open in new window" link can reach for its `staticUrl`. react-query
   // dedupes against `FileContentViewer`'s identical call, so this costs
   // nothing extra.
   const selectedFileContent = useWorkspaceFileContent(selectedPath);
-  const selectedFileStaticUrl = selectedFileContent.data?.staticUrl ?? null;
+  const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
+  const selectedFileStaticUrl = withWorkspaceCacheBuster(
+    selectedFileContent.data?.staticUrl ?? null,
+    mutationCounter,
+  );
 
   // Auto-select the highest-priority file the first time we load the list,
   // so users see something useful immediately.
@@ -101,7 +111,7 @@ function FilesTab() {
     >
       {/* Top toolbar: diff/files + rich/plain toggles (left-aligned) plus
           the refresh button on the right. */}
-      <div className="flex items-center gap-3 px-3 py-1.5 border-b border-[#3A3D44]">
+      <div className="flex items-center gap-3 px-3 py-1.5 border-b border-[var(--oh-border)]">
         <SegmentedToggle<"on" | "off">
           ariaLabel={t(I18nKey.FILES$DIFF_VIEW)}
           testId="files-tab-diff-toggle"
@@ -129,7 +139,7 @@ function FilesTab() {
         <div className="ml-auto flex items-center gap-1">
           {/* Open the currently-selected file in a new browser tab. Only
               meaningful while we're showing a file (not the diff view) and
-              we've resolved its browser-renderable preview URL. */}
+              we've resolved its staticUrl from the workspace fileserver. */}
           {!diffViewEnabled && selectedFileStaticUrl && (
             <a
               href={selectedFileStaticUrl}
@@ -138,7 +148,7 @@ function FilesTab() {
               aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
               title={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
               data-testid="files-tab-open-in-new-window"
-              className="flex items-center justify-center w-[26px] py-1 rounded-[7px] hover:bg-[#474A54] cursor-pointer text-white"
+              className="flex items-center justify-center w-[26px] py-1 rounded-[7px] hover:bg-[var(--oh-interactive-hover)] cursor-pointer text-white"
             >
               <LinkExternalIcon width={14} height={14} />
             </a>
@@ -150,7 +160,7 @@ function FilesTab() {
             aria-label={t(I18nKey.FILES$REFRESH)}
             title={t(I18nKey.FILES$REFRESH)}
             data-testid="files-tab-refresh"
-            className="flex items-center justify-center w-[26px] py-1 rounded-[7px] hover:enabled:bg-[#474A54] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center w-[26px] py-1 rounded-[7px] hover:enabled:bg-[var(--oh-interactive-hover)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshIcon
               width={12.75}
@@ -169,7 +179,7 @@ function FilesTab() {
       ) : (
         <div className="flex flex-1 flex-col min-h-0">
           {filesQuery.isLoading ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-[#9299AA]">
+            <div className="flex flex-1 items-center justify-center text-sm text-[var(--oh-muted)]">
               {t(I18nKey.FILES$LOADING_FILES)}
             </div>
           ) : (
@@ -184,7 +194,7 @@ function FilesTab() {
               <div className="flex flex-1 min-h-0">
                 {isTreeVisible && (
                   <aside
-                    className="w-56 shrink-0 border-r border-[#3A3D44] overflow-y-auto custom-scrollbar-always"
+                    className="w-56 shrink-0 border-r border-[var(--oh-border)] overflow-y-auto custom-scrollbar-always"
                     data-testid="files-tab-tree"
                   >
                     <FileTreeView
@@ -204,7 +214,7 @@ function FilesTab() {
                       viewMode={contentViewMode}
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-sm text-[#9299AA]">
+                    <div className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]">
                       {t(I18nKey.FILES$NO_FILE_SELECTED)}
                     </div>
                   )}

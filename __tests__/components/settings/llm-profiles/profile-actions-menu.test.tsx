@@ -173,11 +173,12 @@ describe("ProfileActionsMenu", () => {
     expect(menuItems).toHaveLength(4);
   });
 
-  it("Delete button has red text styling", () => {
+  it("styles Delete like other menu items", () => {
     render(<ProfileActionsMenu {...defaultProps} />);
 
     const deleteButton = screen.getByTestId("profile-delete");
-    expect(deleteButton).toHaveClass("text-red-400");
+    expect(deleteButton).not.toHaveAttribute("data-destructive");
+    expect(deleteButton.className).not.toMatch(/text-red/);
   });
 
   it("does not call onClose when clicking inside the menu container", () => {

@@ -1,11 +1,13 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { Trash2 } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { SettingsInput } from "../settings-input";
 import { SettingsDropdownInput } from "../settings-dropdown-input";
 import { BrandButton } from "../brand-button";
 import { OptionalTag } from "../optional-tag";
 import { cn } from "#/utils/utils";
+import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 
 type MCPServerType = "sse" | "stdio" | "shttp";
 
@@ -27,6 +29,8 @@ interface MCPServerFormProps {
   existingServers?: MCPServerConfig[];
   onSubmit: (server: MCPServerConfig) => void;
   onCancel: () => void;
+  onDelete?: () => void;
+  isActionDisabled?: boolean;
 }
 
 export function MCPServerForm({
@@ -35,6 +39,8 @@ export function MCPServerForm({
   existingServers,
   onSubmit,
   onCancel,
+  onDelete,
+  isActionDisabled = false,
 }: MCPServerFormProps) {
   const { t } = useTranslation("openhands");
   const [serverType, setServerType] = React.useState<MCPServerType>(
@@ -290,7 +296,7 @@ export function MCPServerForm({
           isClearable={false}
           allowsCustomValue={false}
           required
-          wrapperClassName={cn("w-full", "max-w-[680px]")}
+          wrapperClassName="w-full min-w-0"
         />
       )}
 
@@ -303,7 +309,7 @@ export function MCPServerForm({
             name="url"
             type="url"
             label={t(I18nKey.SETTINGS$MCP_URL)}
-            className="w-full max-w-[680px]"
+            className="w-full min-w-0"
             required
             defaultValue={server?.url || ""}
             placeholder="https://api.example.com"
@@ -314,7 +320,7 @@ export function MCPServerForm({
             name="api_key"
             type="password"
             label={t(I18nKey.SETTINGS$MCP_API_KEY)}
-            className="w-full max-w-[680px]"
+            className="w-full min-w-0"
             showOptionalTag
             defaultValue={server?.api_key || ""}
             placeholder={t(I18nKey.SETTINGS$MCP_API_KEY_PLACEHOLDER)}
@@ -326,7 +332,7 @@ export function MCPServerForm({
               name="timeout"
               type="number"
               label={t(I18nKey.SETTINGS$MCP_TIMEOUT_LABEL)}
-              className="w-full max-w-[680px]"
+              className="w-full min-w-0"
               showOptionalTag
               defaultValue={server?.timeout?.toString() || ""}
               placeholder="60"
@@ -344,7 +350,7 @@ export function MCPServerForm({
             name="name"
             type="text"
             label={t(I18nKey.SETTINGS$MCP_NAME)}
-            className="w-full max-w-[680px]"
+            className="w-full min-w-0"
             required
             defaultValue={server?.name || ""}
             placeholder="my-mcp-server"
@@ -356,13 +362,13 @@ export function MCPServerForm({
             name="command"
             type="text"
             label={t(I18nKey.SETTINGS$MCP_COMMAND)}
-            className="w-full max-w-[680px]"
+            className="w-full min-w-0"
             required
             defaultValue={server?.command || ""}
             placeholder="npx"
           />
 
-          <label className="flex flex-col gap-2.5 w-full max-w-[680px]">
+          <label className="flex flex-col gap-2.5 w-full min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm">
                 {t(I18nKey.SETTINGS$MCP_COMMAND_ARGUMENTS)}
@@ -376,8 +382,9 @@ export function MCPServerForm({
               defaultValue={server?.args?.join("\n") || ""}
               placeholder="arg1&#10;arg2&#10;arg3"
               className={cn(
-                "bg-tertiary border border-[#717888] w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
-                "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+                formControlMultilineFieldClassName,
+                "resize-none placeholder:italic",
+                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
               )}
             />
             <p className="text-xs text-tertiary-alt">
@@ -385,7 +392,7 @@ export function MCPServerForm({
             </p>
           </label>
 
-          <label className="flex flex-col gap-2.5 w-full max-w-[680px]">
+          <label className="flex flex-col gap-2.5 w-full min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm">
                 {t(I18nKey.SETTINGS$MCP_ENVIRONMENT_VARIABLES)}
@@ -399,28 +406,55 @@ export function MCPServerForm({
               defaultValue={formatEnvironmentVariables(server?.env)}
               placeholder="KEY1=value1&#10;KEY2=value2"
               className={cn(
-                "resize-none",
-                "bg-tertiary border border-[#717888] rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
-                "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+                formControlMultilineFieldClassName,
+                "resize-none placeholder:italic",
+                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
               )}
             />
           </label>
         </>
       )}
 
-      <div className="flex items-center gap-4">
-        <BrandButton
-          testId="cancel-button"
-          type="button"
-          variant="secondary"
-          onClick={onCancel}
-        >
-          {t(I18nKey.BUTTON$CANCEL)}
-        </BrandButton>
-        <BrandButton testId="submit-button" type="submit" variant="primary">
-          {mode === "add" && t(I18nKey.SETTINGS$MCP_ADD_SERVER)}
-          {mode === "edit" && t(I18nKey.SETTINGS$MCP_SAVE_SERVER)}
-        </BrandButton>
+      <div
+        className={cn(
+          "flex w-full items-center gap-2",
+          onDelete ? "justify-between" : "justify-end",
+        )}
+      >
+        {onDelete ? (
+          <BrandButton
+            testId="mcp-custom-editor-delete"
+            type="button"
+            variant="secondary"
+            onClick={onDelete}
+            isDisabled={isActionDisabled}
+            startContent={
+              <Trash2 aria-hidden className="size-4" strokeWidth={2} />
+            }
+          >
+            {t(I18nKey.BUTTON$DELETE)}
+          </BrandButton>
+        ) : null}
+        <div className="flex items-center gap-2">
+          <BrandButton
+            testId="cancel-button"
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            isDisabled={isActionDisabled}
+          >
+            {t(I18nKey.BUTTON$CANCEL)}
+          </BrandButton>
+          <BrandButton
+            testId="submit-button"
+            type="submit"
+            variant="primary"
+            isDisabled={isActionDisabled}
+          >
+            {mode === "add" && t(I18nKey.SETTINGS$MCP_ADD_SERVER)}
+            {mode === "edit" && t(I18nKey.SETTINGS$MCP_SAVE_SERVER)}
+          </BrandButton>
+        </div>
       </div>
     </form>
   );

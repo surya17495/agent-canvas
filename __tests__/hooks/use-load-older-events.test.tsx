@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import EventService from "#/api/event-service/event-service.api";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 import { useEventStore } from "#/stores/use-event-store";
 import { INITIAL_HISTORY_PAGE_SIZE } from "#/hooks/query/use-conversation-history";
 import type { Conversation } from "#/api/open-hands.types";
@@ -14,10 +15,12 @@ import type { EventSearchPage } from "#/api/event-service/event-service.types";
 
 vi.mock("#/api/event-service/event-service.api");
 vi.mock("#/hooks/query/use-user-conversation");
-
-const mockUseActiveBackend = vi.fn();
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => mockUseActiveBackend(),
+vi.mock("#/hooks/query/use-conversation-history", () => ({
+  INITIAL_HISTORY_PAGE_SIZE: 50,
+  useConversationHistory: vi.fn(() => ({
+    data: undefined,
+    isFetched: false,
+  })),
 }));
 
 function makeConversation(): Conversation {
@@ -77,13 +80,6 @@ describe("useLoadOlderEvents", () => {
       useEventStore.getState().clearEvents();
     });
 
-    // Default to a local backend so existing tests exercise the
-    // pagination path. Individual tests can override to cloud.
-    mockUseActiveBackend.mockReturnValue({
-      backend: { kind: "local" },
-      orgId: null,
-    });
-
     vi.mocked(useUserConversation).mockReturnValue({
       data: makeConversation(),
       isLoading: false,
@@ -92,6 +88,11 @@ describe("useLoadOlderEvents", () => {
       error: null,
       refetch: vi.fn(),
     } as any);
+
+    vi.mocked(useConversationHistory).mockReturnValue({
+      data: undefined,
+      isFetched: false,
+    } as ReturnType<typeof useConversationHistory>);
   });
 
   afterEach(() => {
@@ -296,39 +297,7 @@ describe("useLoadOlderEvents", () => {
     expect(result.current.hasMore).toBe(true);
   });
 
-
-
-
-  it("disables REST older-event pagination for cloud backends", async () => {
-    // Arrange: cloud backend active, plus an anchor event in the store
-    // that would otherwise let `loadOlder` issue a `timestamp__lt` request.
-    mockUseActiveBackend.mockReturnValue({
-      backend: { kind: "cloud" },
-      orgId: "org-1",
-    });
-    act(() => {
-      useEventStore
-        .getState()
-        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
-    });
-    const spy = vi.spyOn(EventService, "searchEvents");
-
-    const { result } = renderHook(() => useLoadOlderEvents("conv-1"), {
-      wrapper,
-    });
-
-    // Act
-    await act(async () => {
-      await result.current.loadOlder();
-    });
-
-    // Assert: cloud short-circuits — no request fires and hasMore is false
-    // from first render so the chat scroll handler never triggers.
-    expect(spy).not.toHaveBeenCalled();
-    expect(result.current.hasMore).toBe(false);
-  });
-
-  it("stops paginating and throws when the oldest loaded event is missing a timestamp", async () => {
+  it("stops paginating silently when the oldest loaded event is missing a timestamp", async () => {
     act(() => {
       useEventStore
         .getState()
@@ -340,22 +309,66 @@ describe("useLoadOlderEvents", () => {
       wrapper,
     });
 
-    let thrown: unknown;
     await act(async () => {
-      try {
-        await result.current.loadOlder();
-      } catch (error) {
-        thrown = error;
-      }
+      await result.current.loadOlder();
     });
 
     expect(spy).not.toHaveBeenCalled();
-    expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toContain(
-      "oldest loaded event has no timestamp",
-    );
     await waitFor(() => {
       expect(result.current.hasMore).toBe(false);
     });
+  });
+
+  it("does not paginate on start-task placeholder conversation ids", async () => {
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
+    });
+
+    const spy = vi.spyOn(EventService, "searchEvents");
+    const { result } = renderHook(() => useLoadOlderEvents("task-abc"), {
+      wrapper,
+    });
+
+    expect(result.current.hasMore).toBe(false);
+
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("mirrors initial REST history hasMore=false so short chats do not backfill", async () => {
+    vi.mocked(useConversationHistory).mockReturnValue({
+      data: {
+        events: [makeEvent("evt-only", "2024-06-01T00:00:00Z")],
+        hasMore: false,
+        nextPageId: null,
+      },
+      isFetched: true,
+    } as ReturnType<typeof useConversationHistory>);
+
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvent(makeEvent("evt-only", "2024-06-01T00:00:00Z"));
+    });
+
+    const spy = vi.spyOn(EventService, "searchEvents");
+    const { result } = renderHook(() => useLoadOlderEvents("conv-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasMore).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });

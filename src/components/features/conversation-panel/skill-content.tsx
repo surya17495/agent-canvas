@@ -12,21 +12,18 @@ export function SkillContent({ content }: SkillContentProps) {
 
   return (
     <div className="mt-2">
-      <Typography.Text className="text-sm font-semibold text-gray-300 mb-2">
+      <Typography.Text className="text-sm font-semibold text-[var(--oh-text-tertiary)] mb-2">
         {t(I18nKey.COMMON$CONTENT)}
       </Typography.Text>
       <Pre
-        size="default"
+        size="small"
         font="mono"
         lineHeight="relaxed"
-        background="dark"
-        textColor="light"
         padding="medium"
         borderRadius="medium"
-        shadow="inner"
         maxHeight="small"
         overflow="auto"
-        className="mt-2"
+        className="mt-2 border border-[var(--oh-border)] bg-base text-[var(--oh-text-tertiary)]"
       >
         {content || t(I18nKey.SKILLS_MODAL$NO_CONTENT)}
       </Pre>

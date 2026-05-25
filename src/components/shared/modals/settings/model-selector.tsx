@@ -9,6 +9,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { cn } from "#/utils/utils";
+import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
+import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
@@ -117,7 +119,7 @@ export function ModelSelector({
   return (
     <div
       className={cn(
-        "flex flex-col md:flex-row w-full max-w-[680px] justify-between gap-4 md:gap-[46px]",
+        "flex flex-col md:flex-row w-full min-w-0 justify-between gap-4 md:gap-[46px]",
         wrapperClassName,
       )}
     >
@@ -132,7 +134,6 @@ export function ModelSelector({
           name="llm-provider-input"
           isDisabled={isDisabled}
           aria-label={t(I18nKey.LLM$PROVIDER)}
-          placeholder={t(I18nKey.LLM$SELECT_PROVIDER_PLACEHOLDER)}
           isClearable={false}
           onSelectionChange={(e) => {
             if (e?.toString()) handleChangeProvider(e.toString());
@@ -141,16 +142,21 @@ export function ModelSelector({
           defaultSelectedKey={selectedProvider ?? undefined}
           selectedKey={selectedProvider}
           classNames={{
-            popoverContent: "bg-tertiary rounded-xl border border-[#717888]",
+            popoverContent:
+              "bg-content1 rounded-xl border border-[var(--oh-border)]",
+            selectorButton: heroUiAutocompleteSelectorButtonClassName,
           }}
+          selectorButtonProps={{ disableRipple: true }}
           inputProps={{
             classNames: {
-              inputWrapper:
-                "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic",
+              inputWrapper: formControlSettingsFieldClassName,
             },
           }}
         >
-          <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
+          <AutocompleteSection
+            title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+            classNames={{ heading: "text-[var(--oh-muted)]" }}
+          >
             {verifiedProviders.map((provider) => (
               <AutocompleteItem
                 data-testid={`provider-item-${provider.name}`}
@@ -161,7 +167,10 @@ export function ModelSelector({
             ))}
           </AutocompleteSection>
           {unverifiedProviders.length > 0 ? (
-            <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
+            <AutocompleteSection
+              title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
+              classNames={{ heading: "text-[var(--oh-muted)]" }}
+            >
               {unverifiedProviders.map((provider) => (
                 <AutocompleteItem key={provider.name}>
                   {mapProvider(provider.name)}
@@ -194,7 +203,6 @@ export function ModelSelector({
           isLoading={isLoadingModels}
           name="llm-model-input"
           aria-label={t(I18nKey.LLM$MODEL)}
-          placeholder={t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER)}
           isClearable={false}
           onSelectionChange={(e) => {
             if (e?.toString()) handleChangeModel(e.toString());
@@ -203,22 +211,30 @@ export function ModelSelector({
           selectedKey={selectedModel}
           defaultSelectedKey={selectedModel ?? undefined}
           classNames={{
-            popoverContent: "bg-tertiary rounded-xl border border-[#717888]",
+            popoverContent:
+              "bg-content1 rounded-xl border border-[var(--oh-border)]",
+            selectorButton: heroUiAutocompleteSelectorButtonClassName,
           }}
+          selectorButtonProps={{ disableRipple: true }}
           inputProps={{
             classNames: {
-              inputWrapper:
-                "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic",
+              inputWrapper: formControlSettingsFieldClassName,
             },
           }}
         >
-          <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
+          <AutocompleteSection
+            title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+            classNames={{ heading: "text-[var(--oh-muted)]" }}
+          >
             {verifiedModels.map((model) => (
               <AutocompleteItem key={model.name}>{model.name}</AutocompleteItem>
             ))}
           </AutocompleteSection>
           {unverifiedModels.length > 0 ? (
-            <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
+            <AutocompleteSection
+              title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
+              classNames={{ heading: "text-[var(--oh-muted)]" }}
+            >
               {unverifiedModels.map((model) => (
                 <AutocompleteItem
                   data-testid={`model-item-${model.name}`}
