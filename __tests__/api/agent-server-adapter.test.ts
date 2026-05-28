@@ -36,6 +36,8 @@ vi.mock("#/api/agent-server-config", () => ({
   getAgentServerWorkingDir: mockGetAgentServerWorkingDir,
   getConfiguredWorkerUrls: vi.fn(() => []),
   shouldLoadPublicSkills: vi.fn(() => true),
+  shouldLoadProjectSkills: vi.fn(() => true),
+  shouldLoadOrgSkills: vi.fn(() => false),
 }));
 
 vi.mock("#/api/agent-server-compatibility", () => ({
@@ -117,6 +119,8 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings.agent_context).toEqual({
       load_public_skills: true,
       load_user_skills: true,
+      load_project_skills: true,
+      load_org_skills: false,
     });
     expect(payload.agent_settings.agent).toBe("CodeActAgent");
     expect(payload.agent_settings.enable_switch_llm_tool).toBe(true);
@@ -824,6 +828,8 @@ describe("agent_settings runtime services suffix", () => {
     expect(payload.agent_settings.agent_context).toEqual({
       load_public_skills: true,
       load_user_skills: true,
+      load_project_skills: true,
+      load_org_skills: false,
     });
   });
 
@@ -901,6 +907,8 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.agent_context).toEqual({
       load_public_skills: true,
       load_user_skills: true,
+      load_project_skills: true,
+      load_org_skills: false,
     });
     expect(payload.tags).toEqual({ [ACP_SERVER_TAG_KEY]: "claude-code" });
   });
