@@ -16,23 +16,6 @@
     "tr": "Bunu kullanmak için yeni bir sohbet başlatın",
     "uk": "Почніть нову розмову, щоб скористатися цим"
   },
-  "AGENT_PICKER$REASON_AFTER_FIRST_MESSAGE": {
-    "en": "Available after the first message",
-    "ja": "最初のメッセージの後に利用可能",
-    "zh-CN": "首条消息后可用",
-    "zh-TW": "首則訊息後可用",
-    "ko-KR": "첫 메시지 후 사용 가능",
-    "no": "Tilgjengelig etter den første meldingen",
-    "ar": "متاح بعد الرسالة الأولى",
-    "de": "Nach der ersten Nachricht verfügbar",
-    "fr": "Disponible après le premier message",
-    "it": "Disponibile dopo il primo messaggio",
-    "pt": "Disponível após a primeira mensagem",
-    "es": "Disponible después del primer mensaje",
-    "ca": "Disponible després del primer missatge",
-    "tr": "İlk mesajdan sonra kullanılabilir",
-    "uk": "Доступно після першого повідомлення"
-  },
   "AGENT_PICKER$START_NEW_WITH": {
     "en": "Start new conversation with {{name}}",
     "ja": "{{name}} で新しい会話を開始",

@@ -151,13 +151,13 @@ describe("getBundleAction", () => {
       sessionInitialized: false,
     });
 
-    it("same provider, runtime-capable, no session yet → disabled (uninitialized)", () => {
+    it("same provider, runtime-capable, no session yet → start-new-only (uninitialized) — lossless fork before the ACP subprocess spawns", () => {
       expect(
         getBundleAction(
           acpBundle("claude-code", "claude-sonnet-4-6"),
           uninitCtx,
         ),
-      ).toEqual({ action: "disabled", reason: "uninitialized" });
+      ).toEqual({ action: "start-new-only", reason: "uninitialized" });
     });
 
     it("session-initialized gate does not affect cross-provider (still start-new-only)", () => {

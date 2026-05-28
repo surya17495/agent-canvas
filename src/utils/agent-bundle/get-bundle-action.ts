@@ -19,15 +19,19 @@ import type {
  * | home (no conversation)          | any bundle                     | `set-default` |
  * | native conversation             | native profile                 | `switch-live` |
  * | native conversation             | any ACP bundle                 | `start-new-only` (different-agent) |
- * | ACP conversation (provider P)   | P, other model, runtime-switch | `switch-live` if session initialized; else `disabled` (uninitialized) |
+ * | ACP conversation (provider P)   | P, other model, runtime-switch | `switch-live` if session initialized; else `start-new-only` (uninitialized) |
  * | ACP conversation (provider P)   | P, other model, no runtime sw. | `start-new-only` (unsupported) |
  * | ACP conversation                | other provider / native        | `start-new-only` (different-agent) |
  *
  * Capability has two inputs: the *static* per-provider
  * ``supportsRuntimeSwitch`` (from the SDK registry) and the *dynamic*
- * ``sessionInitialized`` (whether the ACP session exists yet — it 409s
- * before the first message). Both are required to tell "switch now" from
- * "after the first message" from "this agent can't switch live".
+ * ``sessionInitialized`` (the ACP subprocess only spawns on the first
+ * ``run()`` — see ``ACPAgent._start_acp_server``; ``switch_acp_model`` 409s
+ * with ``RuntimeError("ACP session is not initialized…")`` until then).
+ * Both inputs are required to tell "switch now" from "fork instead — the
+ * subprocess hasn't started so the change is lossless" from "this agent
+ * can't switch live at all". The uninitialized fork is the canvas-only
+ * answer until the SDK exposes a pre-spawn ``acp_model`` patch.
  */
 export function getBundleAction(
   bundle: AgentModelBundle,
@@ -76,10 +80,14 @@ export function getBundleAction(
   }
 
   if (!ctx.sessionInitialized) {
-    // Runtime-capable, but the session isn't up yet — the agent-server 409s
-    // until the first message. Phase 2 may offer this as a (lossless)
-    // new-conversation instead.
-    return { action: "disabled", reason: "uninitialized" };
+    // Runtime-capable, but the ACP subprocess hasn't been spawned yet —
+    // ``_start_acp_server`` only runs on the conversation's first ``run()``,
+    // so ``switch_acp_model`` would 409 until the first message. The source
+    // conversation is by definition empty (zero events), so a fork carries
+    // no work loss; ``useStartNewWithBundle`` deletes the empty source on
+    // success so the user sees a single conversation on the new model
+    // rather than a leftover empty one.
+    return { action: "start-new-only", reason: "uninitialized" };
   }
 
   return { action: "switch-live" };

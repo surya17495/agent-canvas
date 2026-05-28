@@ -42,13 +42,13 @@ function useReasonText(): (reason?: BundleActionReason) => string | undefined {
   const { t } = useTranslation("openhands");
   return (reason) => {
     switch (reason) {
-      case "uninitialized":
-        return t(I18nKey.AGENT_PICKER$REASON_AFTER_FIRST_MESSAGE);
       case "different-agent":
       case "unsupported":
         return t(I18nKey.AGENT_PICKER$REASON_NEW_CONVERSATION);
       default:
-        // "cloud" rows are never rendered (cloud shows a read-only label).
+        // "cloud" rows are never rendered (cloud shows a read-only label);
+        // "uninitialized" is always a fork (actionable) — its row goes through
+        // the "Start new conversation with X" branch, not this reason map.
         return undefined;
     }
   };
