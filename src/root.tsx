@@ -1,5 +1,6 @@
 import {
   Links,
+  LinksFunction,
   Meta,
   MetaFunction,
   Navigate,
@@ -68,6 +69,10 @@ function AgentServerBootstrapLoading() {
     </main>
   );
 }
+
+export const links: LinksFunction = () => [
+  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+];
 
 export const meta: MetaFunction = () => [
   { title: "OpenHands" },
