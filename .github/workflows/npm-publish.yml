@@ -92,9 +92,11 @@ jobs:
 
       # Resolve the npm dist-tag from the version's pre-release identifier:
       #   alpha  →  --tag alpha   (e.g. 1.0.0-alpha.1)
-      #   beta   →  --tag beta    (e.g. 1.0.0-beta.1)
-      #   rc     →  --tag rc      (e.g. 1.0.0-rc.1)
+      #   beta   →  --tag latest  (e.g. 1.0.0-beta.1)
+      #   rc     →  --tag latest  (e.g. 1.0.0-rc.1)
       #   stable →  --tag latest  (e.g. 1.0.0)
+      # Beta and RC publish as `latest` so `npm install @openhands/agent-canvas`
+      # resolves to the most recent release until the first stable version ships.
       # Note: OIDC trusted-publishing tokens cover only the `npm publish` call
       # itself; a separate `npm dist-tag add` would fail with E401, so the tag
       # is resolved and passed directly in one step.
@@ -104,10 +106,6 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           if [[ "$VERSION" == *-alpha* ]]; then
             DIST_TAG="alpha"
-          elif [[ "$VERSION" == *-beta* ]]; then
-            DIST_TAG="beta"
-          elif [[ "$VERSION" == *-rc* ]]; then
-            DIST_TAG="rc"
           else
             DIST_TAG="latest"
           fi
