@@ -55,8 +55,10 @@ code review and dependency updates, then have your personal agents running on yo
 
 ```sh
 npm install -g @openhands/agent-canvas
-agent-canvas
+openhands
 ```
+
+The package also exposes `agent-canvas` as a backwards-compatible command name.
 
 ### Option 2: With a Docker Sandbox
 

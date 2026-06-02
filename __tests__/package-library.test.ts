@@ -11,6 +11,7 @@ const packageJson = JSON.parse(
   module: string;
   types: string;
   exports: Record<string, unknown>;
+  bin: Record<string, string>;
   scripts: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -22,6 +23,10 @@ describe("package library metadata", () => {
     expect(packageJson.main).toBe("./dist/index.cjs");
     expect(packageJson.module).toBe("./dist/index.js");
     expect(packageJson.types).toBe("./dist/index.d.ts");
+    expect(packageJson.bin).toEqual({
+      "agent-canvas": "bin/agent-canvas.mjs",
+      openhands: "bin/agent-canvas.mjs",
+    });
     expect(packageJson.exports).toMatchObject({
       ".": {
         types: "./dist/index.d.ts",

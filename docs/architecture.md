@@ -59,7 +59,8 @@ Agent Canvas supports several modes:
 
 The npm package is `@openhands/agent-canvas`. The package exposes:
 
-- The `agent-canvas` binary for launching a local stack.
+- The `openhands` binary for launching a local stack, matching the primary quickstart command.
+- The `agent-canvas` binary as a backwards-compatible command alias.
 - A standalone app build.
 - Library entrypoints for browser, conversation, files, settings, sidebar, terminal, and i18n modules.
 
