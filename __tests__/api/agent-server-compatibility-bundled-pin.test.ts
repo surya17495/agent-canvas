@@ -28,6 +28,14 @@ const cloudBackend: Backend = {
   kind: "cloud",
 };
 
+const localBackend: Backend = {
+  id: "local",
+  name: "Local",
+  host: "http://localhost:9000",
+  apiKey: "local-key",
+  kind: "local",
+};
+
 beforeEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
@@ -43,7 +51,7 @@ afterEach(() => {
 
 describe("loadAgentServerInfo", () => {
   it("targets the bundled local backend even when the active backend is cloud", async () => {
-    setRegisteredBackends([cloudBackend]);
+    setRegisteredBackends([localBackend, cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
     await loadAgentServerInfo();

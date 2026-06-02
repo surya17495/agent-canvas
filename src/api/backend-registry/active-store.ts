@@ -1,4 +1,3 @@
-import { makeDefaultLocalBackend } from "./default-backend";
 import {
   readStoredActiveBackend,
   readStoredBackends,
@@ -15,17 +14,22 @@ interface Snapshot {
   active: ResolvedActiveBackend;
 }
 
-/**
- * Pick the local backend the GUI should talk to for local-protocol calls
- * (settings, conversations, secrets, …). Prefers the user's first
- * registered local backend. As a last resort — when the registry has no
- * local entry at all — synthesize one from env/agent-server-config so
- * synchronous call sites never have to handle a `null` backend; the
- * synthesized entry is never persisted.
- */
-function pickLocalBackend(backends: Backend[]): Backend {
-  const firstLocal = backends.find((b) => b.kind === "local");
-  return firstLocal ?? makeDefaultLocalBackend();
+export const NO_BACKEND_ID = "no-backend";
+
+export const NO_BACKEND: Backend = {
+  id: NO_BACKEND_ID,
+  name: "No Backend Available",
+  host: "",
+  apiKey: "",
+  kind: "local",
+};
+
+export function isNoBackend(backend: Backend): boolean {
+  return backend.id === NO_BACKEND_ID;
+}
+
+function pickFallbackBackend(backends: Backend[]): Backend {
+  return backends[0] ?? NO_BACKEND;
 }
 
 function computeSnapshot(
@@ -48,7 +52,7 @@ function computeSnapshot(
 
   // @spec BM-003 — Fallback on active backend removal
   if (!activeBackend) {
-    activeBackend = pickLocalBackend(backends);
+    activeBackend = pickFallbackBackend(backends);
     activeOrgId = null;
   }
 
@@ -81,13 +85,13 @@ export function getActiveBackend(): ResolvedActiveBackend {
  * skills/MCP/secrets, etc.) speak the local agent-server's protocol —
  * they would fail against a cloud host. When the user has chosen a
  * cloud backend as active, those calls fall back to the first registered
- * local backend (or the env-derived default if none exists). Cloud-only
- * call sites import `getActiveBackend` directly.
+ * local backend. If no local backend is registered, callers should skip
+ * local-only work instead of synthesizing one.
  */
-export function getEffectiveLocalBackend(): Backend {
+export function getEffectiveLocalBackend(): Backend | null {
   const active = snapshot.active.backend;
-  if (active.kind === "local") return active;
-  return pickLocalBackend(snapshot.backends);
+  if (active.kind === "local" && !isNoBackend(active)) return active;
+  return snapshot.backends.find((backend) => backend.kind === "local") ?? null;
 }
 
 export function getRegisteredBackends(): Backend[] {

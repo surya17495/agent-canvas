@@ -79,7 +79,7 @@ describe("callCloudProxy X-Org-Id injection", () => {
     // calls callCloudProxy(b) for every registered cloud backend. Sending
     // the active backend's orgId across an unrelated API key would cause
     // the cloud backend to 403 on api_key_org_id / X-Org-Id mismatch.
-    setRegisteredBackends([cloudPersonal, cloudAcme]);
+    setRegisteredBackends([localBackend, cloudPersonal, cloudAcme]);
     setActiveSelection({
       backendId: cloudPersonal.id,
       orgId: "org-personal-uuid",

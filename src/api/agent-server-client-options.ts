@@ -1,10 +1,6 @@
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
-import {
-  getAgentServerSessionApiKey,
-  getAgentServerWorkingDir,
-} from "./agent-server-config";
+import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
-import { DEFAULT_LOCAL_BACKEND_ID } from "./backend-registry/default-backend";
 import type { Backend } from "./backend-registry/types";
 
 export interface AgentServerClientOverrides {
@@ -22,6 +18,22 @@ export interface AgentServerClientOptions {
   workingDir: string;
   timeout?: number;
 }
+
+export class NoBackendAvailableError extends Error {
+  constructor() {
+    super("No backend is configured.");
+    this.name = "NoBackendAvailableError";
+  }
+}
+
+export const isNoBackendAvailableError = (
+  error: unknown,
+): error is NoBackendAvailableError =>
+  error instanceof NoBackendAvailableError ||
+  (typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "NoBackendAvailableError");
 
 function normalizeHost(host: string): string {
   return host.replace(/\/+$/, "");
@@ -41,18 +53,25 @@ export function getAgentServerClientOptions(
   overrides: AgentServerClientOverrides = {},
 ): AgentServerClientOptions {
   const backend = getEffectiveLocalBackend();
-  const configuredSessionApiKey = getAgentServerSessionApiKey();
-  const defaultLocalApiKeyOverride =
-    backend.id === DEFAULT_LOCAL_BACKEND_ID ? configuredSessionApiKey : null;
+  if (!backend && !overrides.host && !overrides.conversationUrl) {
+    throw new NoBackendAvailableError();
+  }
+
+  const fallbackBackend: Backend = backend ?? {
+    id: "override-only",
+    name: "Override",
+    host: "",
+    apiKey: "",
+    kind: "local",
+  };
   const apiKey =
     overrides.sessionApiKey ??
     overrides.apiKey ??
-    defaultLocalApiKeyOverride ??
-    backend.apiKey ??
+    fallbackBackend.apiKey ??
     undefined;
 
   return {
-    host: resolveHost(overrides, backend),
+    host: resolveHost(overrides, fallbackBackend),
     ...(apiKey ? { apiKey } : {}),
     workingDir: overrides.workingDir ?? getAgentServerWorkingDir(),
     ...(overrides.timeout !== undefined ? { timeout: overrides.timeout } : {}),

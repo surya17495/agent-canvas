@@ -691,10 +691,18 @@ describe("AgentServerConversationService", () => {
       kind: "cloud",
     };
 
+    const localBackend: Backend = {
+      id: "local",
+      name: "Local",
+      host: "http://localhost:9000",
+      apiKey: "local-key",
+      kind: "local",
+    };
+
     beforeEach(() => {
       window.localStorage.clear();
       __resetActiveStoreForTests();
-      setRegisteredBackends([cloudBackend]);
+      setRegisteredBackends([localBackend, cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
       vi.mocked(axios.post).mockReset();
     });

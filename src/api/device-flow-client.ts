@@ -10,6 +10,7 @@
  * is required to use the frontend, the proxy is always available.
  */
 
+import { NoBackendAvailableError } from "./agent-server-client-options";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
 import { buildAuthHeaders } from "./backend-registry/auth";
 
@@ -86,6 +87,7 @@ async function makeProxiedRequest(
   signal?: AbortSignal,
 ): Promise<Response> {
   const local = getEffectiveLocalBackend();
+  if (!local) throw new NoBackendAvailableError();
   const proxyUrl = `${local.host.replace(/\/+$/, "")}/api/cloud-proxy`;
 
   const response = await fetch(proxyUrl, {

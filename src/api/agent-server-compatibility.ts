@@ -92,6 +92,11 @@ export async function loadAgentServerInfo() {
   // backend when that backend is cloud, because cloud hosts don't
   // expose /api/server_info and would fail with a CORS error besides.
   const local = getEffectiveLocalBackend();
+  if (!local) {
+    clearCachedAgentServerInfo();
+    return null;
+  }
+
   const clientOptions = getAgentServerClientOptions({
     host: local.host,
     sessionApiKey: local.apiKey || null,
