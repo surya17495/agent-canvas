@@ -29,7 +29,7 @@ export const useModelInterceptor = (
   const queryClient = useQueryClient();
   const { switchAndLog } = useSwitchLlmProfileAndLog();
   const { backend, orgId } = useActiveBackend();
-  const isLocal = isAgentServerBackend(backend);
+  const usesAgentServerBackend = isAgentServerBackend(backend);
   const { t } = useTranslation();
 
   return useCallback(
@@ -37,7 +37,7 @@ export const useModelInterceptor = (
       const trimmed = message.trim();
       const isModel =
         trimmed === MODEL_COMMAND || trimmed.startsWith(MODEL_PREFIX);
-      if (!isModel || !isLocal) {
+      if (!isModel || !usesAgentServerBackend) {
         onSubmit(message);
         return;
       }
@@ -82,7 +82,7 @@ export const useModelInterceptor = (
     },
     [
       conversationId,
-      isLocal,
+      usesAgentServerBackend,
       onSubmit,
       showProfiles,
       queryClient,

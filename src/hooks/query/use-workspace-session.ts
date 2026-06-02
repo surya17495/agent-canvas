@@ -56,9 +56,11 @@ export function useWorkspaceSession(): {
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
-  const isLocal = isAgentServerBackend(getActiveBackend().backend);
+  const usesAgentServerBackend = isAgentServerBackend(
+    getActiveBackend().backend,
+  );
 
-  const enabled = runtimeIsReady && !!conversationId && isLocal;
+  const enabled = runtimeIsReady && !!conversationId && usesAgentServerBackend;
 
   const query = useQuery<WorkspaceSession>({
     queryKey: [

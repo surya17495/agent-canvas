@@ -34,7 +34,7 @@ export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
   const { navigate } = useNavigation();
-  const isLocal = isAgentServerBackend(backend);
+  const usesAgentServerBackend = isAgentServerBackend(backend);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [pendingWorkspace, setPendingWorkspace] =
@@ -50,12 +50,14 @@ export function HomeChatLauncher() {
   const { images, files, imagesMarkedUploadAsFile, clearAllFiles } =
     useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
-  const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
-  const workspacesUnsupportedMessage = isLocal
+  const { error: workspacesError } = useLocalWorkspaces({
+    enabled: usesAgentServerBackend,
+  });
+  const workspacesUnsupportedMessage = usesAgentServerBackend
     ? getWorkspacesUnsupportedMessage(workspacesError, t)
     : null;
 
-  const hasSelection = isLocal
+  const hasSelection = usesAgentServerBackend
     ? !!pendingWorkspace
     : !!pendingRepository && !!pendingBranch;
 
@@ -78,9 +80,9 @@ export function HomeChatLauncher() {
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
     };
-    if (isLocal && pendingWorkspace) {
+    if (usesAgentServerBackend && pendingWorkspace) {
       variables = { ...variables, workingDir: pendingWorkspace.path };
-    } else if (!isLocal && pendingRepository && pendingBranch) {
+    } else if (!usesAgentServerBackend && pendingRepository && pendingBranch) {
       variables = {
         ...variables,
         repository: {
@@ -112,7 +114,8 @@ export function HomeChatLauncher() {
         if (hasAttachments) {
           // Cloud sandboxes provision asynchronously; uploads and the first
           // message must target the runtime URL, not the bundled local server.
-          const shouldDeferAttachments = !isLocal || isTaskConversation;
+          const shouldDeferAttachments =
+            !usesAgentServerBackend || isTaskConversation;
 
           if (shouldDeferAttachments) {
             const taskId =
@@ -211,7 +214,7 @@ export function HomeChatLauncher() {
           />
         ) : (
           <OpenLauncherButton
-            kind={isLocal ? "local" : "cloud"}
+            kind={usesAgentServerBackend ? "local" : "cloud"}
             onClick={() => setIsDialogOpen(true)}
             disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
             disabledTooltip={workspacesUnsupportedMessage}
@@ -219,7 +222,7 @@ export function HomeChatLauncher() {
         )}
       </div>
 
-      {isLocal ? (
+      {usesAgentServerBackend ? (
         <OpenWorkspaceDialog
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}

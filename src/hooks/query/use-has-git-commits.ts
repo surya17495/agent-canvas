@@ -32,7 +32,7 @@ export function useHasGitCommits(options?: { enabled?: boolean }): {
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
   const { backend } = useActiveBackend();
-  const isLocalBackend = isAgentServerBackend(backend);
+  const usesAgentServerBackend = isAgentServerBackend(backend);
 
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
@@ -41,7 +41,7 @@ export function useHasGitCommits(options?: { enabled?: boolean }): {
 
   const enabled =
     (options?.enabled ?? true) &&
-    isLocalBackend &&
+    usesAgentServerBackend &&
     runtimeIsReady &&
     !!conversationId &&
     !!workingDir;

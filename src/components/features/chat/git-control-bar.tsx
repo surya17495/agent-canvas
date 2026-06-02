@@ -45,9 +45,9 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
     (state) => state.markPendingMessageError,
   );
   const { backend } = useActiveBackend();
-  const isLocalBackend = isAgentServerBackend(backend);
+  const usesAgentServerBackend = isAgentServerBackend(backend);
   const { providers } = useUserProviders();
-  const providerTokensReady = isLocalBackend || providers.length > 0;
+  const providerTokensReady = usesAgentServerBackend || providers.length > 0;
 
   const { data: conversation } = useActiveConversation();
   const { repositoryInfo } = useTaskPolling();
@@ -201,12 +201,12 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
   // empty-state button there. A repo or workspace label inferred from local git
   // metadata is still informational and stays visible.
   const showRepoButton =
-    !isLocalBackend || !!selectedRepository || !!workspaceName;
+    !usesAgentServerBackend || !!selectedRepository || !!workspaceName;
   // On a local backend the informational pill (e.g. workspace name, or a repo
   // detected without a recognized provider) should not open the remote-repo
   // modal — that flow is cloud-only. Disable the button in that case so the
   // click is a no-op. Linkable repos render as <a> and ignore `disabled`.
-  const isRepoButtonInert = isLocalBackend && !hasRepository;
+  const isRepoButtonInert = usesAgentServerBackend && !hasRepository;
 
   // True when the bar will render at least one chip (cloud always shows
   // "Open Repository"; local needs a repo or a workspace name; selected

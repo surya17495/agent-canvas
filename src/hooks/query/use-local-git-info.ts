@@ -98,7 +98,7 @@ export const useLocalGitInfo = () => {
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
   const { backend } = useActiveBackend();
-  const isLocalBackend = isAgentServerBackend(backend);
+  const usesAgentServerBackend = isAgentServerBackend(backend);
 
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
@@ -109,7 +109,7 @@ export const useLocalGitInfo = () => {
   const hasConversationBranch = !!conversation?.selected_branch;
 
   const queryEnabled =
-    isLocalBackend &&
+    usesAgentServerBackend &&
     runtimeIsReady &&
     !!conversationId &&
     !!workingDir &&

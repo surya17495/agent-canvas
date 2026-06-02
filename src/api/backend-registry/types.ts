@@ -1,6 +1,8 @@
 export type BackendKind = "local" | "remote" | "cloud";
 
-export function isAgentServerBackend(backend: Pick<Backend, "kind">): boolean {
+export function isAgentServerBackend(
+  backend: Pick<Backend, "kind">,
+): backend is Pick<Backend, "kind"> & { kind: "local" | "remote" } {
   return backend.kind === "local" || backend.kind === "remote";
 }
 

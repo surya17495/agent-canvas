@@ -39,7 +39,7 @@ const ONBOARDING_LLM_OVERRIDES = {
 export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
-  const isLocalBackend = isAgentServerBackend(backend);
+  const usesAgentServerBackend = isAgentServerBackend(backend);
   const saveProfile = useSaveLlmProfile();
   const activateProfile = useActivateLlmProfile();
   const [saveControl, setSaveControl] =
@@ -50,7 +50,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   // truth; without this step the form save only updates agent_settings and
   // the new config never shows up in the profiles list ("ghost profile").
   const persistAsProfile = React.useCallback(async () => {
-    if (!isLocalBackend || !saveControl) return;
+    if (!usesAgentServerBackend || !saveControl) return;
     const values = saveControl.values;
     const model =
       typeof values["llm.model"] === "string" ? values["llm.model"] : "";
@@ -78,7 +78,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
       // user is not blocked from completing onboarding.
       console.error("Failed to persist onboarding LLM as profile:", error);
     }
-  }, [isLocalBackend, saveControl, saveProfile, activateProfile]);
+  }, [usesAgentServerBackend, saveControl, saveProfile, activateProfile]);
 
   const handleSaveSuccess = React.useCallback(async () => {
     setIsFinalizing(true);
