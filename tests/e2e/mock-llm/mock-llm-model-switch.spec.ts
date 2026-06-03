@@ -10,7 +10,9 @@
  *   2. Conversation + switch: start a conversation from the home page,
  *      wait for the agent to reply, then type `/model <profile-B>` in the
  *      chat input. Verify the "Switched to profile" confirmation renders in
- *      the chat UI. Verify the switch_profile POST was made to the agent-server.
+ *      the chat UI. Verify the switch_llm POST was made to the agent-server
+ *      (the frontend fetches the full encrypted profile config and sends it
+ *      via /switch_llm rather than calling /switch_profile by name).
  *
  *   3. Post-switch verification: send another message after the switch
  *      and verify the agent responds, proving the conversation continues
@@ -175,9 +177,9 @@ test.describe("mock-LLM /model slash command", () => {
     test.setTimeout(120_000);
 
     // Track whether the switch_llm POST was intercepted.
-    // The switchProfile service method fetches the full profile config and
-    // then calls conversationClient.switchLLM(), which POSTs to
-    // /api/conversations/{id}/switch_llm with the resolved LLM config.
+    // The frontend calls POST /api/conversations/{id}/switch_llm with the full
+    // encrypted profile config (model + api_key + base_url) rather than calling
+    // /switch_profile by name — this avoids an extra agent-server secrets fetch.
     let switchLlmCalled = false;
     let switchLlmBody: Record<string, unknown> | null = null;
     page.on("request", (req) => {
@@ -236,13 +238,14 @@ test.describe("mock-LLM /model slash command", () => {
 
     // ── Verify: the switch_llm POST was made ──
 
-    await test.step("verify switch_llm API was called", async () => {
+    await test.step("verify switch_llm API was called with profile B model", async () => {
       expect(
         switchLlmCalled,
         "POST /switch_llm should have been called",
       ).toBe(true);
       expect(switchLlmBody).toBeTruthy();
-      // The switch_llm API sends the resolved LLM config with model field
+      // ConversationClient.switchLLM posts { llm: <config> } to switch_llm,
+      // so the model is nested under the "llm" key in the HTTP body.
       const llm = switchLlmBody!.llm as Record<string, unknown> | undefined;
       expect(llm, "switch_llm body should contain an llm object").toBeTruthy();
       expect(
