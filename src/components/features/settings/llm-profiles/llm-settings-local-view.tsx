@@ -11,6 +11,7 @@ import { ProfileNameInput } from "./profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LlmSettingsScreen } from "#/routes/llm-settings";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
+import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
@@ -53,6 +54,20 @@ interface EditingProfile {
   baseConfig: Record<string, unknown>;
 }
 
+export function shouldReapplyProfileAfterSave({
+  activeProfileName,
+  originalName,
+  savedName,
+}: {
+  activeProfileName: string | null | undefined;
+  originalName: string | null | undefined;
+  savedName: string;
+}): boolean {
+  if (!activeProfileName) return false;
+  if (originalName) return activeProfileName === originalName;
+  return activeProfileName === savedName;
+}
+
 /**
  * LlmSettingsLocalView provides an integrated view for managing LLM profiles
  * in local agent-server mode. It supports listing, creating, and editing profiles.
@@ -67,6 +82,7 @@ export function LlmSettingsLocalView() {
   const { t } = useTranslation("openhands");
   const { setHideSectionHeader } = useSettingsSectionHeader();
   const saveProfile = useSaveLlmProfile();
+  const activateProfile = useActivateLlmProfile();
   const { data: profilesData } = useLlmProfiles();
   const { data: settings } = useSettings();
   const { data: agentSchema } = useAgentSettingsSchema(
@@ -277,7 +293,11 @@ export function LlmSettingsLocalView() {
     const originalName = editingProfile?.profile.name;
     const isRename =
       viewMode === "edit" && originalName && originalName !== trimmedName;
-    const wasActive = profilesData?.active_profile === originalName;
+    const shouldReapplyActiveProfile = shouldReapplyProfileAfterSave({
+      activeProfileName: profilesData?.active_profile,
+      originalName,
+      savedName: trimmedName,
+    });
 
     setIsSaving(true);
     try {
@@ -298,10 +318,11 @@ export function LlmSettingsLocalView() {
         },
       });
 
-      // If the renamed profile was the active profile, re-activate it
-      // (the rename operation doesn't automatically update active_profile)
-      if (isRename && wasActive) {
-        await ProfilesService.activateProfile(trimmedName);
+      // Conversation start uses agent_settings.llm, not the profile row
+      // directly. Re-applying an active profile keeps those settings in sync
+      // after editing or recreating a profile with the active profile name.
+      if (shouldReapplyActiveProfile) {
+        await activateProfile.mutateAsync(trimmedName);
       }
 
       displaySuccessToast(
@@ -324,6 +345,7 @@ export function LlmSettingsLocalView() {
     editingProfile,
     profilesData?.active_profile,
     saveProfile,
+    activateProfile,
     t,
     handleBackToList,
   ]);
