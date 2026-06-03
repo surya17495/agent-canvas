@@ -448,6 +448,124 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
   });
 
+  describe("ACP reserved credentials (StaticSecret path)", () => {
+    // Settings factory for a containerized ACP conversation.
+    const acpSettings = (overrides: Record<string, unknown> = {}) => ({
+      ...DEFAULT_SETTINGS,
+      agent_settings: {
+        ...DEFAULT_SETTINGS.agent_settings,
+        agent_kind: "acp",
+        acp_server: "codex",
+        acp_command: ["npx", "-y", "@zed-industries/codex-acp"],
+        acp_model: "gpt-5.5/medium",
+        ...overrides,
+      },
+    });
+
+    it("emits reserved ACP credentials as inline StaticSecrets and mirrors them onto agent_context", () => {
+      // This is the validated container contract: the SDK's acp_file_secrets
+      // defaults read agent_context.secrets at spawn time to materialise the
+      // *_JSON blob — a LookupSecret wouldn't be resolved in time.
+      const payload = buildStartConversationRequest({
+        settings: acpSettings(),
+        acpStaticSecrets: { CODEX_AUTH_JSON: '{"tokens":{"access":"abc"}}' },
+      }) as {
+        agent_settings: {
+          acp_model?: string;
+          agent_context?: { secrets?: Record<string, unknown> };
+        };
+        secrets: Record<string, unknown>;
+      };
+
+      const expected = {
+        kind: "StaticSecret",
+        value: '{"tokens":{"access":"abc"}}',
+      };
+      expect(payload.secrets.CODEX_AUTH_JSON).toEqual(expected);
+      expect(payload.agent_settings.agent_context?.secrets?.CODEX_AUTH_JSON).toEqual(
+        expected,
+      );
+      // The configured model rides along unchanged.
+      expect(payload.agent_settings.acp_model).toBe("gpt-5.5/medium");
+    });
+
+    it("sends the Vertex-safe model + Vertex credentials for Gemini", () => {
+      const payload = buildStartConversationRequest({
+        settings: acpSettings({
+          acp_server: "gemini-cli",
+          acp_command: ["npx", "-y", "@google/gemini-cli", "--acp"],
+          acp_model: "gemini-2.5-flash",
+        }),
+        acpStaticSecrets: {
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: '{"type":"service_account"}',
+          GOOGLE_CLOUD_PROJECT: "my-project",
+          GOOGLE_CLOUD_LOCATION: "us-central1",
+          GOOGLE_GENAI_USE_VERTEXAI: "true",
+        },
+      }) as {
+        agent_settings: { acp_model?: string };
+        secrets: Record<string, { kind: string; value?: string }>;
+      };
+
+      expect(payload.agent_settings.acp_model).toBe("gemini-2.5-flash");
+      expect(payload.secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON).toEqual({
+        kind: "StaticSecret",
+        value: '{"type":"service_account"}',
+      });
+      expect(payload.secrets.GOOGLE_CLOUD_PROJECT).toEqual({
+        kind: "StaticSecret",
+        value: "my-project",
+      });
+      expect(payload.secrets.GOOGLE_GENAI_USE_VERTEXAI).toEqual({
+        kind: "StaticSecret",
+        value: "true",
+      });
+    });
+
+    it("lets a StaticSecret override a same-named LookupSecret from the global store", () => {
+      // A reserved credential saved as a global secret would otherwise be sent
+      // as a LookupSecret too; the inline StaticSecret must win so the value
+      // reaches the CLI before spawn.
+      const payload = buildStartConversationRequest({
+        settings: acpSettings(),
+        customSecrets: [{ name: "CODEX_AUTH_JSON" }],
+        acpStaticSecrets: { CODEX_AUTH_JSON: "inline-value" },
+      }) as { secrets: Record<string, { kind: string; value?: string }> };
+
+      expect(payload.secrets.CODEX_AUTH_JSON).toEqual({
+        kind: "StaticSecret",
+        value: "inline-value",
+      });
+    });
+
+    it("drops empty / whitespace-only StaticSecret values (a deliberate skip)", () => {
+      const payload = buildStartConversationRequest({
+        settings: acpSettings(),
+        acpStaticSecrets: { CODEX_AUTH_JSON: "   ", OPENAI_API_KEY: "" },
+      }) as { secrets?: Record<string, unknown> };
+
+      expect(payload.secrets).toBeUndefined();
+    });
+
+    it("trims surrounding whitespace from the StaticSecret value", () => {
+      const payload = buildStartConversationRequest({
+        settings: acpSettings(),
+        acpStaticSecrets: { OPENAI_API_KEY: "  sk-abc\n" },
+      }) as { secrets: Record<string, { value?: string }> };
+
+      expect(payload.secrets.OPENAI_API_KEY.value).toBe("sk-abc");
+    });
+
+    it("ignores acpStaticSecrets for a non-ACP (OpenHands) conversation", () => {
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        acpStaticSecrets: { CODEX_AUTH_JSON: "value" },
+      }) as { secrets?: Record<string, unknown> };
+
+      expect(payload.secrets).toBeUndefined();
+    });
+  });
+
   describe("canvas_ui tool injection", () => {
     it("always registers canvas_ui_tool in tool_module_qualnames, even when no user settings supply qualnames", () => {
       const payload = buildStartConversationRequest({

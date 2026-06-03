@@ -9,7 +9,10 @@ import {
   type OnboardingAgentId,
 } from "#/components/features/onboarding/steps/choose-agent-step";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import { ACP_PROVIDERS } from "#/constants/acp-providers";
+import {
+  ACP_PROVIDERS,
+  getAcpPreferredDefaultModel,
+} from "#/constants/acp-providers";
 import { I18nKey } from "#/i18n/declaration";
 
 function renderStep(initial: OnboardingAgentId = "openhands") {
@@ -191,9 +194,12 @@ describe("ChooseAgentStep", () => {
     expect(
       (call.agent_settings_diff as Record<string, unknown>).acp_server,
     ).toBe(expected);
+    // Canvas preselects the *preferred* default model — the registry default
+    // for Codex, but the Vertex-safe override (gemini-2.5-flash) for Gemini, so
+    // a fresh container doesn't hit gemini-cli's preview default that 404s.
     expect(
       (call.agent_settings_diff as Record<string, unknown>).acp_model,
-    ).toBe(ACP_PROVIDERS.find(({ key }) => key === expected)?.default_model);
+    ).toBe(getAcpPreferredDefaultModel(expected));
   });
 
   it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {

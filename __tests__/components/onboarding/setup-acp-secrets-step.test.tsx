@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { SetupAcpSecretsStep } from "#/components/features/onboarding/steps/setup-acp-secrets-step";
+import {
+  SetupAcpSecretsStep,
+  backendRequiresAcpCredentials,
+} from "#/components/features/onboarding/steps/setup-acp-secrets-step";
 import { type OnboardingAgentId } from "#/components/features/onboarding/steps/choose-agent-step";
 import { SecretsService } from "#/api/secrets-service";
 
@@ -264,5 +267,79 @@ describe("SetupAcpSecretsStep", () => {
     expect(
       screen.queryByTestId("onboarding-acp-auth-checking"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the Codex subscription blob as a multiline textarea", () => {
+    renderStep("codex");
+
+    const blob = screen.getByTestId("onboarding-acp-secret-CODEX_AUTH_JSON");
+    expect(blob.tagName).toBe("TEXTAREA");
+  });
+
+  it("requires credentials (blocks Next) on a logged-out local backend, then unblocks once one is entered", async () => {
+    // local + "unauthenticated" = a fresh container with no host login → the
+    // step is required until the user provides a credential.
+    acpAuthStatusMock.mockReturnValue({
+      status: "unauthenticated",
+      isChecking: false,
+      isSupported: true,
+    });
+    const { onNext, user } = renderStep("claude-code");
+
+    expect(
+      screen.getByTestId("onboarding-acp-secrets-blocked"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("onboarding-acp-secrets-next")).toBeDisabled();
+
+    await user.type(
+      screen.getByTestId("onboarding-acp-secret-CLAUDE_CODE_OAUTH_TOKEN"),
+      "oauth-token",
+    );
+
+    expect(
+      screen.queryByTestId("onboarding-acp-secrets-blocked"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-acp-secrets-next"),
+    ).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("onboarding-acp-secrets-next"));
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not block Next when the login probe is unknown (permissive for native dev)", () => {
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: false,
+    });
+    renderStep("claude-code");
+
+    expect(
+      screen.queryByTestId("onboarding-acp-secrets-blocked"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-acp-secrets-next"),
+    ).not.toBeDisabled();
+  });
+});
+
+describe("backendRequiresAcpCredentials", () => {
+  it("never requires credentials when a login is already detected", () => {
+    expect(backendRequiresAcpCredentials("local", "authenticated")).toBe(false);
+    expect(backendRequiresAcpCredentials("cloud", "authenticated")).toBe(false);
+  });
+
+  it("always requires credentials on a cloud backend (no host login)", () => {
+    expect(backendRequiresAcpCredentials("cloud", "unauthenticated")).toBe(true);
+    expect(backendRequiresAcpCredentials("cloud", "unknown")).toBe(true);
+  });
+
+  it("requires credentials on a logged-out local backend (a fresh container)", () => {
+    expect(backendRequiresAcpCredentials("local", "unauthenticated")).toBe(true);
+  });
+
+  it("stays permissive on a local backend the probe can't classify", () => {
+    expect(backendRequiresAcpCredentials("local", "unknown")).toBe(false);
   });
 });

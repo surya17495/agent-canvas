@@ -190,28 +190,160 @@ export interface ACPProviderSecretField {
   /** Secret name and env var (e.g. ``"ANTHROPIC_API_KEY"``). Must satisfy the
    * secret-name pattern ``^[a-zA-Z][a-zA-Z0-9_]{0,63}$``. */
   name: string;
-  /** Render as a masked password input (API keys) rather than a plain-text
-   * input (base URLs). Every field is optional regardless — the whole step is
-   * skippable — so this only controls masking, not whether the field gates. */
+  /** Render as a masked password input (API keys, OAuth tokens, credential
+   * blobs) rather than a plain-text input (base URLs, project IDs). Every field
+   * is optional regardless — the whole step is skippable — so this only
+   * controls masking, not whether the field gates. */
   secret?: boolean;
+  /** Render as a multi-line textarea rather than a single-line input. Set for
+   * file-content credentials the user pastes verbatim (Codex ``auth.json``,
+   * Gemini Vertex service-account / ADC JSON). */
+  multiline?: boolean;
+  /**
+   * The credential must reach a containerized agent-server as a
+   * {@link https://github.com/OpenHands/software-agent-sdk StaticSecret}
+   * (literal value sent inline in the start request), not a back-end lookup.
+   * The SDK's ``acp_file_secrets`` defaults read ``agent_context.secrets`` at
+   * spawn time — before any ``LookupSecret`` URL could be resolved — to
+   * materialise the ``*_JSON`` blobs to disk and point the CLI's data-dir env
+   * at them. Set ``true`` for every credential canvas collects here except the
+   * optional base URL (see the {@link getAcpProviderSecrets} note on
+   * ``ANTHROPIC_BASE_URL``).
+   */
+  reserved?: boolean;
   /** i18n key for the one-line helper text under the field. */
   hint_key: I18nKey;
+  /**
+   * Interpolation values for {@link hint_key} (e.g. ``{ file: "~/.codex/auth.json" }``
+   * for the shared "paste the file contents" hint). Omitted for hints that
+   * take no parameters.
+   */
+  hint_values?: Record<string, string>;
+}
+
+/**
+ * Reserved credentials — beyond the registry's API key / base URL — that canvas
+ * collects per provider so a *containerized* agent-server (no host login state)
+ * can authenticate the ACP CLI. These are the file-content blobs and Vertex
+ * config the SDK's ``acp_file_secrets`` materialisation consumes; they have no
+ * registry env-var entry because they're a deployment concern, not a model
+ * registry field. Keyed by ACP provider registry key.
+ *
+ * Sourced from the validated container contract (agent-canvas#1013/#1014):
+ *   - Codex subscription → ``CODEX_AUTH_JSON`` (contents of ``~/.codex/auth.json``;
+ *     materialised back to ``auth.json`` under ``CODEX_HOME``).
+ *   - Claude subscription → ``CLAUDE_CODE_OAUTH_TOKEN`` (Pro/Max OAuth token).
+ *   - Gemini Vertex → ``GOOGLE_APPLICATION_CREDENTIALS_JSON`` (SA / ADC JSON,
+ *     materialised to a file referenced by ``GOOGLE_APPLICATION_CREDENTIALS``)
+ *     plus ``GOOGLE_CLOUD_PROJECT`` / ``GOOGLE_CLOUD_LOCATION`` /
+ *     ``GOOGLE_GENAI_USE_VERTEXAI``.
+ */
+const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
+  codex: [
+    {
+      name: "CODEX_AUTH_JSON",
+      secret: true,
+      multiline: true,
+      reserved: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_FILE_BLOB_HINT,
+      hint_values: { file: "~/.codex/auth.json" },
+    },
+  ],
+  "claude-code": [
+    {
+      name: "CLAUDE_CODE_OAUTH_TOKEN",
+      secret: true,
+      reserved: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_OAUTH_TOKEN_HINT,
+    },
+  ],
+  "gemini-cli": [
+    {
+      name: "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+      secret: true,
+      multiline: true,
+      reserved: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_FILE_BLOB_HINT,
+      hint_values: {
+        file: "~/.config/gcloud/application_default_credentials.json",
+      },
+    },
+    {
+      name: "GOOGLE_CLOUD_PROJECT",
+      reserved: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_GCP_PROJECT_HINT,
+    },
+    {
+      name: "GOOGLE_CLOUD_LOCATION",
+      reserved: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_GCP_LOCATION_HINT,
+    },
+    {
+      name: "GOOGLE_GENAI_USE_VERTEXAI",
+      reserved: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_VERTEXAI_FLAG_HINT,
+    },
+  ],
+};
+
+/**
+ * Vertex AI-safe ``acp_model`` for Gemini.
+ *
+ * When ``acp_model`` is left unset, gemini-cli falls back to its own internal
+ * default (``gemini-3-flash-preview``), which 404s in the many Google Cloud
+ * projects that don't have the preview models enabled. ``gemini-2.5-flash`` is
+ * broadly available on Vertex AND on the API-key / Google-login paths, so canvas
+ * preselects it as the concrete default rather than relying on gemini-cli's
+ * preview pick. Users can still choose a stronger model (e.g. ``gemini-2.5-pro``)
+ * from the Settings → Agent picker. Kept as a named constant so the onboarding
+ * selection and any other model-default consumer agree.
+ */
+export const ACP_VERTEX_SAFE_MODEL = "gemini-2.5-flash";
+
+/**
+ * The ``acp_model`` canvas preselects for ``providerKey`` when the user picks it.
+ * Overrides only Gemini (→ {@link ACP_VERTEX_SAFE_MODEL}, see why above); every
+ * other provider keeps its registry {@link ACPProviderConfig.default_model}.
+ * Returns ``null`` when there's no override and no registry default, letting the
+ * ACP server pick its own.
+ *
+ * Distinct from {@link ACPProviderConfig.default_model} (which mirrors the SDK
+ * registry verbatim, closing agent-canvas#740): this is the *preferred* default
+ * to write into settings, deliberately diverging for Gemini where the registry
+ * value isn't safe on every backend.
+ */
+export function getAcpPreferredDefaultModel(
+  key: string | null | undefined,
+): string | null {
+  if (key === "gemini-cli") return ACP_VERTEX_SAFE_MODEL;
+  return getAcpProvider(key)?.default_model ?? null;
 }
 
 /**
  * List the credentials Canvas should prompt for when onboarding the given ACP
- * provider, derived from the SDK registry's ``api_key_env_var`` /
- * ``base_url_env_var`` (mirrored via ``@openhands/typescript-client``) rather
- * than a hand-maintained per-provider list — so the field names track the SDK
- * as providers are added or renamed, with no parallel copy to drift. Each field
+ * provider. The API-key and base-URL field *names* track the SDK registry's
+ * ``api_key_env_var`` / ``base_url_env_var`` (mirrored via
+ * ``@openhands/typescript-client``) so they can't drift as providers are added
+ * or renamed; the per-provider reserved credentials (subscription / Vertex
+ * blobs) come from {@link ACP_RESERVED_CREDENTIALS}, since those are a
+ * containerized-deployment concern with no model-registry entry. Each field
  * name equals the env var the agent-server exports into the provider subprocess
- * (which is what makes a saved secret reach the CLI); the API key renders
- * masked, the base URL plain-text. All three built-ins (Claude Code, Codex,
- * Gemini CLI) expose an API key + optional base URL.
+ * (which is what makes a saved secret reach the CLI).
  *
- * Every field is optional — the step is skippable — and a subscription / OAuth
- * login takes precedence over a key at runtime (most relevant for Gemini, whose
- * Google login is the common local path).
+ * Field order is: API key → reserved subscription/Vertex credentials → optional
+ * base URL. Everything except the base URL is {@link ACPProviderSecretField.reserved}
+ * (sent inline as a ``StaticSecret`` for containerized backends).
+ *
+ * Every field is optional at the UI level — the step is skippable, and a
+ * subscription / OAuth login on the backend takes precedence over a key at
+ * runtime. (Whether the *step* is required is a backend-capability decision the
+ * onboarding modal makes; see ``backendRequiresAcpCredentials``.)
+ *
+ * NB: the base URL is deliberately **not** ``reserved``. Sending
+ * ``ANTHROPIC_BASE_URL`` alongside a ``CLAUDE_CODE_OAUTH_TOKEN`` silently breaks
+ * the token's bearer auth (an inherited LiteLLM base URL routes the request away
+ * from Anthropic), so canvas never auto-promotes it to a StaticSecret — it only
+ * travels if the user explicitly set it as a global secret.
  *
  * Returns ``[]`` for OpenHands, the ``"custom"`` preset, any unknown key, and a
  * future OAuth-only provider whose registry entry has no ``api_key_env_var`` —
@@ -227,9 +359,11 @@ export function getAcpProviderSecrets(
     fields.push({
       name: info.api_key_env_var,
       secret: true,
+      reserved: true,
       hint_key: I18nKey.ONBOARDING$ACP_SECRET_API_KEY_HINT,
     });
   }
+  fields.push(...(key ? (ACP_RESERVED_CREDENTIALS[key] ?? []) : []));
   if (info.base_url_env_var) {
     fields.push({
       name: info.base_url_env_var,
@@ -237,6 +371,22 @@ export function getAcpProviderSecrets(
     });
   }
   return fields;
+}
+
+/**
+ * The subset of {@link getAcpProviderSecrets} that must be sent to the
+ * agent-server as inline ``StaticSecret`` values for a containerized backend —
+ * i.e. every {@link ACPProviderSecretField.reserved} field name. The
+ * conversation-start path reads these names, looks up the ones the user has
+ * saved, and emits them inline (see ``buildStartConversationRequest``'s
+ * ``acpStaticSecrets`` option) rather than as a backend ``LookupSecret``.
+ */
+export function getReservedAcpSecretNames(
+  key: string | null | undefined,
+): string[] {
+  return getAcpProviderSecrets(key)
+    .filter((field) => field.reserved)
+    .map((field) => field.name);
 }
 
 /**

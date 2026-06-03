@@ -3,6 +3,7 @@ import { ExecutionStatus } from "#/types/agent-server/core";
 import { Settings, SettingsValue } from "#/types/settings";
 import {
   getAcpProvider,
+  getReservedAcpSecretNames,
   resolveEffectiveAcpModel,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
@@ -552,6 +553,16 @@ function buildConfiguredAcpAgentSettings(
     agent_context: buildAgentContext(agentSettings),
   };
 
+  // TODO(agent-canvas#1014): set ``acp_isolate_data_dir: true`` here for a
+  // containerized backend so concurrent same-provider conversations in one
+  // container don't race on a shared HOME (CLI auth/config/locks). The SDK
+  // supports it (software-agent-sdk#3492), but it's an ``ACPAgent`` field that
+  // the released ``@openhands/typescript-client`` (1.24.3) does NOT yet surface
+  // on ``ACPAgentSettings`` — it's absent from both ``ACP_SETTINGS_KEYS`` and
+  // ``ACPProviderInfo`` — so sending it now risks a Pydantic validation error
+  // on older servers. Wire it in (gated on the local/Docker backend) once the
+  // client exposes it; OpenHands-cloud grouping isolation is separate (#1016).
+
   for (const key of ACP_SETTINGS_KEYS) {
     // ``acp_model`` is resolved separately below so a saved ``null`` still
     // falls back to the provider's default rather than being dropped.
@@ -686,6 +697,22 @@ interface LookupSecret {
   description?: string;
 }
 
+/**
+ * A secret whose value travels inline in the start request, rather than being
+ * fetched back from the canvas/agent-server settings store at resolution time.
+ * Used for ACP reserved credentials (see {@link StartConversationOptions.acpStaticSecrets}):
+ * the SDK's ``acp_file_secrets`` defaults read ``agent_context.secrets`` at
+ * spawn time to materialise ``*_JSON`` blobs to disk, which a {@link LookupSecret}
+ * URL wouldn't be resolved in time for.
+ */
+interface StaticSecret {
+  kind: "StaticSecret";
+  value: string;
+  description?: string;
+}
+
+type ConversationSecret = LookupSecret | StaticSecret;
+
 type StartConversationPayload = Record<string, unknown> & {
   agent_settings: AgentSettingsPayload;
   workspace: LocalWorkspacePayload;
@@ -698,7 +725,7 @@ type StartConversationPayload = Record<string, unknown> & {
   worktree: true;
   secrets_encrypted?: true;
   conversation_id?: string;
-  secrets?: Record<string, LookupSecret>;
+  secrets?: Record<string, ConversationSecret>;
   tags?: Record<string, string>;
   tool_module_qualnames?: Record<string, string>;
 };
@@ -714,6 +741,19 @@ export interface StartConversationOptions {
   encryptedConversationSettings?: Record<string, SettingsValue>;
   secretsEncrypted?: boolean;
   customSecrets?: Array<{ name: string; description?: string }>;
+  /**
+   * Reserved ACP credentials whose values travel inline as ``StaticSecret``s,
+   * keyed by secret name (= the env var the agent-server exports into the ACP
+   * subprocess). Populated by the conversation-start orchestrator from the
+   * provider's {@link getReservedAcpSecretNames} that the user has saved; the
+   * e2e harness passes them directly. Only honored for ACP conversations.
+   *
+   * Empty/whitespace values are dropped (a deliberate skip, matching
+   * onboarding), and a StaticSecret here overrides any same-named
+   * {@link LookupSecret} from {@link customSecrets} — the reserved credential
+   * must reach the CLI inline so the SDK can materialise it before spawn.
+   */
+  acpStaticSecrets?: Record<string, string | null | undefined>;
 }
 
 export function buildStartConversationRequest(
@@ -798,11 +838,15 @@ export function buildStartConversationRequest(
     payload.agent_definitions = conversationSettings.agent_definitions;
   }
 
+  const secrets: Record<string, ConversationSecret> = {};
+
+  // Global Settings → Secrets entries: the agent-server fetches each value back
+  // from the canvas/agent-server store at resolution time via a host-relative
+  // LookupSecret URL (authenticated with the active backend's headers).
   if (options.customSecrets && options.customSecrets.length > 0) {
     const backend = getEffectiveLocalBackend();
     const headers = backend ? buildAuthHeaders(backend) : {};
 
-    const secrets: Record<string, LookupSecret> = {};
     for (const secret of options.customSecrets) {
       const lookupSecret: LookupSecret = {
         kind: "LookupSecret",
@@ -816,9 +860,30 @@ export function buildStartConversationRequest(
 
       secrets[secret.name] = lookupSecret;
     }
+  }
 
+  // Reserved ACP credentials travel inline as StaticSecrets (ACP only) so the
+  // SDK's acp_file_secrets defaults can materialise the *_JSON blobs to disk
+  // before spawning the CLI — a LookupSecret wouldn't be resolved in time.
+  // These override any same-named LookupSecret emitted above.
+  if (acpMode && options.acpStaticSecrets) {
+    for (const [name, rawValue] of Object.entries(options.acpStaticSecrets)) {
+      const value = typeof rawValue === "string" ? rawValue.trim() : "";
+      // Empty/whitespace = deliberate skip, mirroring the onboarding form
+      // (which never writes a blank field).
+      if (!value) continue;
+      secrets[name] = { kind: "StaticSecret", value };
+    }
+  }
+
+  if (Object.keys(secrets).length > 0) {
     payload.secrets = secrets;
 
+    // ACPAgent's spawn-time env loop reads from ``agent_context.secrets`` (not
+    // the bare ``secrets`` registry channel), so mirror the same map there for
+    // ACP conversations — both LookupSecret (env-var creds) and StaticSecret
+    // (file-content creds the SDK materialises). Non-ACP agents read the
+    // registry directly and must not get a surprise agent_context.secrets map.
     if (acpMode) {
       payload.agent_settings.agent_context = {
         ...payload.agent_settings.agent_context,
@@ -848,12 +913,35 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
 
+  // For ACP conversations, the provider's reserved credentials (subscription /
+  // Vertex blobs the user saved during onboarding) must travel inline as
+  // StaticSecrets so the SDK can materialise them before the CLI spawns. Read
+  // back the values of the ones that are both reserved for this provider and
+  // actually saved, and hand them to the request builder. Non-ACP and
+  // backends with none of these saved fall through with no extra work.
+  let acpStaticSecrets: Record<string, string> | undefined;
+  if (agentSettings.agent_kind === "acp") {
+    const providerKey =
+      typeof agentSettings.acp_server === "string"
+        ? agentSettings.acp_server
+        : undefined;
+    const reservedNames = new Set(getReservedAcpSecretNames(providerKey));
+    const savedReserved = customSecrets
+      .map((secret) => secret.name)
+      .filter((name) => reservedNames.has(name));
+    if (savedReserved.length > 0) {
+      const values = await SecretsService.getSecretValues(savedReserved);
+      if (Object.keys(values).length > 0) acpStaticSecrets = values;
+    }
+  }
+
   return buildStartConversationRequest({
     ...options,
     encryptedAgentSettings: agentSettings,
     encryptedConversationSettings: conversationSettings,
     secretsEncrypted,
     customSecrets,
+    acpStaticSecrets,
   });
 }
 
