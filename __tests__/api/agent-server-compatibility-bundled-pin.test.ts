@@ -6,7 +6,10 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
-import { loadAgentServerInfo } from "#/api/agent-server-compatibility";
+import {
+  AgentServerUnavailableError,
+  loadAgentServerInfo,
+} from "#/api/agent-server-compatibility";
 
 const { getServerInfoMock } = vi.hoisted(() => ({
   getServerInfoMock: vi.fn(),
@@ -57,6 +60,16 @@ describe("loadAgentServerInfo", () => {
     const result = await loadAgentServerInfo();
 
     expect(result).toBeNull();
+    expect(ServerClient).not.toHaveBeenCalled();
+  });
+
+  it("throws AgentServerUnavailableError when the registry is empty", async () => {
+    // Empty registry — no backends at all (frontend-only with no config).
+    setRegisteredBackends([]);
+
+    await expect(loadAgentServerInfo()).rejects.toThrow(
+      AgentServerUnavailableError,
+    );
     expect(ServerClient).not.toHaveBeenCalled();
   });
 });

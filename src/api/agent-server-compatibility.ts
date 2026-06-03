@@ -5,7 +5,11 @@ import {
 import type { ServerInfo as BaseServerInfo } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isAuthRequired } from "#/api/agent-server-config";
-import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
+import {
+  getActiveBackend,
+  getEffectiveLocalBackend,
+  isNoBackend,
+} from "#/api/backend-registry/active-store";
 
 const AGENT_SERVER_INFO_TIMEOUT_MS = 5000;
 
@@ -94,6 +98,15 @@ export async function loadAgentServerInfo() {
   const local = getEffectiveLocalBackend();
   if (!local) {
     clearCachedAgentServerInfo();
+
+    // Empty registry (NO_BACKEND sentinel) — the user has no backend
+    // configured at all.  Throw so root.tsx shows the manage-backends
+    // modal instead of silently rendering a broken home page.
+    if (isNoBackend(getActiveBackend().backend)) {
+      throw new AgentServerUnavailableError("No backend configured");
+    }
+
+    // Active backend is cloud — no local probe needed.
     return null;
   }
 
