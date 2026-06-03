@@ -394,6 +394,13 @@ async function buildConfig(args, env = process.env) {
 
     // Data directories (same as dev-safe.mjs)
     stateDir,
+    // Only bake the host-side workspace path when this launcher also starts
+    // the agent-server that can read it. In frontend-only mode the backend may
+    // be a tunnel/remote service, so leave VITE_WORKING_DIR unset unless the
+    // user explicitly supplied a backend-relative value.
+    viteWorkingDir: launchAgentServer
+      ? safeConfig.workingDir
+      : env.VITE_WORKING_DIR,
 
     // Auth — single key for both backends
     sessionApiKey,
@@ -866,10 +873,11 @@ function startVite(config) {
     // Full-stack mode points Vite at this launcher's ingress. Frontend-only
     // mode uses the separately running backend ingress instead.
     ...buildViteBackendEnv(config),
-    VITE_WORKING_DIR:
-      config.viteWorkingDir ?? join(config.stateDir, "workspaces"),
     VITE_FRONTEND_PORT: config.vitePort.toString(),
   };
+  if (config.viteWorkingDir) {
+    viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
+  }
 
   if (runtimeServicesInfo) {
     // Inform the frontend (and downstream, the agent's system prompt) about

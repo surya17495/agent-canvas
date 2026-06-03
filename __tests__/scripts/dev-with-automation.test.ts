@@ -374,6 +374,32 @@ describe("stack mode routing", () => {
     expect(buildRouteArgs(getLocalServiceRoutes(config))).toEqual([]);
   });
 
+  it("does not bake a host workspace path in frontend-only mode by default", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.viteWorkingDir).toBeUndefined();
+  });
+
+  it("honors explicit frontend-only VITE_WORKING_DIR values", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath({ VITE_WORKING_DIR: "workspace/project" }),
+    );
+
+    expect(config.viteWorkingDir).toBe("workspace/project");
+  });
+
+  it("bakes the host workspace path when this launcher starts the agent-server", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(config.viteWorkingDir).toBe(
+      path.join(config.stateDir, "workspaces"),
+    );
+  });
+
   it("points frontend-only Vite at a separately running backend by default", async () => {
     const config = await buildConfig(
       { frontendOnly: true },
