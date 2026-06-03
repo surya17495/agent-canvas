@@ -1,4 +1,7 @@
-import { ConversationSortOrder } from "@openhands/typescript-client";
+import {
+  ConversationSortOrder,
+  type LLMConfig,
+} from "@openhands/typescript-client";
 import {
   ConversationClient,
   FileClient,
@@ -684,10 +687,25 @@ class AgentServerConversationService {
       return;
     }
 
-    await new ConversationClient(getAgentServerClientOptions()).switchProfile(
-      conversationId,
-      profileName,
-    );
+    const clientOptions = getAgentServerClientOptions();
+    const conversationClient = new ConversationClient(clientOptions);
+    try {
+      const profile = await new ProfilesClient(clientOptions).getProfile(
+        profileName,
+        { exposeSecrets: "encrypted" },
+      );
+      const model =
+        typeof profile.config.model === "string" ? profile.config.model : "";
+      if (!model) throw new Error(`Profile '${profileName}' has no model.`);
+      await conversationClient.switchLLM(conversationId, {
+        ...profile.config,
+        model,
+        // Avoid stale first-write-wins entries in the backend LLM registry.
+        usage_id: `profile:${profileName}:${uuidv4()}`,
+      } as LLMConfig);
+    } catch {
+      await conversationClient.switchProfile(conversationId, profileName);
+    }
   }
 
   /**

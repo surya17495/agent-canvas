@@ -630,17 +630,50 @@ describe("AgentServerConversationService", () => {
       __resetActiveStoreForTests();
     });
 
-    it("switches the conversation by profile name when a conversationId is provided", async () => {
+    it("switches an active conversation with the full encrypted profile config", async () => {
+      mockGetProfile.mockResolvedValue({
+        name: "haiku",
+        config: {
+          model: "litellm_proxy/claude-haiku-4-5",
+          api_key: "encrypted-key",
+          base_url: "https://llm-proxy.app.all-hands.dev/",
+        },
+        api_key_set: true,
+      });
+      mockSwitchLLM.mockResolvedValue(undefined);
+
+      await AgentServerConversationService.switchProfile("conv-1", "haiku");
+
+      expect(mockGetProfile).toHaveBeenCalledWith("haiku", {
+        exposeSecrets: "encrypted",
+      });
+      expect(mockSwitchLLM).toHaveBeenCalledWith(
+        "conv-1",
+        expect.objectContaining({
+          model: "litellm_proxy/claude-haiku-4-5",
+          api_key: "encrypted-key",
+          base_url: "https://llm-proxy.app.all-hands.dev/",
+          usage_id: expect.stringMatching(/^profile:haiku:/),
+        }),
+      );
+      // Per-convo path: global default is left untouched and profile secrets are
+      // only fetched as encrypted values for direct round-trip to switch_llm.
+      expect(mockActivateProfile).not.toHaveBeenCalled();
+      expect(mockSwitchProfile).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the profile-name switch when encrypted profile export fails", async () => {
+      mockGetProfile.mockRejectedValueOnce(new Error("No cipher"));
       mockSwitchProfile.mockResolvedValue(undefined);
 
       await AgentServerConversationService.switchProfile("conv-1", "haiku");
 
+      expect(mockGetProfile).toHaveBeenCalledWith("haiku", {
+        exposeSecrets: "encrypted",
+      });
       expect(mockSwitchProfile).toHaveBeenCalledWith("conv-1", "haiku");
-      // Per-convo path: global default is left untouched and profile secrets are
-      // never fetched into the UI.
-      expect(mockActivateProfile).not.toHaveBeenCalled();
-      expect(mockGetProfile).not.toHaveBeenCalled();
       expect(mockSwitchLLM).not.toHaveBeenCalled();
+      expect(mockActivateProfile).not.toHaveBeenCalled();
     });
 
     it("activates the profile globally when called without a conversationId", async () => {
