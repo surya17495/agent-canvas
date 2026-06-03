@@ -12,14 +12,15 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
+const getServerInfoMock = vi.hoisted(() => vi.fn());
 
 // Both the backend status badge in the embedded edit form and the
 // step-1 health probe ride on `useBackendsHealth`, which resolves
 // server metadata through `ServerClient`.
 vi.mock("@openhands/typescript-client/clients", () => ({
-  ServerClient: vi.fn(function ServerClientMock() {
+  ServerClient: vi.fn(function ServerClientMock(options?: { host?: string }) {
     return {
-      getServerInfo: vi.fn().mockResolvedValue({ version: "1.18.0" }),
+      getServerInfo: vi.fn(() => getServerInfoMock(options)),
     };
   }),
   // The always-mounted LLM slide initializes settings hooks even though
@@ -156,6 +157,13 @@ beforeEach(() => {
   // ACP secret-write checks and the LLM-defaults mock) don't see calls
   // leaked from a prior test. Covers `llmSettingsScreenMock` too.
   vi.clearAllMocks();
+  getServerInfoMock.mockReset();
+  getServerInfoMock.mockImplementation((options?: { host?: string }) => {
+    if (options?.host?.startsWith("https://127.0.0.1:8000")) {
+      return Promise.reject(new Error("Failed to fetch"));
+    }
+    return Promise.resolve({ version: "1.18.0" });
+  });
   // ChooseAgentStep's Next button now persists the selection via
   // saveSettings before advancing. Stub it so the rest of the flow
   // (which these tests focus on) isn't gated on a real HTTP call.
@@ -198,6 +206,30 @@ describe("OnboardingModal", () => {
     expect(screen.getByTestId("onboarding-progress-step-1")).toHaveAttribute(
       "data-state",
       "upcoming",
+    );
+  });
+
+  it("shows a connection error when saving an unreachable backend", async () => {
+    renderModal();
+    const user = userEvent.setup();
+
+    await user.clear(screen.getByTestId("onboarding-backend-host"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-host"),
+      "https://127.0.0.1:8000",
+    );
+    await user.clear(screen.getByTestId("onboarding-backend-api-key"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-api-key"),
+      "session-key",
+    );
+    await user.click(screen.getByTestId("onboarding-backend-submit"));
+
+    expect(
+      await screen.findByTestId("onboarding-backend-error"),
+    ).toHaveTextContent("BACKEND$CONNECTION_TEST_FAILED");
+    expect(screen.getByTestId("onboarding-backend-error")).toHaveTextContent(
+      "Failed to fetch",
     );
   });
 
