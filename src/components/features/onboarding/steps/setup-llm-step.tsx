@@ -17,12 +17,14 @@ interface SetupLlmStepProps {
 /**
  * Pre-fills the LLM form with the OpenAI GPT-5.5 model. The SDK's
  * bare default model is `gpt-5.5`; Canvas stores provider-qualified
- * LiteLLM model ids, so the onboarding override uses `openai/gpt-5.5`.
- * Keeping this as an explicit override marks the model dirty so the
- * Next button persists the suggested default immediately.
+ * LiteLLM model ids, so the onboarding override uses this OpenAI-prefixed
+ * model id. Keeping this as an explicit override marks the model dirty so
+ * the Next button persists the suggested default immediately.
  */
+export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.5";
+
 const ONBOARDING_LLM_OVERRIDES = {
-  "llm.model": "openai/gpt-5.5",
+  "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
 } as const;
 
 /**

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { OnboardingModal } from "#/components/features/onboarding/onboarding-modal";
+import { ONBOARDING_DEFAULT_LLM_MODEL } from "#/components/features/onboarding/steps/setup-llm-step";
 import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
@@ -240,7 +241,7 @@ describe("OnboardingModal", () => {
     expect(llmSettingsScreenMock).toHaveBeenCalledWith(
       expect.objectContaining({
         initialValueOverrides: {
-          "llm.model": "openai/gpt-5.5",
+          "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
         },
       }),
     );
