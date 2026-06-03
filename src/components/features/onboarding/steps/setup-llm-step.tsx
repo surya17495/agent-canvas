@@ -15,14 +15,14 @@ interface SetupLlmStepProps {
 }
 
 /**
- * Pre-fills the LLM form with the Anthropic provider's Claude Opus
- * model. Most users won't have an OpenHands account, so onboarding
- * routes directly through Anthropic by default. Keeping this as an
- * explicit override marks the model dirty so the Next button persists
- * the suggested default immediately.
+ * Pre-fills the LLM form with the OpenAI GPT-5.5 model. The SDK's
+ * bare default model is `gpt-5.5`; Canvas stores provider-qualified
+ * LiteLLM model ids, so the onboarding override uses `openai/gpt-5.5`.
+ * Keeping this as an explicit override marks the model dirty so the
+ * Next button persists the suggested default immediately.
  */
 const ONBOARDING_LLM_OVERRIDES = {
-  "llm.model": "anthropic/claude-opus-4-8",
+  "llm.model": "openai/gpt-5.5",
 } as const;
 
 /**

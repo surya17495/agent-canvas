@@ -233,14 +233,14 @@ describe("OnboardingModal", () => {
     );
   });
 
-  it("pre-fills the LLM step with the Anthropic provider's Claude Opus model", () => {
+  it("pre-fills the LLM step with OpenAI GPT-5.5", () => {
     renderModal();
 
     expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
     expect(llmSettingsScreenMock).toHaveBeenCalledWith(
       expect.objectContaining({
         initialValueOverrides: {
-          "llm.model": "anthropic/claude-opus-4-8",
+          "llm.model": "openai/gpt-5.5",
         },
       }),
     );
