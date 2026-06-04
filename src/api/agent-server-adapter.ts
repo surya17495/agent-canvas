@@ -555,7 +555,7 @@ function buildConfiguredAcpAgentSettings(
     agent_context: buildAgentContext(agentSettings),
   };
 
-  // TODO(agent-canvas#1014): set ``acp_isolate_data_dir: true`` here for a
+  // TODO(#1019): set ``acp_isolate_data_dir: true`` here for a
   // containerized backend so concurrent same-provider conversations in one
   // container don't race on a shared HOME (CLI auth/config/locks). The SDK
   // supports it (software-agent-sdk#3492), but it's an ``ACPAgent`` field that

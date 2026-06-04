@@ -236,7 +236,8 @@ export interface ACPProviderSecretField {
  *   - Gemini Vertex → ``GOOGLE_APPLICATION_CREDENTIALS_JSON`` (SA / ADC JSON,
  *     materialised to a file referenced by ``GOOGLE_APPLICATION_CREDENTIALS``)
  *     plus ``GOOGLE_CLOUD_PROJECT`` / ``GOOGLE_CLOUD_LOCATION`` /
- *     ``GOOGLE_GENAI_USE_VERTEXAI``.
+ *     ``GOOGLE_GENAI_USE_VERTEXAI`` (the last three are plain config / a routing
+ *     flag, not secrets; grouped here only because they travel with the SA blob).
  */
 const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
   codex: [
