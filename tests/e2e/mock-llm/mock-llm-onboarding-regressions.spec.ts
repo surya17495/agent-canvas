@@ -6,7 +6,7 @@ import {
   waitForOnboardingStep,
 } from "../support/onboarding-helpers";
 import {
-  resetAgentServerLLMSettings,
+  interceptSettingsForFirstRun,
   routeSessionApiKey,
   SESSION_API_KEY,
 } from "./utils/mock-llm-helpers";
@@ -14,15 +14,6 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("onboarding recent regressions", () => {
-  // Reset the agent-server's LLM settings once before this describe
-  // block so the onboarding flow sees a genuinely clean state — no
-  // stale base_url, model, or api_key left behind by earlier specs.
-  // Using beforeAll (not beforeEach) avoids unnecessary resets between
-  // the serial tests in this block, which share the same clean state.
-  test.beforeAll(async ({ request }) => {
-    await resetAgentServerLLMSettings(request);
-  });
-
   // Regression coverage for #1085 / PR #1100: errant outside
   // interactions must not permanently mark onboarding complete.
 
@@ -81,7 +72,11 @@ test.describe("onboarding recent regressions", () => {
   }) => {
     await showOnboarding(page, {
       apiKey: SESSION_API_KEY,
-      beforeGoto: () => routeSessionApiKey(page),
+      beforeGoto: async () => {
+        await routeSessionApiKey(page);
+        // Strip stale LLM config so the form sees a first-run state.
+        await interceptSettingsForFirstRun(page);
+      },
     });
     await advanceOnboardingToLlmStep(page);
 

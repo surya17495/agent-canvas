@@ -423,38 +423,33 @@ export async function resetMockLLM(request: APIRequestContext) {
 }
 
 /**
- * Reset the agent-server's LLM base_url to its default.
+ * Intercept `GET /api/settings` to strip all LLM configuration, simulating
+ * a first-run state where no model/api_key/base_url has been configured.
  *
- * Earlier specs (conversation, automation, etc.) configure the real
- * agent-server with a custom llm.base_url pointing at the mock LLM
- * server. That stale URL causes LlmSettingsScreen's getInitialView
- * to select "Advanced" view instead of "Basic", hiding the
- * ModelSelector dropdowns the onboarding tests assert against.
+ * Earlier specs (conversation, automation, etc.) persist custom LLM settings
+ * on the real agent-server. The settings schema's `inferInitialView` checks
+ * ALL non-critical fields against their defaults — if any differ (model,
+ * api_key, base_url), the LLM form renders in "Advanced" view instead of
+ * "Basic". The PATCH API rejects null/empty values for most fields (422),
+ * so we can't reset them server-side. Instead we strip the stale values from
+ * the response so the frontend sees schema defaults.
  *
- * We only clear base_url — model and api_key are left alone because
- * the agent-server validates them strictly (rejects empty strings).
- * The base_url is the only field that affects view-mode selection.
+ * Must be registered AFTER `routeSessionApiKey` so Playwright's LIFO order
+ * processes the settings interception first for matching requests.
  */
-export async function resetAgentServerLLMSettings(
-  request: APIRequestContext,
-) {
-  const resp = await request.patch(`${BACKEND_URL}/api/settings`, {
-    headers: {
-      "X-Session-API-Key": SESSION_API_KEY,
-      "Content-Type": "application/json",
-    },
-    data: {
-      agent_settings_diff: {
-        llm: {
-          base_url: "",
-        },
-      },
-    },
+export async function interceptSettingsForFirstRun(page: Page) {
+  await page.route("**/api/settings", async (route, req) => {
+    if (req.method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+    const response = await route.fetch();
+    const body = await response.json();
+    if (body?.agent_settings?.llm) {
+      body.agent_settings.llm = {};
+    }
+    await route.fulfill({ response, json: body });
   });
-  expect(
-    resp.ok(),
-    `Reset agent-server LLM settings failed: ${resp.status()}`,
-  ).toBe(true);
 }
 
 /**
