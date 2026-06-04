@@ -8,7 +8,7 @@ import { NoBackendAvailableError } from "../agent-server-client-options";
 import { buildAuthHeaders } from "../backend-registry/auth";
 import type { Backend } from "../backend-registry/types";
 
-interface CloudProxyRequest {
+export interface CloudProxyRequest {
   /**
    * Cloud backend whose bearer token authenticates the upstream call.
    * `backend.host` is also the default upstream host unless `hostOverride`
@@ -49,6 +49,18 @@ interface CloudProxyRequest {
    * payload (e.g. ZIP downloads); leave undefined for default JSON.
    */
   responseType?: "blob";
+  /**
+   * Force this app-host call through the bundled agent-server's
+   * `/api/cloud-proxy` instead of calling the cloud host directly from the
+   * browser. App-host calls normally go direct because the main cloud API
+   * loosens CORS for bearer-token requests (ApiKeyAwareCORSMiddleware →
+   * `Access-Control-Allow-Origin: *`). The standalone automation service
+   * (`/api/automation/*`) uses a strict origin allowlist instead, so direct
+   * browser requests fail CORS preflight; the same-origin proxy hop avoids
+   * cross-origin entirely while attaching the same auth and `X-Org-Id`
+   * headers server-side.
+   */
+  forceProxy?: boolean;
 }
 
 function buildUpstreamAuthHeaders(
