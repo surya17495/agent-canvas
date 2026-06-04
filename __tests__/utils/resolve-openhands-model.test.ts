@@ -52,7 +52,9 @@ describe("chooseOpenHandsFallbackModel", () => {
   it("returns null when no compatible variant exists", () => {
     const available = ["gpt-5.5", "gemini-3.1-pro"];
 
-    expect(chooseOpenHandsFallbackModel("claude-opus-4-5", available)).toBeNull();
+    expect(
+      chooseOpenHandsFallbackModel("claude-opus-4-5", available),
+    ).toBeNull();
   });
 
   it("matches case-insensitive ids when providers vary casing", () => {
