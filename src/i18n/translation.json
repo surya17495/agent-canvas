@@ -29495,7 +29495,7 @@
     "zh-TW": "No Backend Available"
   },
   "ONBOARDING$ACP_SECRET_FILE_BLOB_HINT": {
-    "en": "Paste the full contents of {{file}}. Saved as a secret and written to disk for the agent at runtime.",
+    "en": "Paste the full contents of {{file}}. Run `cat {{file}}` to get it. Saved as a secret and written to disk for the agent at runtime.",
     "ja": "{{file}} の内容全体を貼り付けてください。シークレットとして保存され、実行時にエージェント用にディスクへ書き出されます。",
     "zh-CN": "粘贴 {{file}} 的完整内容。它会作为密钥保存，并在运行时写入磁盘供智能体使用。",
     "zh-TW": "貼上 {{file}} 的完整內容。將以密鑰形式儲存，並在執行時寫入磁碟供代理使用。",
@@ -29512,7 +29512,7 @@
     "uk": "Вставте повний вміст {{file}}. Зберігається як секрет і записується на диск для агента під час виконання."
   },
   "ONBOARDING$ACP_SECRET_OAUTH_TOKEN_HINT": {
-    "en": "Subscription OAuth token. For a Claude Pro/Max login, paste the access token from your local Claude credentials.",
+    "en": "Subscription OAuth token for Claude Pro/Max. Run `claude setup-token` in your terminal to get it.",
     "ja": "サブスクリプションの OAuth トークン。Claude Pro/Max ログインの場合は、ローカルの Claude 認証情報からアクセストークンを貼り付けてください。",
     "zh-CN": "订阅 OAuth 令牌。如使用 Claude Pro/Max 登录，请粘贴本地 Claude 凭据中的访问令牌。",
     "zh-TW": "訂閱 OAuth 權杖。若使用 Claude Pro/Max 登入，請貼上本機 Claude 憑證中的存取權杖。",
