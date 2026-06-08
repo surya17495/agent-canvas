@@ -136,13 +136,13 @@ test.describe("backend recovery flow", () => {
       page.getByTestId("manage-backends-row-Broken"),
     ).toBeVisible();
 
-    // Wait for the health probe to settle to a non-connected state
+    // The probe targets localhost:19999 (non-existent) so it fails fast.
     const statusEl = page.getByTestId("manage-backends-status-Broken");
-    await expect(statusEl).toBeVisible({ timeout: 15_000 });
+    await expect(statusEl).toBeVisible({ timeout: 5_000 });
     await expect
       .poll(
         async () => (await statusEl.textContent())?.trim() ?? "",
-        { timeout: 15_000, message: "backend status should settle to a non-connected state" },
+        { timeout: 5_000, message: "backend status should settle to a non-connected state" },
       )
       .not.toBe("Connected");
   });

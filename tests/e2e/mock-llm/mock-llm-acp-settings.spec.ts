@@ -65,15 +65,15 @@ test.describe("ACP settings: single save + auth banner", () => {
       await seedLocalStorage(page);
       await resetToOpenHandsAgentViaUI(page);
       await ensureMockLLMProfile(page);
-    } catch {
-      // best-effort
+    } catch (e) {
+      console.warn("ACP settings afterAll cleanup failed:", e);
     } finally {
       await page.close();
     }
     try {
       await resetMockLLM(request);
-    } catch {
-      // best-effort
+    } catch (e) {
+      console.warn("Mock LLM reset failed:", e);
     }
   });
 
@@ -165,6 +165,7 @@ test.describe("ACP settings: single save + auth banner", () => {
   test("Save button is disabled when no changes have been made", async ({
     page,
   }) => {
+    await ensureMockLLMProfile(page);
     await navigateToAgentSettings(page);
 
     const saveBtn = page.getByTestId("agent-save-button");
