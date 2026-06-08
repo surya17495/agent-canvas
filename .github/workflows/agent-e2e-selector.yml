@@ -1,0 +1,174 @@
+# Agent-powered E2E test selector.
+#
+# Uses the OpenHands SDK LLM to analyze changed files in a PR and
+# determine which mock-LLM E2E test specs are most relevant, then
+# triggers the Mock-LLM E2E Tests workflow with only that subset.
+#
+# Trigger modes:
+#   - Label "smart-e2e" on a PR  → runs automatically
+#   - Manual workflow_dispatch   → provide a PR number
+#
+# This workflow is intentionally separate from the full-suite
+# mock-llm-e2e.yml (which still fires on every PR push).  Teams can
+# use this as a faster feedback loop during development while keeping
+# the full suite as a merge gate.
+
+name: "Agent E2E Selector"
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to analyze and run E2E subset for"
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write          # needed to trigger downstream workflow_dispatch
+
+concurrency:
+  group: agent-e2e-selector-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  select-and-dispatch:
+    # On label events, only run when the "smart-e2e" label is applied.
+    # On workflow_dispatch, always run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.label.name == 'smart-e2e' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    env:
+      EFFECTIVE_PR: ${{ github.event.pull_request.number || inputs.pr_number }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Read defaults from config/defaults.json
+        id: defaults
+        run: |
+          echo "agent_server_version=$(node -p "require('./config/defaults.json').versions.agentServer")" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install openhands-sdk
+        env:
+          AGENT_SERVER_VERSION: ${{ steps.defaults.outputs.agent_server_version }}
+        run: |
+          uv venv .selector-venv
+          uv pip install -p .selector-venv "openhands-sdk==$AGENT_SERVER_VERSION"
+
+      - name: Get changed files from PR
+        id: changed_files
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          FILES=$(gh api \
+            "/repos/${{ github.repository }}/pulls/${{ env.EFFECTIVE_PR }}/files" \
+            --paginate \
+            --jq '.[].filename')
+          echo "$FILES" > changed_files.txt
+          echo "count=$(echo "$FILES" | wc -l)" >> "$GITHUB_OUTPUT"
+          echo "Changed files ($(echo "$FILES" | wc -l)):"
+          echo "$FILES" | head -50
+
+      - name: Run test selector
+        id: selector
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ vars.LIVE_E2E_LLM_BASE_URL || 'https://llm-proxy.app.all-hands.dev' }}
+          LLM_MODEL: "litellm_proxy/openai/gpt-4.1-mini"
+        run: |
+          RESULT=$(.selector-venv/bin/python3 scripts/select-e2e-tests.py < changed_files.txt)
+          echo "$RESULT" | python3 -m json.tool
+          echo "$RESULT" > selector_result.json
+
+          # Parse outputs for downstream use.
+          SPECS=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('specs',[])))")
+          REASON=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('reason',''))")
+          MODE=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('mode','full'))")
+
+          echo "specs=$SPECS" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve PR head ref
+        id: pr_ref
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          REF=$(gh api "/repos/${{ github.repository }}/pulls/${{ env.EFFECTIVE_PR }}" --jq '.head.ref')
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "PR head ref: $REF"
+
+      - name: Trigger Mock-LLM E2E Tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+        run: |
+          SPECS="${{ steps.selector.outputs.specs }}"
+          MODE="${{ steps.selector.outputs.mode }}"
+          REF="${{ steps.pr_ref.outputs.ref }}"
+          PR="${{ env.EFFECTIVE_PR }}"
+
+          echo "Mode: $MODE"
+          echo "Specs: ${SPECS:-<full suite>}"
+          echo "Dispatching on ref: $REF"
+
+          gh workflow run "Mock-LLM E2E Tests" \
+            --ref "$REF" \
+            -f test_specs="$SPECS" \
+            -f pr_number="$PR"
+
+          echo "::notice::Dispatched Mock-LLM E2E Tests (mode=$MODE, specs=${SPECS:-all})"
+
+      - name: Post selection summary to PR
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          MODE="${{ steps.selector.outputs.mode }}"
+          SPECS="${{ steps.selector.outputs.specs }}"
+          REASON="${{ steps.selector.outputs.reason }}"
+          FILE_COUNT="${{ steps.changed_files.outputs.count }}"
+
+          if [ "$MODE" = "full" ]; then
+            SPEC_DISPLAY="**Full suite** (all specs)"
+          else
+            SPEC_DISPLAY=$(echo "$SPECS" | tr ',' '\n' | sed 's/^/- `/' | sed 's/$/`/')
+          fi
+
+          BODY=$(cat <<'COMMENT_EOF'
+          <!-- agent-e2e-selector -->
+          ### 🤖 Agent E2E Test Selector
+
+          | | |
+          |---|---|
+          | **Mode** | `MODE_PLACEHOLDER` |
+          | **Files analyzed** | FILE_COUNT_PLACEHOLDER |
+          | **Reason** | REASON_PLACEHOLDER |
+
+          **Selected specs:**
+          SPECS_PLACEHOLDER
+
+          _Triggered run: [Mock-LLM E2E Tests](/${{ github.repository }}/actions/workflows/mock-llm-e2e.yml)_
+          COMMENT_EOF
+          )
+
+          BODY="${BODY//MODE_PLACEHOLDER/$MODE}"
+          BODY="${BODY//FILE_COUNT_PLACEHOLDER/$FILE_COUNT}"
+          BODY="${BODY//REASON_PLACEHOLDER/$REASON}"
+          BODY="${BODY//SPECS_PLACEHOLDER/$SPEC_DISPLAY}"
+
+          echo "$BODY" | gh pr comment "${{ env.EFFECTIVE_PR }}" --body-file -
