@@ -13,7 +13,7 @@
  *   3. Editing the broken backend to point at the real backend boots the app.
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   BACKEND_URL,
   SESSION_API_KEY,
@@ -24,15 +24,16 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+// ── Helpers ───────────────────────────────────────────────────────────
+
 /**
  * Seed localStorage with a backend pointing at a non-existent host so the
  * /server_info probe fails and the app enters the recovery gate.
  *
- * The analytics consent is suppressed and onboarding is marked done so the
- * only screen the app can show is the recovery modal (not the analytics
- * overlay or onboarding wizard).
+ * Analytics consent is suppressed and onboarding is marked done so the
+ * only screen the app can show is the recovery modal.
  */
-async function seedBrokenBackend(page: import("@playwright/test").Page) {
+async function seedBrokenBackend(page: Page) {
   await page.addInitScript(() => {
     window.localStorage.setItem("analytics-consent", "false");
     window.localStorage.setItem("openhands-telemetry-consent", "denied");
@@ -50,7 +51,6 @@ async function seedBrokenBackend(page: import("@playwright/test").Page) {
         },
       ]),
     );
-    // Point the active selection at the broken backend
     window.sessionStorage.setItem(
       "openhands-active-backend",
       JSON.stringify({ backendId: "broken-backend" }),
@@ -58,34 +58,77 @@ async function seedBrokenBackend(page: import("@playwright/test").Page) {
   });
 }
 
+/**
+ * Fill and submit the BackendForm (add or edit variant).
+ *
+ * @param prefix - testId prefix: `"add-backend"` or `"edit-backend"`.
+ */
+async function fillAndSubmitBackendForm(
+  page: Page,
+  prefix: "add-backend" | "edit-backend",
+  fields: { name?: string; host: string; apiKey: string },
+) {
+  await waitForTestId(page, `${prefix}-modal`);
+
+  if (fields.name) {
+    const nameInput = page.getByTestId(`${prefix}-name`);
+    await expect(nameInput).toBeVisible({ timeout: 5_000 });
+    await nameInput.click();
+    await nameInput.fill(fields.name);
+  }
+
+  const hostInput = page.getByTestId(`${prefix}-host`);
+  await expect(hostInput).toBeVisible({ timeout: 5_000 });
+  await hostInput.click();
+  await hostInput.fill(fields.host);
+
+  const apiKeyInput = page.getByTestId(`${prefix}-api-key`);
+  await apiKeyInput.click();
+  await apiKeyInput.fill(fields.apiKey);
+
+  await page.getByTestId(`${prefix}-submit`).click();
+}
+
+/** Assert that the app has left the recovery screen and reached the home/onboarding page. */
+async function expectAppRecovered(page: Page) {
+  await dismissAnalyticsModal(page);
+  await expect(
+    page.getByTestId("agent-server-onboarding-screen"),
+  ).not.toBeVisible({ timeout: 20_000 });
+
+  const homeOrOnboarding = page
+    .getByTestId("home-chat-launcher")
+    .or(page.getByTestId("onboarding-step-choose-agent"));
+  await expect(homeOrOnboarding).toBeVisible({ timeout: 20_000 });
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────
+
 test.describe("backend recovery flow", () => {
+  test.beforeEach(async ({ page }) => {
+    await seedBrokenBackend(page);
+    await routeSessionApiKey(page);
+  });
+
   // ── 1. Recovery modal renders with recovery-mode semantics ──────────
 
   test("shows recovery modal without dismiss controls when backend is unreachable", async ({
     page,
   }) => {
-    await seedBrokenBackend(page);
-    await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    // The recovery screen wrapper should be visible
     await waitForTestId(page, "agent-server-onboarding-screen");
-
-    // The Manage Backends modal should be visible inside it
     await waitForTestId(page, "manage-backends-modal");
 
-    // Recovery mode: no close (X) button
+    // Recovery mode: no close (X) button, no "Done" button
     await expect(
       page.getByTestId("close-manage-backends-modal"),
     ).not.toBeVisible({ timeout: 2_000 });
-
-    // Recovery mode: no "Done" button
     await expect(page.getByTestId("manage-backends-done")).not.toBeVisible({
       timeout: 2_000,
     });
 
-    // The "Add Backend" button should still be present (primary variant
-    // in recovery mode)
+    // "Add Backend" button should still be present
     await expect(page.getByTestId("manage-backends-add")).toBeVisible();
 
     // The broken backend should be listed
@@ -93,20 +136,12 @@ test.describe("backend recovery flow", () => {
       page.getByTestId("manage-backends-row-Broken"),
     ).toBeVisible();
 
-    // The broken backend should show a disconnected/error status.
-    // Wait for the health probe to settle — it should show "Disconnected"
-    // or an error state, never the exact word "Connected" alone.
+    // Wait for the health probe to settle to a non-connected state
     const statusEl = page.getByTestId("manage-backends-status-Broken");
     await expect(statusEl).toBeVisible({ timeout: 15_000 });
     await expect
       .poll(
-        async () => {
-          const text = (await statusEl.textContent())?.trim() ?? "";
-          // "Checking…" means the probe is still running — keep polling.
-          // "Disconnected", "Invalid API key", etc. are all acceptable.
-          // Only the exact status "Connected" is unexpected here.
-          return text;
-        },
+        async () => (await statusEl.textContent())?.trim() ?? "",
         { timeout: 15_000, message: "backend status should settle to a non-connected state" },
       )
       .not.toBe("Connected");
@@ -115,50 +150,17 @@ test.describe("backend recovery flow", () => {
   // ── 2. Adding a reachable backend through the recovery modal ────────
 
   test("recovers by adding a reachable backend", async ({ page }) => {
-    await seedBrokenBackend(page);
-    await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
-
-    // Wait for the recovery modal
     await waitForTestId(page, "manage-backends-modal");
 
-    // Click "Add Backend"
     await page.getByTestId("manage-backends-add").click();
+    await fillAndSubmitBackendForm(page, "add-backend", {
+      name: "Working Backend",
+      host: BACKEND_URL,
+      apiKey: SESSION_API_KEY,
+    });
 
-    // The add-backend form should appear
-    await waitForTestId(page, "add-backend-modal");
-
-    // Fill in the real backend details
-    const nameInput = page.getByTestId("add-backend-name");
-    await expect(nameInput).toBeVisible({ timeout: 5_000 });
-    await nameInput.click();
-    await nameInput.fill("Working Backend");
-
-    const hostInput = page.getByTestId("add-backend-host");
-    await hostInput.click();
-    await hostInput.fill(BACKEND_URL);
-
-    const apiKeyInput = page.getByTestId("add-backend-api-key");
-    await apiKeyInput.click();
-    await apiKeyInput.fill(SESSION_API_KEY);
-
-    // Submit the form
-    await page.getByTestId("add-backend-submit").click();
-
-    // After adding a reachable backend the app should recover:
-    // the recovery modal disappears and the home page loads.
-    await dismissAnalyticsModal(page);
-    await expect(
-      page.getByTestId("agent-server-onboarding-screen"),
-    ).not.toBeVisible({ timeout: 20_000 });
-
-    // The app should show either the home launcher or the onboarding
-    // modal (depending on whether the new backend has settings).
-    // Either is acceptable — the key is we're NOT stuck in recovery.
-    const homeOrOnboarding = page
-      .getByTestId("home-chat-launcher")
-      .or(page.getByTestId("onboarding-step-choose-agent"));
-    await expect(homeOrOnboarding).toBeVisible({ timeout: 20_000 });
+    await expectAppRecovered(page);
   });
 
   // ── 3. Editing the broken backend to fix it ─────────────────────────
@@ -166,41 +168,15 @@ test.describe("backend recovery flow", () => {
   test("recovers by editing the broken backend to a reachable host", async ({
     page,
   }) => {
-    await seedBrokenBackend(page);
-    await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
-
-    // Wait for the recovery modal
     await waitForTestId(page, "manage-backends-modal");
 
-    // Click the edit button on the broken backend row
     await page.getByTestId("manage-backends-edit-Broken").click();
+    await fillAndSubmitBackendForm(page, "edit-backend", {
+      host: BACKEND_URL,
+      apiKey: SESSION_API_KEY,
+    });
 
-    // The edit form should appear
-    await waitForTestId(page, "edit-backend-modal");
-
-    // Update the host to the real backend
-    const hostInput = page.getByTestId("edit-backend-host");
-    await expect(hostInput).toBeVisible({ timeout: 5_000 });
-    await hostInput.click();
-    await hostInput.fill(BACKEND_URL);
-
-    const apiKeyInput = page.getByTestId("edit-backend-api-key");
-    await apiKeyInput.click();
-    await apiKeyInput.fill(SESSION_API_KEY);
-
-    // Save the edit
-    await page.getByTestId("edit-backend-submit").click();
-
-    // After editing to a reachable backend the app should recover.
-    await dismissAnalyticsModal(page);
-    await expect(
-      page.getByTestId("agent-server-onboarding-screen"),
-    ).not.toBeVisible({ timeout: 20_000 });
-
-    const homeOrOnboarding = page
-      .getByTestId("home-chat-launcher")
-      .or(page.getByTestId("onboarding-step-choose-agent"));
-    await expect(homeOrOnboarding).toBeVisible({ timeout: 20_000 });
+    await expectAppRecovered(page);
   });
 });
