@@ -5,20 +5,16 @@
 # calls the Mock-LLM E2E Tests workflow (via workflow_call) with only
 # that subset.
 #
-# Trigger modes:
-#   - Label "smart-e2e" on a PR  → runs automatically
-#   - Manual workflow_dispatch   → provide a PR number
-#
-# This workflow is intentionally separate from the full-suite
-# mock-llm-e2e.yml (which still fires on every PR push).  Teams can
-# use this as a faster feedback loop during development while keeping
-# the full suite as a merge gate.
+# This is the primary entry point for PR-driven E2E testing.
+# mock-llm-e2e.yml no longer triggers on pull_request directly;
+# it only runs when called from here (workflow_call) or via manual
+# dispatch (workflow_dispatch).
 
 name: "Agent E2E Selector"
 
 on:
   pull_request:
-    types: [labeled]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -37,13 +33,10 @@ concurrency:
 jobs:
   # ── Phase 1: analyze changed files and pick the test subset ──
   select:
-    # On label events, only run when the "smart-e2e" label is applied.
-    # On workflow_dispatch, always run.
+    # Skip fork PRs — secrets are not available.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.label.name == 'smart-e2e' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5
 

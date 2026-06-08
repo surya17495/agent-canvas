@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Select which mock-LLM E2E test specs to run based on changed files.
 
-Uses the OpenHands SDK's LLM class to intelligently map PR file changes
-to the most relevant test specs.  Falls back to running the full suite
-when the LLM is unavailable or when the change set is too broad.
+Uses the OpenHands SDK's LLM class to map PR file changes to the most
+relevant test specs.  Returns the full suite when the LLM decides the
+changes are too broad to narrow.
 
 Usage:
     # Pipe changed files (one per line):
@@ -13,14 +13,14 @@ Usage:
     python scripts/select-e2e-tests.py src/routes/automations.tsx src/api/automation-service/...
 
 Environment variables:
-    LLM_API_KEY   – required (unless --fallback-only)
+    LLM_API_KEY   – required
     LLM_BASE_URL  – optional, defaults to https://llm-proxy.app.all-hands.dev
     LLM_MODEL     – optional, defaults to openhands/gpt-5.1
 
 Output (stdout): JSON object with keys:
     specs   – list of spec filenames to run (empty ⇒ full suite)
     reason  – human-readable explanation
-    mode    – "llm" | "heuristic" | "full"
+    mode    – "llm" | "full"
 """
 
 from __future__ import annotations
@@ -28,6 +28,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+
+from openhands.sdk import LLM
 
 # ---------------------------------------------------------------------------
 # Spec catalog – each entry maps a spec filename to a brief description
@@ -95,119 +97,12 @@ SPEC_CATALOG: dict[str, str] = {
     ),
 }
 
-ALL_SPECS = sorted(SPEC_CATALOG.keys())
 
-# ---------------------------------------------------------------------------
-# Heuristic path → spec mapping (fast fallback when LLM is unavailable)
-# ---------------------------------------------------------------------------
-HEURISTIC_MAP: list[tuple[list[str], list[str]]] = [
-    # (path prefixes, relevant specs)
-    (
-        ["src/components/features/onboarding/", "src/hooks/use-onboarding"],
-        ["mock-llm-onboarding-happy-path.spec.ts", "mock-llm-onboarding-regressions.spec.ts"],
-    ),
-    (
-        ["src/api/automation-service/", "src/routes/automations", "src/components/features/automations/"],
-        ["mock-llm-automation.spec.ts", "mock-llm-preset-automation.spec.ts"],
-    ),
-    (
-        ["src/components/features/backends/", "src/api/backend-registry/"],
-        ["mock-llm-auth-modes.spec.ts", "mock-llm-cross-connect.spec.ts"],
-    ),
-    (
-        ["src/components/features/settings/", "src/routes/llm-settings", "src/routes/agent-settings"],
-        [
-            "mock-llm-profile-management.spec.ts",
-            "mock-llm-conversation.spec.ts",
-            "mock-llm-model-switch.spec.ts",
-            "mock-llm-acp-agent.spec.ts",
-        ],
-    ),
-    (
-        ["src/components/conversation-events/", "src/components/features/chat/"],
-        ["mock-llm-conversation.spec.ts", "mock-llm-image-upload.spec.ts", "mock-llm-ui-regressions.spec.ts"],
-    ),
-    (
-        ["src/components/features/conversation-panel/"],
-        ["mock-llm-conversation.spec.ts", "mock-llm-model-switch.spec.ts"],
-    ),
-    (
-        ["bin/", "scripts/static-server", "scripts/ingress", "docker/entrypoint"],
-        ["mock-llm-partial-stack.spec.ts", "mock-llm-auth-modes.spec.ts"],
-    ),
-    (
-        ["src/hooks/query/use-conversation", "src/hooks/use-load-older-events"],
-        ["mock-llm-conversation.spec.ts", "mock-llm-ui-regressions.spec.ts"],
-    ),
-    (
-        [".agents/skills/", "src/api/skills-service"],
-        ["mock-llm-skills.spec.ts"],
-    ),
-    (
-        ["src/styles/", "src/components/shared/", "src/tailwind.css"],
-        ["mock-llm-ui-regressions.spec.ts"],
-    ),
-    (
-        ["src/components/features/workspace/", "src/hooks/use-workspaces"],
-        ["mock-llm-ui-regressions.spec.ts", "mock-llm-onboarding-happy-path.spec.ts"],
-    ),
-    (
-        ["tests/e2e/mock-llm/"],
-        [],  # Modified test files → run those specific specs (handled separately)
-    ),
-]
-
-# If changed files touch only these paths, no E2E tests are needed.
-SKIP_PATHS = [
-    "README", "AGENTS.md", "DEVELOPMENT.md", "LICENSE", "CHANGELOG",
-    ".github/workflows/", "docs/", "specs/", ".openhands/",
-    "__tests__/", "src/mocks/", ".env.sample",
-    "tests/e2e/snapshots/", "tests/e2e/live/",
-]
-
-
-def heuristic_select(changed_files: list[str]) -> tuple[list[str], str]:
-    """Return (specs, reason) using the static heuristic map."""
-    selected: set[str] = set()
-    matched_areas: list[str] = []
-
-    # Direct test-file changes: run the changed spec itself.
-    for f in changed_files:
-        if f.startswith("tests/e2e/mock-llm/") and f.endswith(".spec.ts"):
-            basename = f.rsplit("/", 1)[-1]
-            if basename in SPEC_CATALOG:
-                selected.add(basename)
-
-    # Check whether all files are skip-only.
-    non_skip = [f for f in changed_files if not any(f.startswith(s) or f == s for s in SKIP_PATHS)]
-    if not non_skip and not selected:
-        return [], "All changed files are docs/CI/tests — no mock-LLM E2E needed."
-
-    for prefixes, specs in HEURISTIC_MAP:
-        for f in non_skip:
-            if any(f.startswith(p) for p in prefixes):
-                selected.update(specs)
-                matched_areas.extend(prefixes)
-                break
-
-    if not selected and non_skip:
-        # Source files changed but no heuristic matched → run full suite.
-        return [], f"Heuristic could not narrow: {len(non_skip)} source files changed."
-
-    reason = f"Heuristic matched {len(selected)} spec(s) from {len(set(matched_areas))} area(s)."
-    return sorted(selected), reason
-
-
-def llm_select(changed_files: list[str]) -> tuple[list[str], str]:
+def select(changed_files: list[str]) -> tuple[list[str], str]:
     """Use the OpenHands SDK LLM to pick the relevant specs."""
-    try:
-        from openhands.sdk import LLM
-    except ImportError:
-        return [], "openhands-sdk not installed; falling back to heuristic."
-
     api_key = os.environ.get("LLM_API_KEY", "")
     if not api_key:
-        return [], "LLM_API_KEY not set; falling back to heuristic."
+        raise RuntimeError("LLM_API_KEY is required but not set.")
 
     base_url = os.environ.get("LLM_BASE_URL", "https://llm-proxy.app.all-hands.dev")
     model = os.environ.get("LLM_MODEL", "openhands/gpt-5.1")
@@ -236,22 +131,19 @@ Changed files in this PR:
 
 Respond with ONLY the JSON object, no markdown fences."""
 
-    try:
-        llm = LLM(model=model, api_key=api_key, base_url=base_url)
-        response = llm.completion(
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-        )
-        content = response.choices[0].message.content.strip()
-        # Strip markdown fences if the model adds them anyway.
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        result = json.loads(content)
-        specs = [s for s in result.get("specs", []) if s in SPEC_CATALOG]
-        reason = result.get("reason", "LLM selection")
-        return specs, reason
-    except Exception as e:
-        return [], f"LLM call failed ({e}); falling back to heuristic."
+    llm = LLM(model=model, api_key=api_key, base_url=base_url)
+    response = llm.completion(
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0,
+    )
+    content = response.choices[0].message.content.strip()
+    # Strip markdown fences if the model adds them anyway.
+    if content.startswith("```"):
+        content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    result = json.loads(content)
+    specs = [s for s in result.get("specs", []) if s in SPEC_CATALOG]
+    reason = result.get("reason", "LLM selection")
+    return specs, reason
 
 
 def main() -> None:
@@ -265,17 +157,8 @@ def main() -> None:
         print(json.dumps({"specs": [], "reason": "No changed files provided.", "mode": "full"}))
         return
 
-    # Try LLM first, fall back to heuristic.
-    specs, reason = llm_select(changed_files)
-    mode = "llm"
-
-    if reason.startswith(("LLM_API_KEY not set", "openhands-sdk not installed", "LLM call failed")):
-        specs, reason = heuristic_select(changed_files)
-        mode = "heuristic"
-
-    if not specs:
-        mode = "full"
-
+    specs, reason = select(changed_files)
+    mode = "llm" if specs else "full"
     print(json.dumps({"specs": specs, "reason": reason, "mode": mode}, indent=2))
 
 
