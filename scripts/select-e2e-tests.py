@@ -15,7 +15,7 @@ Usage:
 Environment variables:
     LLM_API_KEY   – required (unless --fallback-only)
     LLM_BASE_URL  – optional, defaults to https://llm-proxy.app.all-hands.dev
-    LLM_MODEL     – optional, defaults to litellm_proxy/openai/gpt-4.1-mini
+    LLM_MODEL     – optional, defaults to openhands/gpt-5.1
 
 Output (stdout): JSON object with keys:
     specs   – list of spec filenames to run (empty ⇒ full suite)
@@ -210,7 +210,7 @@ def llm_select(changed_files: list[str]) -> tuple[list[str], str]:
         return [], "LLM_API_KEY not set; falling back to heuristic."
 
     base_url = os.environ.get("LLM_BASE_URL", "https://llm-proxy.app.all-hands.dev")
-    model = os.environ.get("LLM_MODEL", "litellm_proxy/openai/gpt-4.1-mini")
+    model = os.environ.get("LLM_MODEL", "openhands/gpt-5.1")
 
     catalog_text = "\n".join(
         f"  - {name}: {desc}" for name, desc in sorted(SPEC_CATALOG.items())

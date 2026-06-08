@@ -2,7 +2,8 @@
 #
 # Uses the OpenHands SDK LLM to analyze changed files in a PR and
 # determine which mock-LLM E2E test specs are most relevant, then
-# triggers the Mock-LLM E2E Tests workflow with only that subset.
+# calls the Mock-LLM E2E Tests workflow (via workflow_call) with only
+# that subset.
 #
 # Trigger modes:
 #   - Label "smart-e2e" on a PR  → runs automatically
@@ -28,14 +29,14 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  actions: write          # needed to trigger downstream workflow_dispatch
 
 concurrency:
   group: agent-e2e-selector-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
-  select-and-dispatch:
+  # ── Phase 1: analyze changed files and pick the test subset ──
+  select:
     # On label events, only run when the "smart-e2e" label is applied.
     # On workflow_dispatch, always run.
     if: >-
@@ -45,6 +46,12 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+
+    outputs:
+      specs: ${{ steps.selector.outputs.specs }}
+      reason: ${{ steps.selector.outputs.reason }}
+      mode: ${{ steps.selector.outputs.mode }}
+      file_count: ${{ steps.changed_files.outputs.count }}
 
     env:
       EFFECTIVE_PR: ${{ github.event.pull_request.number || inputs.pr_number }}
@@ -89,7 +96,7 @@ jobs:
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ vars.LIVE_E2E_LLM_BASE_URL || 'https://llm-proxy.app.all-hands.dev' }}
-          LLM_MODEL: "litellm_proxy/openai/gpt-4.1-mini"
+          LLM_MODEL: "openhands/gpt-5.1"
         run: |
           RESULT=$(.selector-venv/bin/python3 scripts/select-e2e-tests.py < changed_files.txt)
           echo "$RESULT" | python3 -m json.tool
@@ -103,35 +110,6 @@ jobs:
           echo "specs=$SPECS" >> "$GITHUB_OUTPUT"
           echo "reason=$REASON" >> "$GITHUB_OUTPUT"
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve PR head ref
-        id: pr_ref
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          REF=$(gh api "/repos/${{ github.repository }}/pulls/${{ env.EFFECTIVE_PR }}" --jq '.head.ref')
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "PR head ref: $REF"
-
-      - name: Trigger Mock-LLM E2E Tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
-        run: |
-          SPECS="${{ steps.selector.outputs.specs }}"
-          MODE="${{ steps.selector.outputs.mode }}"
-          REF="${{ steps.pr_ref.outputs.ref }}"
-          PR="${{ env.EFFECTIVE_PR }}"
-
-          echo "Mode: $MODE"
-          echo "Specs: ${SPECS:-<full suite>}"
-          echo "Dispatching on ref: $REF"
-
-          gh workflow run "Mock-LLM E2E Tests" \
-            --ref "$REF" \
-            -f test_specs="$SPECS" \
-            -f pr_number="$PR"
-
-          echo "::notice::Dispatched Mock-LLM E2E Tests (mode=$MODE, specs=${SPECS:-all})"
 
       - name: Post selection summary to PR
         continue-on-error: true
@@ -162,7 +140,7 @@ jobs:
           **Selected specs:**
           SPECS_PLACEHOLDER
 
-          _Triggered run: [Mock-LLM E2E Tests](/${{ github.repository }}/actions/workflows/mock-llm-e2e.yml)_
+          _Running via: [Mock-LLM E2E Tests](/${{ github.repository }}/actions/runs/${{ github.run_id }})_
           COMMENT_EOF
           )
 
@@ -172,3 +150,14 @@ jobs:
           BODY="${BODY//SPECS_PLACEHOLDER/$SPEC_DISPLAY}"
 
           echo "$BODY" | gh pr comment "${{ env.EFFECTIVE_PR }}" --body-file -
+
+  # ── Phase 2: run the E2E suite via workflow_call ──
+  run-e2e:
+    needs: select
+    uses: ./.github/workflows/mock-llm-e2e.yml
+    with:
+      test_specs: ${{ needs.select.outputs.specs }}
+      pr_number: ${{ github.event.pull_request.number && format('{0}', github.event.pull_request.number) || format('{0}', inputs.pr_number) }}
+    permissions:
+      contents: read
+      pull-requests: write

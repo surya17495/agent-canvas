@@ -25,6 +25,26 @@ on:
           non-PR dispatches.
         required: false
         default: ""
+  # Reusable workflow entry point — called by agent-e2e-selector.yml.
+  # Inputs mirror workflow_dispatch so the job body can use
+  # `inputs.*` regardless of which trigger fired.
+  workflow_call:
+    inputs:
+      test_specs:
+        description: "Comma-separated spec filenames to run."
+        required: false
+        type: string
+        default: ""
+      test_grep:
+        description: "Playwright --grep pattern."
+        required: false
+        type: string
+        default: ""
+      pr_number:
+        description: "PR number for comment posting."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: mock-llm-e2e-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
