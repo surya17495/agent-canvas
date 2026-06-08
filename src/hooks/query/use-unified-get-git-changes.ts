@@ -1,5 +1,5 @@
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import AgentServerGitService from "#/api/git-service/agent-server-git-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useConversationId } from "#/hooks/use-conversation-id";
@@ -11,6 +11,7 @@ import type { GitChange } from "#/api/open-hands.types";
 export const useUnifiedGetGitChanges = () => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
+  const queryClient = useQueryClient();
   const [orderedChanges, setOrderedChanges] = React.useState<GitChange[]>([]);
   const previousDataRef = React.useRef<GitChange[] | null>(null);
   const runtimeIsReady = useRuntimeIsReady();
@@ -39,6 +40,9 @@ export const useUnifiedGetGitChanges = () => {
       const freshWorkingDir = freshConversation?.workspace?.working_dir?.trim();
 
       const freshGitPath = getGitPath(freshSelectedRepository, freshWorkingDir);
+
+      // Invalidate localGitInfo to ensure repo bar updates after workspace change
+      queryClient.invalidateQueries({ queryKey: ["localGitInfo"] });
 
       return AgentServerGitService.getGitChanges(
         conversationUrl,
