@@ -141,13 +141,16 @@ function buildStressTrajectory() {
 
 const STRESS_TRAJECTORY = buildStressTrajectory();
 
-// Trajectory that commits all changes
+// Trajectory that commits all changes.
+// Pass user.name/user.email inline because the agent-server worktree
+// may not have git identity configured.
 const COMMIT_TRAJECTORY = [
   {
     tool_call: {
       name: "terminal",
       arguments: {
-        command: "git add -A && git commit -m 'Commit all test files'",
+        command:
+          "git add -A && git -c user.name='Test' -c user.email='test@test.com' commit -m 'Commit all test files'",
       },
     },
   },
@@ -604,17 +607,32 @@ test.describe("diff view stress test", () => {
     await test.step("refresh and verify diffs are empty after commit", async () => {
       const refreshBtn = page.getByTestId("files-tab-refresh");
       await expect(refreshBtn).toBeVisible();
+
+      // The git cache may need a moment to reflect the commit.
+      // Click refresh, wait briefly, then click again to ensure
+      // we get the post-commit state.
+      await refreshBtn.click();
+      await page.waitForTimeout(2_000);
       await refreshBtn.click();
 
       // Poll until all file-diff-viewer-outer entries disappear
       await expect
         .poll(
-          async () => page.getByTestId("file-diff-viewer-outer").count(),
+          async () => {
+            // Keep refreshing periodically to pick up the committed state
+            const count = await page
+              .getByTestId("file-diff-viewer-outer")
+              .count();
+            if (count > 0) {
+              await refreshBtn.click();
+            }
+            return count;
+          },
           {
             message:
               "All diffs should disappear after commit (expected 0 diff viewers)",
             timeout: 30_000,
-            intervals: [1_000, 2_000, 3_000],
+            intervals: [2_000, 3_000, 5_000],
           },
         )
         .toBe(0);
