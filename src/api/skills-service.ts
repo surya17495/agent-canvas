@@ -2,7 +2,7 @@ import { SkillsClient } from "@openhands/typescript-client/clients";
 import {
   SKILLS_CATALOG,
   type SkillCatalogEntry,
-} from "@openhands/extensions/skills";
+} from "@openhands/extensions/skills/index.js";
 import { SkillInfo } from "#/types/settings";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getActiveBackend } from "./backend-registry/active-store";

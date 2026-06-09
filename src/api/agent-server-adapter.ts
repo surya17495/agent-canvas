@@ -1,5 +1,5 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
-import { SKILLS_CATALOG } from "@openhands/extensions/skills";
+import { SKILLS_CATALOG } from "@openhands/extensions/skills/index.js";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { Settings, SettingsValue } from "#/types/settings";

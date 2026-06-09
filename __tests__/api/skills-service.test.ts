@@ -32,7 +32,7 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
 }));
 
-vi.mock("@openhands/extensions/skills", () => ({
+vi.mock("@openhands/extensions/skills/index.js", () => ({
   SKILLS_CATALOG: MOCK_PUBLIC_CATALOG,
 }));
 
