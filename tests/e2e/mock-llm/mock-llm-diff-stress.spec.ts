@@ -16,8 +16,6 @@
 
 import { test, expect } from "@playwright/test";
 import {
-  BACKEND_URL,
-  SESSION_API_KEY,
   seedLocalStorage,
   routeSessionApiKey,
   dismissAnalyticsModal,
@@ -120,10 +118,7 @@ function buildStressTrajectory() {
   for (const spec of FILE_SPECS) {
     let content: string;
     if (spec.name.endsWith(".json")) {
-      content = `{\n  "generated": true,\n  "lines": ${spec.lines}\n}`.slice(
-        0,
-        spec.lines * 30,
-      );
+      content = `{\n  "generated": true,\n  "lines": ${spec.lines}\n}`;
     } else if (spec.name.endsWith(".md")) {
       const mdLines = [`# ${spec.name}`, "", "Generated test file.", ""];
       content = mdLines.slice(0, spec.lines).join("\n");
