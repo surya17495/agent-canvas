@@ -70,46 +70,6 @@ async function getProfileConfig(
   return (data.config ?? {}) as Record<string, unknown>;
 }
 
-/**
- * Assert that a proxy profile config is valid after a Basic-tab re-save.
- *
- * Agent-server ≥1.28 normalises `litellm_proxy/*` → `openhands/*` on storage
- * and manages the proxy URL internally (returning base_url:null). Both
- * representations are accepted here. The original issue #1146 regression
- * (litellm_proxy/* with null base_url) is still guarded explicitly.
- */
-function assertProxyProfileConfig(
-  config: Record<string, unknown>,
-  litellmProxyModel: string,
-  openHandsEquivalentModel: string,
-  proxyBaseUrl: string,
-) {
-  const model = config.model as string | null | undefined;
-  const baseUrl = config.base_url as string | null | undefined;
-
-  const isLitellmForm =
-    typeof model === "string" && model.startsWith("litellm_proxy/");
-  const isOpenHandsForm =
-    typeof model === "string" && model.startsWith("openhands/");
-
-  expect(
-    isLitellmForm || isOpenHandsForm,
-    `model must be ${litellmProxyModel} or ${openHandsEquivalentModel}; got: ${model}`,
-  ).toBe(true);
-
-  if (isLitellmForm) {
-    // A litellm_proxy/* profile without the proxy URL is stranded (issue #1146).
-    // The frontend must always inject the URL when saving from the Basic tab.
-    expect(
-      baseUrl,
-      "base_url must be the All-Hands proxy URL for litellm_proxy/* profiles " +
-        "(dropping it strands the profile — issue #1146)",
-    ).toBe(proxyBaseUrl);
-  }
-  // For openhands/* (agent-server ≥1.28 rewrite), null base_url is correct;
-  // the server routes the request through the proxy internally.
-}
-
 test.describe.configure({ mode: "serial" });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -393,17 +353,52 @@ test.describe("same-model profile identity", () => {
 //          (PR #1148, issue #1146)
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Assert that a proxy profile config is valid after a Basic-tab re-save.
+ *
+ * Agent-server ≥1.28 normalises `litellm_proxy/*` → `openhands/*` on storage
+ * and manages the proxy URL internally (returning base_url: null). Both
+ * representations are accepted here. The original issue #1146 regression
+ * (litellm_proxy/* with null base_url) is still guarded explicitly.
+ */
+function assertProxyProfileConfig(
+  config: Record<string, unknown>,
+  litellmProxyModel: string,
+  openHandsEquivalentModel: string,
+  proxyBaseUrl: string,
+) {
+  const model = config.model as string | null | undefined;
+  const baseUrl = config.base_url as string | null | undefined;
+
+  const isLitellmForm =
+    typeof model === "string" && model.startsWith("litellm_proxy/");
+  const isOpenHandsForm =
+    typeof model === "string" && model.startsWith("openhands/");
+
+  expect(
+    isLitellmForm || isOpenHandsForm,
+    `model must be ${litellmProxyModel} or ${openHandsEquivalentModel}; got: ${model}`,
+  ).toBe(true);
+
+  if (isLitellmForm) {
+    // A litellm_proxy/* profile without the proxy URL is stranded (issue #1146).
+    // The frontend must always inject the URL when saving from the Basic tab.
+    expect(
+      baseUrl,
+      "base_url must be the All-Hands proxy URL for litellm_proxy/* profiles " +
+        "(dropping it strands the profile — issue #1146)",
+    ).toBe(proxyBaseUrl);
+  }
+  // For openhands/* (agent-server ≥1.28 rewrite), null base_url is correct;
+  // the server routes the request through the proxy internally.
+}
+
 test.describe("litellm_proxy proxy base_url preservation", () => {
   // Simulates the state the SDK persists after onboarding through the
   // OpenHands provider: openhands/* is rewritten to litellm_proxy/* and
   // paired with the All-Hands proxy base URL.
-  //
-  // Agent-server ≥1.28 additionally normalises litellm_proxy/* back to
-  // openhands/* on storage and manages the proxy URL internally (returning
-  // base_url:null). The assertions below accept both representations.
   const PROXY_PROFILE = "proxy-base-url-test";
   const LITELLM_PROXY_MODEL = "litellm_proxy/claude-opus-4-8";
-  const OPENHANDS_EQUIVALENT_MODEL = "openhands/claude-opus-4-8";
   const OPENHANDS_PROXY_BASE_URL = "https://llm-proxy.app.all-hands.dev/";
 
   test.beforeEach(async ({ page }) => {
@@ -430,6 +425,11 @@ test.describe("litellm_proxy proxy base_url preservation", () => {
     page,
     request,
   }) => {
+    // Agent-server ≥1.28 normalises litellm_proxy/* → openhands/* on storage
+    // and manages the proxy URL internally (returning base_url: null). The old
+    // assertions hard-coded the pre-1.28 storage format.
+    const OPENHANDS_EQUIVALENT_MODEL = "openhands/claude-opus-4-8";
+
     // ── Setup: create a profile with the SDK-rewritten litellm_proxy
     // model + proxy base_url through the Settings UI, exactly as
     // the agent-server persists it after an openhands/* model
