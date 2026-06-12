@@ -107,32 +107,36 @@ describe("getInstallableMcpConnectionOption", () => {
   });
 
   it("returns undefined for an OAuth-only entry (no locally installable option)", () => {
-    const oauthOnlyEntry: Parameters<typeof getInstallableMcpConnectionOption>[0] =
-      {
-        ...slackEntry,
-        id: "oauth-only",
-        defaultConnectionOptionId: "oauth",
-        connectionOptions: [
-          {
-            id: "oauth",
-            provider: "mcp",
-            auth: { strategy: "oauth2" },
-            transport: { kind: "shttp", url: "https://example.com/mcp" },
-          } as Parameters<typeof getInstallableMcpConnectionOption>[0]["connectionOptions"][number],
-        ],
-      };
+    const oauthOnlyEntry: Parameters<
+      typeof getInstallableMcpConnectionOption
+    >[0] = {
+      ...slackEntry,
+      id: "oauth-only",
+      defaultConnectionOptionId: "oauth",
+      connectionOptions: [
+        {
+          id: "oauth",
+          provider: "mcp",
+          auth: { strategy: "oauth2" },
+          transport: { kind: "shttp", url: "https://example.com/mcp" },
+        } as Parameters<
+          typeof getInstallableMcpConnectionOption
+        >[0]["connectionOptions"][number],
+      ],
+    };
     const option = getInstallableMcpConnectionOption(oauthOnlyEntry);
     expect(option).toBeUndefined();
   });
 
   it("returns undefined when the entry has no MCP connection options", () => {
-    const noOptionsEntry: Parameters<typeof getInstallableMcpConnectionOption>[0] =
-      {
-        ...slackEntry,
-        id: "no-mcp",
-        defaultConnectionOptionId: undefined,
-        connectionOptions: [],
-      };
+    const noOptionsEntry: Parameters<
+      typeof getInstallableMcpConnectionOption
+    >[0] = {
+      ...slackEntry,
+      id: "no-mcp",
+      defaultConnectionOptionId: undefined,
+      connectionOptions: [],
+    };
     const option = getInstallableMcpConnectionOption(noOptionsEntry);
     expect(option).toBeUndefined();
   });
@@ -263,6 +267,7 @@ describe("findCatalogEntryForServer", () => {
     expect(match?.id).toBe("linear");
   });
 });
+});
 
 describe("getMcpMarketplaceCatalog", () => {
   it("includes Linear with its default transport", () => {
@@ -292,5 +297,7 @@ describe("getMcpMarketplaceCatalog", () => {
   it("includes Filesystem (it has MCP connection options)", () => {
     // filesystem has a default MCP connection option and should be included
     expect(mcpMarketplace.find((e) => e.id === "filesystem")).toBeDefined();
+  });
+});
   });
 });
