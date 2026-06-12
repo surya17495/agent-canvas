@@ -164,9 +164,9 @@ describe("buildStartConversationRequest", () => {
     });
     // Bundled public skills are injected into agent_context.skills so the
     // SDK can perform trigger matching without cloning the extensions repo.
-    expect(
-      Array.isArray(payload.agent_settings.agent_context.skills),
-    ).toBe(true);
+    expect(Array.isArray(payload.agent_settings.agent_context.skills)).toBe(
+      true,
+    );
     const skills = payload.agent_settings.agent_context.skills as Record<
       string,
       unknown
@@ -686,9 +686,9 @@ describe("buildStartConversationRequest", () => {
         tool_module_qualnames?: Record<string, string>;
       };
 
-      expect(payload.agent_settings.tools.map((tool) => tool.name)).not.toContain(
-        "canvas_ui",
-      );
+      expect(
+        payload.agent_settings.tools.map((tool) => tool.name),
+      ).not.toContain("canvas_ui");
       expect(payload.tool_module_qualnames).toBeUndefined();
     });
 
@@ -1247,9 +1247,9 @@ describe("agent_settings runtime services suffix", () => {
       load_user_skills: true,
       load_project_skills: true,
     });
-    expect(
-      Array.isArray(payload.agent_settings.agent_context.skills),
-    ).toBe(true);
+    expect(Array.isArray(payload.agent_settings.agent_context.skills)).toBe(
+      true,
+    );
   });
 
   it("sets system_message_suffix when runtime info is provided", () => {
