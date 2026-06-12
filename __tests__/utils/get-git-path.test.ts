@@ -63,4 +63,48 @@ describe("getGitPath", () => {
       expect(getGitPath(null, "  ")).toBe(DEFAULT_WORKING_DIR);
     });
   });
+
+  describe("with localGitDetectedRepo fallback", () => {
+    it("prefers selectedRepository over localGitDetectedRepo", () => {
+      expect(
+        getGitPath(
+          "OpenHands/software-agent-sdk",
+          undefined,
+          "facebook/react",
+        ),
+      ).toBe(`${DEFAULT_WORKING_DIR}/software-agent-sdk`);
+    });
+
+    it("uses localGitDetectedRepo when selectedRepository is absent", () => {
+      expect(
+        getGitPath(
+          null,
+          "/workspace/stale",
+          "facebook/react",
+        ),
+      ).toBe(`${DEFAULT_WORKING_DIR}/react`);
+    });
+
+    it("uses localGitDetectedRepo even when workingDir is provided but stale", () => {
+      // localGitDetectedRepo takes priority over workingDir when no selectedRepository
+      expect(
+        getGitPath(
+          null,
+          "/workspace/stale/old-repo",
+          "owner/my-cloned-repo",
+        ),
+      ).toBe(`${DEFAULT_WORKING_DIR}/my-cloned-repo`);
+    });
+
+    it("falls back to workingDir when neither selectedRepository nor localGitDetectedRepo is set", () => {
+      expect(getGitPath(null, "/workspace/my-project", null)).toBe(
+        "/workspace/my-project",
+      );
+    });
+
+    it("falls back to default when all three are absent or null", () => {
+      expect(getGitPath(null, null, null)).toBe(DEFAULT_WORKING_DIR);
+      expect(getGitPath(null, undefined, undefined)).toBe(DEFAULT_WORKING_DIR);
+    });
+  });
 });
