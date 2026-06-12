@@ -303,8 +303,13 @@ function stringArrayOrUndefined(value: unknown): string[] | undefined {
 
 function parentAcpServer(parent: Record<string, unknown>): string | undefined {
   const tags = isRecord(parent.tags) ? parent.tags : null;
+  if (!tags) return undefined;
+
   const value = tags?.acpserver;
-  return typeof value === "string" && value.trim() ? value : undefined;
+  if (typeof value !== "string") return undefined;
+
+  const acpServer = value.trim();
+  return acpServer || undefined;
 }
 
 function resolveParentAcpAgentSettings(
@@ -380,7 +385,10 @@ async function resolveParentOpenHandsAgentSettings(
     // Parent profile lookup is best-effort. Conversation creation should fall
     // back to the caller's settings instead of failing because inheritance
     // metadata is stale or inaccessible.
-    console.warn("Failed to resolve parent profile settings:", error);
+    console.warn(
+      `Failed to resolve parent profile settings for ${parentConversationId}:`,
+      error,
+    );
     return undefined;
   }
 }
