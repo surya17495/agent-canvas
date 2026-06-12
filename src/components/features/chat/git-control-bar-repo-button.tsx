@@ -55,6 +55,7 @@ export function GitControlBarRepoButton({
         href={repositoryUrl}
         target="_blank"
         rel="noopener noreferrer"
+        data-testid={dataTestId}
         className={cn(
           "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] flex-1 truncate relative",
           "border border-[var(--oh-border)] bg-transparent hover:border-[var(--oh-border-subtle)] cursor-pointer",
