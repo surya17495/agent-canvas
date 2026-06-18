@@ -37,6 +37,9 @@ import {
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
+import { buildConversationUrl } from "#/api/backend-registry/url-selection";
+import type { BackendSelection } from "#/api/backend-registry/types";
+import { isNoBackend } from "#/api/backend-registry/active-store";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -80,7 +83,17 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
-  const { backend: activeBackend } = useActiveBackend();
+  const { backend: activeBackend, orgId: activeOrgId } = useActiveBackend();
+  const activeBackendSelection = React.useMemo<BackendSelection | null>(
+    () =>
+      isNoBackend(activeBackend)
+        ? null
+        : {
+            backendId: activeBackend.id,
+            orgId: activeOrgId,
+          },
+    [activeBackend.id, activeOrgId],
+  );
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -434,13 +447,17 @@ export function ConversationPanel({
             showLlmProfiles={showLlmProfiles}
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
+            conversationUrl={buildConversationUrl(
+              conversation.id,
+              activeBackendSelection,
+            )}
           />
         );
       }
       return (
         <NavigationLink
           key={conversation.id}
-          to={`/conversations/${conversation.id}`}
+          to={buildConversationUrl(conversation.id, activeBackendSelection)}
           onClick={onClose}
           className="block"
         >
@@ -489,6 +506,7 @@ export function ConversationPanel({
       handleStopConversation,
       onClose,
       openContextMenuId,
+      activeBackendSelection,
       showRepoBranchMetadata,
       showLlmProfiles,
     ],
@@ -592,7 +610,10 @@ export function ConversationPanel({
           startTasks?.map((task) => (
             <NavigationLink
               key={task.id}
-              to={`/conversations/task-${task.id}`}
+              to={buildConversationUrl(
+                `task-${task.id}`,
+                activeBackendSelection,
+              )}
               onClick={onClose}
               className="block"
             >
