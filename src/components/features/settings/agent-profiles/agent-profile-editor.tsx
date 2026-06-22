@@ -288,59 +288,71 @@ export function AgentProfileEditor({
     };
   };
 
-  const reportSaveError = (error: unknown) => {
-    if (isSdkHttpStatusError(error, 409)) {
-      displayErrorToast(
-        mode === "edit" && name !== profile?.name
-          ? t(I18nKey.SETTINGS$AGENT_PROFILE_NAME_EXISTS)
-          : t(I18nKey.SETTINGS$AGENT_PROFILE_LIMIT_REACHED),
-      );
-    } else {
-      // 422 (validation) and everything else: surface the server message.
-      displayErrorToast(
-        error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
-      );
-    }
+  // 409 means different things per operation (save = profile-count limit,
+  // rename = name collision), so each call site passes its own conflict copy.
+  const showSaveError = (error: unknown, conflictKey: I18nKey) => {
+    displayErrorToast(
+      isSdkHttpStatusError(error, 409)
+        ? t(conflictKey)
+        : error instanceof Error
+          ? error.message
+          : t(I18nKey.ERROR$GENERIC),
+    );
   };
 
   const handleSave = async () => {
     if (!canSave) return;
     const trimmedName = name.trim();
 
-    try {
-      // Persist ACP credentials first so they exist when the spec is applied.
-      if (acpCredentialForm.isDirty) {
+    // Persist ACP credentials first so they exist when the spec is applied.
+    if (acpCredentialForm.isDirty) {
+      try {
         const ok = await acpCredentialForm.save({ silent: true });
         if (!ok) return;
         acpCredentialForm.reset();
+      } catch (error) {
+        displayErrorToast(
+          error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
+        );
+        return;
       }
+    }
 
-      // Save the body first (under its current name), then rename — so a
-      // validation failure can't leave a half-applied edit (renamed but with
-      // the old body). The stable id is preserved by both the overwrite and
-      // the rename.
-      const saveName = mode === "edit" && profile ? profile.name : trimmedName;
+    // Save the body first (under its current name), then rename — so a
+    // validation failure can't leave a half-applied edit (renamed but with the
+    // old body). The stable id is preserved by both the overwrite and the
+    // rename. A 409 here is the profile-count limit; an overwrite of a namesake
+    // never conflicts on name.
+    const saveName = mode === "edit" && profile ? profile.name : trimmedName;
+    try {
       await saveProfile.mutateAsync({
         name: saveName,
         profile: buildPayload(),
       });
+    } catch (error) {
+      showSaveError(error, I18nKey.SETTINGS$AGENT_PROFILE_LIMIT_REACHED);
+      return;
+    }
 
-      if (mode === "edit" && profile && profile.name !== trimmedName) {
+    // Rename last; a 409 here is specifically a name collision.
+    if (mode === "edit" && profile && profile.name !== trimmedName) {
+      try {
         await renameProfile.mutateAsync({
           name: profile.name,
           newName: trimmedName,
         });
+      } catch (error) {
+        showSaveError(error, I18nKey.SETTINGS$AGENT_PROFILE_NAME_EXISTS);
+        return;
       }
-
-      displaySuccessToast(
-        mode === "create"
-          ? t(I18nKey.SETTINGS$PROFILE_CREATED, { name: trimmedName })
-          : t(I18nKey.SETTINGS$PROFILE_UPDATED, { name: trimmedName }),
-      );
-      onSaved();
-    } catch (error) {
-      reportSaveError(error);
     }
+
+    displaySuccessToast(
+      mode === "create"
+        ? t(I18nKey.SETTINGS$PROFILE_CREATED, { name: trimmedName })
+        : t(I18nKey.SETTINGS$PROFILE_UPDATED, { name: trimmedName }),
+    );
+    onSaved();
   };
 
   const isSaving = saveProfile.isPending || renameProfile.isPending;
