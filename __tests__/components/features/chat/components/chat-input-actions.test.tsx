@@ -30,9 +30,17 @@ vi.mock("#/components/features/chat/change-agent-button", () => ({
   ChangeAgentButton: () => <div data-testid="change-agent-button-stub" />,
 }));
 
-vi.mock("#/components/features/chat/switch-profile-button", () => ({
-  SwitchProfileButton: () => <div data-testid="switch-profile-button-stub" />,
-}));
+vi.mock(
+  "#/components/features/chat/components/chat-input-profile-picker",
+  () => ({
+    ChatInputProfilePicker: () => (
+      <div data-testid="agent-profile-picker-stub" />
+    ),
+    ChatInputProfileMenuContent: () => (
+      <div data-testid="agent-profile-menu-stub" />
+    ),
+  }),
+);
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => useActiveConversationMock(),
@@ -65,22 +73,20 @@ describe("ChatInputActions", () => {
     useActiveConversationMock.mockReturnValue({ data: undefined });
   });
 
-  it("renders the SwitchProfileButton on a local backend", () => {
+  it("renders the AgentProfile picker on a local backend", () => {
     useActiveConversationMock.mockReturnValue({
       data: { conversation_id: "test-conversation-id", llm_model: "gpt-4o" },
     });
 
     renderWithProviders(<ChatInputActions disabled={false} />);
 
-    expect(
-      screen.getByTestId("switch-profile-button-stub"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("agent-profile-picker-stub")).toBeInTheDocument();
     expect(
       screen.queryByTestId("chat-input-llm-model"),
     ).not.toBeInTheDocument();
   });
 
-  it("renders the static model label for local ACP conversations", () => {
+  it("renders the AgentProfile picker for local ACP conversations", () => {
     useActiveConversationMock.mockReturnValue({
       data: {
         conversation_id: "test-conversation-id",
@@ -91,12 +97,11 @@ describe("ChatInputActions", () => {
 
     renderWithProviders(<ChatInputActions disabled={false} />);
 
-    expect(screen.getByTestId("chat-input-llm-model")).toHaveAttribute(
-      "title",
-      "claude-sonnet-4-6",
-    );
+    // Local ACP now uses the unified AgentProfile picker (start-new-with-
+    // profile), not the inline model label.
+    expect(screen.getByTestId("agent-profile-picker-stub")).toBeInTheDocument();
     expect(
-      screen.queryByTestId("switch-profile-button-stub"),
+      screen.queryByTestId("chat-input-llm-model"),
     ).not.toBeInTheDocument();
   });
 
@@ -117,7 +122,7 @@ describe("ChatInputActions", () => {
       "gpt-4o",
     );
     expect(
-      screen.queryByTestId("switch-profile-button-stub"),
+      screen.queryByTestId("agent-profile-picker-stub"),
     ).not.toBeInTheDocument();
   });
 
@@ -171,8 +176,6 @@ describe("ChatInputActions", () => {
       { navigation: { conversationId: null } },
     );
 
-    expect(
-      screen.getByTestId("change-agent-button-stub"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("change-agent-button-stub")).toBeInTheDocument();
   });
 });

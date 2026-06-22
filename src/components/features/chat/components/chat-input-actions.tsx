@@ -5,7 +5,10 @@ import { Cpu } from "lucide-react";
 import { AgentStatus } from "#/components/features/controls/agent-status";
 import { ChangeAgentButton } from "../change-agent-button";
 import { ChatInputModel, ChatInputModelMenuContent } from "./chat-input-model";
-import { SwitchProfileButton } from "../switch-profile-button";
+import {
+  ChatInputProfilePicker,
+  ChatInputProfileMenuContent,
+} from "./chat-input-profile-picker";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
 import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
@@ -367,19 +370,34 @@ export function ChatInputActions({
               testId="overflow-model-submenu"
               className="min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto gap-0"
             >
-              <ChatInputModelMenuContent
-                model={modelState}
-                onClose={closeOverflowMenus}
-                dividerInset="menu"
-                settingsLinkClassName={cn(
-                  "group",
-                  formControlTransitionClassName,
-                )}
-                settingsIconClassName={cn(
-                  "text-[var(--oh-muted)] group-hover:text-[var(--oh-foreground)]",
-                  formControlTransitionClassName,
-                )}
-              />
+              {isCloud ? (
+                <ChatInputModelMenuContent
+                  model={modelState}
+                  onClose={closeOverflowMenus}
+                  dividerInset="menu"
+                  settingsLinkClassName={cn(
+                    "group",
+                    formControlTransitionClassName,
+                  )}
+                  settingsIconClassName={cn(
+                    "text-[var(--oh-muted)] group-hover:text-[var(--oh-foreground)]",
+                    formControlTransitionClassName,
+                  )}
+                />
+              ) : (
+                <ChatInputProfileMenuContent
+                  onClose={closeOverflowMenus}
+                  dividerInset="menu"
+                  settingsLinkClassName={cn(
+                    "group",
+                    formControlTransitionClassName,
+                  )}
+                  settingsIconClassName={cn(
+                    "text-[var(--oh-muted)] group-hover:text-[var(--oh-foreground)]",
+                    formControlTransitionClassName,
+                  )}
+                />
+              )}
             </ContextMenu>
           </div>
         </div>
@@ -406,11 +424,10 @@ export function ChatInputActions({
             </div>
           )}
           <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
-            {isCloud || modelState.isAcpContext ? (
-              <ChatInputModel />
-            ) : (
-              <SwitchProfileButton />
-            )}
+            {/* Cloud keeps the model picker (AgentProfiles are local-first;
+                the cloud app-server has no profile surface yet, #3730). Local
+                OpenHands + ACP get the unified AgentProfile picker (#3727). */}
+            {isCloud ? <ChatInputModel /> : <ChatInputProfilePicker />}
           </div>
 
           {hasOverflowItems && (
