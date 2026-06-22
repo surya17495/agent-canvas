@@ -127,7 +127,7 @@ export function ChatInputProfileMenuContent({
 
 export function ChatInputProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, isLoading } =
+  const { profiles, currentProfileName, isLoading, isSwitching } =
     useChatInputProfileState();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -154,6 +154,11 @@ export function ChatInputProfilePicker() {
         data-testid="chat-input-agent-profile"
         aria-expanded={isPopoverOpen}
         aria-haspopup="dialog"
+        // Disabled while a profile switch (new-conversation create / activate) is
+        // in flight, so re-opening the menu can't fire a second create. The menu
+        // closes on select, so this is the only double-submit path.
+        disabled={isSwitching}
+        aria-busy={isSwitching}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
