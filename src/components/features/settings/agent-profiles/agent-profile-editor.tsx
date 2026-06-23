@@ -114,14 +114,6 @@ export function AgentProfileEditor({
         return <CondenserSection form={form} />;
       case "personality":
         return <PersonalitySection form={form} />;
-      case "provider-model":
-        return <ProviderModelSection form={form} />;
-      case "launch":
-        return <LaunchSection form={form} />;
-      case "mcp":
-        return <McpSection form={form} />;
-      case "authentication":
-        return <AuthenticationSection form={form} />;
       default:
         return null;
     }
@@ -171,15 +163,27 @@ export function AgentProfileEditor({
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-        <AgentProfileSectionNav
-          sections={sections}
-          activeId={activeSection}
-          onSelect={setActiveSection}
-          errorSections={errorSections}
-        />
-        <div className="min-w-0 flex-1 max-w-2xl">{renderSection()}</div>
-      </div>
+      {form.isAcp ? (
+        // ACP is simpler than OpenHands — render it as one flat page (the way
+        // the global agent page does) rather than a master-detail sub-panel.
+        <div className="flex max-w-2xl flex-col gap-8">
+          <GeneralSection form={form} />
+          <ProviderModelSection form={form} />
+          <LaunchSection form={form} />
+          <McpSection form={form} />
+          <AuthenticationSection form={form} />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+          <AgentProfileSectionNav
+            sections={sections}
+            activeId={activeSection}
+            onSelect={setActiveSection}
+            errorSections={errorSections}
+          />
+          <div className="min-w-0 flex-1 max-w-2xl">{renderSection()}</div>
+        </div>
+      )}
 
       <div className="flex justify-start gap-3 border-t border-[#3D4046] pt-4">
         <BrandButton
