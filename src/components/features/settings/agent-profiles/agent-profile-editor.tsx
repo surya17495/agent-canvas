@@ -1,88 +1,48 @@
-import React, { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type {
-  AgentProfile,
-  AgentProfileSaveInput,
-  ACPServerKind,
-  ProfileVerificationSettings,
-} from "@openhands/typescript-client";
+import type { AgentProfile } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
-import { SettingsInput } from "#/components/features/settings/settings-input";
-import { SettingsSwitch } from "#/components/features/settings/settings-switch";
-import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
-import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { Typography } from "#/ui/typography";
-import { McpServerRefsSelect } from "./mcp-server-refs-select";
-import { AgentProfileVerificationFields } from "./agent-profile-verification-fields";
-import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
-import { useSettings } from "#/hooks/query/use-settings";
-import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
-import { useRenameAgentProfile } from "#/hooks/mutation/use-rename-agent-profile";
-import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
-import { isProfileNameValid } from "#/utils/derive-profile-name";
-import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
+import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
 import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import {
-  ACP_PROVIDERS,
-  ACP_CUSTOM_PRESET_KEY,
-  getAcpProvider,
-  getAcpPreferredDefaultModel,
-  type ACPProviderConfig,
-} from "#/constants/acp-providers";
-import { parseCommand, formatCommand } from "#/utils/acp-command";
-
-type AgentKind = "openhands" | "acp";
-
-const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
-
-// Mirrors the SDK ProfileVerificationSettings defaults so an unchanged create
-// matches what the server would seed.
-const DEFAULT_VERIFICATION: ProfileVerificationSettings = {
-  critic_enabled: false,
-  critic_mode: "finish_and_message",
-  enable_iterative_refinement: false,
-  critic_threshold: 0.6,
-  max_refinement_iterations: 3,
-  critic_server_url: null,
-  critic_model_name: null,
-};
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((v): v is string => typeof v === "string")
-    : [];
-}
-
-function isKnownAcpModel(
-  provider: ACPProviderConfig | undefined,
-  model: string,
-): boolean {
-  return (
-    provider?.available_models?.some(({ id }) => id === model.trim()) ?? false
-  );
-}
-
-/** Round-tripped OpenHands fields the editor preserves but does not surface as
- * first-class controls (`agent`/`skills`/`condenser`). Kept verbatim so an edit
- * never resets them; omitted on create so the server seeds its defaults. */
-interface OpenHandsExtras {
-  agent?: string;
-  skills?: unknown[];
-  condenser?: unknown;
-}
+  useAgentProfileForm,
+  type AgentKind,
+} from "./editor/use-agent-profile-form";
+import { getSectionsForKind, type SectionId } from "./editor/sections";
+import { AgentProfileSectionNav } from "./editor/agent-profile-section-nav";
+import { AgentProfileOverview } from "./editor/agent-profile-overview";
+import { GeneralSection } from "./editor/sections/general-section";
+import {
+  ModelSection,
+  ToolsMcpSection,
+  MemorySection,
+  VerificationSection,
+  PersonalitySection,
+  AdvancedSection,
+} from "./editor/sections/openhands-sections";
+import {
+  ProviderModelSection,
+  LaunchSection,
+  McpSection,
+  AuthenticationSection,
+} from "./editor/sections/acp-sections";
 
 interface AgentProfileEditorProps {
   mode: "create" | "edit";
   /** Full profile to edit (already fetched). Null in create mode. */
   profile: AgentProfile | null;
+  /** Kind chosen in the create modal (create mode only). */
+  createKind?: AgentKind;
   /** Existing names for duplicate validation. */
   existingNames: string[];
+  /** Active (default) profile id, for the "Set default" control. */
+  activeId?: string | null;
   onCancel: () => void;
   onSaved: () => void;
 }
@@ -90,505 +50,150 @@ interface AgentProfileEditorProps {
 export function AgentProfileEditor({
   mode,
   profile,
+  createKind = "openhands",
   existingNames,
+  activeId,
   onCancel,
   onSaved,
 }: AgentProfileEditorProps) {
   const { t } = useTranslation("openhands");
-  const { data: llmProfilesData } = useLlmProfiles();
-  const { data: settings } = useSettings();
-  const saveProfile = useSaveAgentProfile();
-  const renameProfile = useRenameAgentProfile();
+  const activate = useActivateAgentProfile();
+  const form = useAgentProfileForm({
+    mode,
+    profile,
+    createKind,
+    existingNames,
+    onSaved,
+  });
 
-  const llmProfiles = llmProfilesData?.profiles ?? [];
-  const mcpServerNames = useMemo(() => {
-    const mcpConfig = settings?.agent_settings?.mcp_config as
-      | { mcpServers?: Record<string, unknown> }
-      | undefined;
-    return Object.keys(mcpConfig?.mcpServers ?? {});
-  }, [settings?.agent_settings?.mcp_config]);
-
-  // --- shared ---
-  const [name, setName] = useState(profile?.name ?? "");
-  const [agentKind, setAgentKind] = useState<AgentKind>(
-    profile?.agent_kind ?? "openhands",
+  const sections = useMemo(
+    () => getSectionsForKind(form.agentKind),
+    [form.agentKind],
   );
-  const [mcpServerRefs, setMcpServerRefs] = useState<string[] | null>(
-    profile?.mcp_server_refs ?? null,
+  const [activeSection, setActiveSection] = useState<SectionId>(
+    mode === "edit" ? "overview" : "general",
   );
 
-  // --- OpenHands ---
-  const openhands = profile?.agent_kind === "openhands" ? profile : null;
-  const [llmProfileRef, setLlmProfileRef] = useState(
-    openhands?.llm_profile_ref ?? llmProfilesData?.active_profile ?? "",
-  );
-  const [enableSubAgents, setEnableSubAgents] = useState(
-    openhands?.enable_sub_agents ?? false,
-  );
-  const [systemSuffix, setSystemSuffix] = useState(
-    openhands?.system_message_suffix ?? "",
-  );
-  const [toolConcurrency, setToolConcurrency] = useState(
-    String(openhands?.tool_concurrency_limit ?? 1),
-  );
-  const [verification, setVerification] = useState<ProfileVerificationSettings>(
-    openhands?.verification ?? DEFAULT_VERIFICATION,
-  );
-  const openHandsExtrasRef = useRef<OpenHandsExtras>(
-    openhands
-      ? {
-          agent: openhands.agent,
-          skills: openhands.skills,
-          condenser: openhands.condenser,
-        }
-      : {},
-  );
+  const errorSections = useMemo(() => {
+    const s = new Set<SectionId>();
+    if (!form.isNameValid) s.add("general");
+    if (!form.isAcp && !form.isLlmRefValid) s.add("model");
+    if (form.isAcp && form.isAcpInvalid) s.add("launch");
+    return s;
+  }, [form.isNameValid, form.isLlmRefValid, form.isAcpInvalid, form.isAcp]);
 
-  // --- ACP ---
-  const acp = profile?.agent_kind === "acp" ? profile : null;
-  const initialAcpServer = acp?.acp_server ?? ACP_PROVIDERS[0]?.key ?? "custom";
-  const initialCommand = (() => {
-    if (acp) {
-      const provider = getAcpProvider(acp.acp_server);
-      const base = acp.acp_command
-        ? parseCommand(acp.acp_command)
-        : (provider?.default_command ?? []);
-      const tokens = [...base, ...toStringArray(acp.acp_args)];
-      return tokens.length ? formatCommand(tokens) : "";
-    }
-    const preferred = getAcpProvider(initialAcpServer);
-    return preferred ? formatCommand(preferred.default_command) : "";
-  })();
-  const [commandText, setCommandText] = useState(initialCommand);
-  const [acpModel, setAcpModel] = useState(
-    acp?.acp_model ?? getAcpPreferredDefaultModel(initialAcpServer) ?? "",
-  );
-  const [isCustomAcpModel, setIsCustomAcpModel] = useState(
-    !!acp?.acp_model &&
-      !isKnownAcpModel(getAcpProvider(acp.acp_server), acp.acp_model),
-  );
-  const [sessionMode, setSessionMode] = useState(acp?.acp_session_mode ?? "");
-  const [promptTimeout, setPromptTimeout] = useState(
-    String(acp?.acp_prompt_timeout ?? 1800),
-  );
-  // The selected ACP provider preset (a registry key or the "custom" sentinel).
-  // Explicit state, NOT derived from the command text, so editing the command
-  // (e.g. adding a flag) can't silently flip the preset to "custom" and drop
-  // the provider's credentials / model list.
-  const [acpServerSel, setAcpServerSel] = useState<string>(initialAcpServer);
+  const isActive = mode === "edit" && !!profile?.id && profile.id === activeId;
+  const canSetDefault = mode === "edit" && !!profile?.id && !isActive;
 
-  const isAcp = agentKind === "acp";
-  const selectedPreset = isAcp ? acpServerSel : ACP_CUSTOM_PRESET_KEY;
-  const selectedProvider = getAcpProvider(selectedPreset);
-  const modelSuggestions = selectedProvider?.available_models ?? [];
-  const hasModelSuggestions = modelSuggestions.length > 0;
-  const selectedModelIsSuggestion = isKnownAcpModel(selectedProvider, acpModel);
-  const selectedModelKey =
-    isCustomAcpModel || !selectedModelIsSuggestion
-      ? ACP_CUSTOM_MODEL_KEY
-      : acpModel;
-
-  // ACP creds live alongside the agent spec; the editor owns the form and a
-  // single Save persists both. Called unconditionally (null for non-ACP/custom)
-  // to keep hook order stable. The hook resets typed values on provider change.
-  const acpCredentialForm = useAcpCredentialForm(
-    isAcp && selectedPreset !== ACP_CUSTOM_PRESET_KEY ? selectedPreset : null,
-  );
-
-  const commandTokens = parseCommand(commandText);
-  const isAcpInvalid = isAcp && commandTokens.length === 0;
-  const isNameValid = useMemo(() => {
-    if (!isProfileNameValid(name, { isRequired: true })) return false;
-    const clash = existingNames.includes(name) && name !== profile?.name;
-    return !clash;
-  }, [name, existingNames, profile?.name]);
-  const isLlmRefValid = isAcp || llmProfileRef.trim().length > 0;
-  const canSave = isNameValid && isLlmRefValid && !isAcpInvalid;
-
-  const handleKindChange = (kind: AgentKind) => {
-    setAgentKind(kind);
-    if (kind === "acp" && !commandText) {
-      const preferred = ACP_PROVIDERS[0];
-      if (preferred) {
-        setAcpServerSel(preferred.key);
-        setCommandText(formatCommand(preferred.default_command));
-        setAcpModel(getAcpPreferredDefaultModel(preferred.key) ?? "");
-        setIsCustomAcpModel(false);
-      }
-    }
-    if (kind === "openhands" && !llmProfileRef) {
-      setLlmProfileRef(llmProfilesData?.active_profile ?? "");
-    }
-  };
-
-  const handlePresetChange = (preset: string) => {
-    setAcpServerSel(preset);
-    const provider = getAcpProvider(preset);
-    if (provider) {
-      setCommandText(formatCommand(provider.default_command));
-      setAcpModel(getAcpPreferredDefaultModel(preset) ?? "");
-      setIsCustomAcpModel(false);
-    } else if (preset === ACP_CUSTOM_PRESET_KEY) {
-      setCommandText("");
-      setAcpModel("");
-      setIsCustomAcpModel(true);
-    }
-  };
-
-  const buildPayload = (): AgentProfileSaveInput => {
-    if (isAcp) {
-      const useDefault =
-        !!selectedProvider &&
-        commandTokens.join(" ") === selectedProvider.default_command.join(" ");
-      const isCustom = selectedPreset === ACP_CUSTOM_PRESET_KEY;
-      const acpServer = (isCustom ? "custom" : selectedPreset) as ACPServerKind;
-      // Built-in provider on its default command → leave command/args null so
-      // the backend resolves them from the registry. Otherwise split the typed
-      // command into executable + args.
-      const explicit = isCustom || !useDefault;
-      const timeout = Number(promptTimeout);
-      return {
-        agent_kind: "acp",
-        acp_server: acpServer,
-        acp_model: acpModel.trim() || null,
-        acp_session_mode: sessionMode.trim() ? sessionMode.trim() : null,
-        acp_prompt_timeout:
-          Number.isFinite(timeout) && timeout > 0 ? timeout : 1800,
-        acp_command: explicit ? (commandTokens[0] ?? null) : null,
-        acp_args: explicit ? commandTokens.slice(1) : null,
-        mcp_server_refs: mcpServerRefs,
-      };
-    }
-
-    const concurrency = Number(toolConcurrency);
-    const extras = openHandsExtrasRef.current;
-    return {
-      agent_kind: "openhands",
-      llm_profile_ref: llmProfileRef,
-      mcp_server_refs: mcpServerRefs,
-      enable_sub_agents: enableSubAgents,
-      system_message_suffix: systemSuffix.trim() ? systemSuffix : null,
-      tool_concurrency_limit:
-        Number.isFinite(concurrency) && concurrency >= 1
-          ? Math.floor(concurrency)
-          : 1,
-      // On edit, round-trip the loaded verification block; on create only send
-      // it once the user enables the critic, otherwise let the server seed its
-      // own default (avoids pinning a possibly-stale default critic_mode).
-      ...(mode === "edit" || verification.critic_enabled
-        ? { verification }
-        : {}),
-      ...(mode === "edit" && extras.agent !== undefined
-        ? {
-            agent: extras.agent,
-            skills: extras.skills ?? [],
-            condenser: extras.condenser,
-          }
-        : {}),
-    };
-  };
-
-  // 409 means different things per operation (save = profile-count limit,
-  // rename = name collision), so each call site passes its own conflict copy.
-  const showSaveError = (error: unknown, conflictKey: I18nKey) => {
-    displayErrorToast(
-      isSdkHttpStatusError(error, 409)
-        ? t(conflictKey)
-        : error instanceof Error
-          ? error.message
-          : t(I18nKey.ERROR$GENERIC),
-    );
-  };
-
-  const handleSave = async () => {
-    if (!canSave) return;
-    const trimmedName = name.trim();
-
-    // Persist ACP credentials first so they exist when the spec is applied.
-    if (acpCredentialForm.isDirty) {
-      try {
-        const ok = await acpCredentialForm.save({ silent: true });
-        if (!ok) return;
-        acpCredentialForm.reset();
-      } catch (error) {
-        displayErrorToast(
-          error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
-        );
-        return;
-      }
-    }
-
-    // Save the body first (under its current name), then rename — so a
-    // validation failure can't leave a half-applied edit (renamed but with the
-    // old body). The stable id is preserved by both the overwrite and the
-    // rename. A 409 here is the profile-count limit; an overwrite of a namesake
-    // never conflicts on name.
-    const saveName = mode === "edit" && profile ? profile.name : trimmedName;
+  const handleSetDefault = async () => {
+    if (!profile?.id) return;
     try {
-      await saveProfile.mutateAsync({
-        name: saveName,
-        profile: buildPayload(),
-      });
-    } catch (error) {
-      showSaveError(error, I18nKey.SETTINGS$AGENT_PROFILE_LIMIT_REACHED);
-      return;
+      await activate.mutateAsync(profile.id);
+      displaySuccessToast(
+        t(I18nKey.SETTINGS$PROFILE_ACTIVATED, { name: profile.name }),
+      );
+    } catch {
+      displayErrorToast(t(I18nKey.ERROR$GENERIC));
     }
-
-    // Rename last; a 409 here is specifically a name collision.
-    if (mode === "edit" && profile && profile.name !== trimmedName) {
-      try {
-        await renameProfile.mutateAsync({
-          name: profile.name,
-          newName: trimmedName,
-        });
-      } catch (error) {
-        showSaveError(error, I18nKey.SETTINGS$AGENT_PROFILE_NAME_EXISTS);
-        return;
-      }
-    }
-
-    displaySuccessToast(
-      mode === "create"
-        ? t(I18nKey.SETTINGS$PROFILE_CREATED, { name: trimmedName })
-        : t(I18nKey.SETTINGS$PROFILE_UPDATED, { name: trimmedName }),
-    );
-    onSaved();
   };
 
-  const isSaving = saveProfile.isPending || renameProfile.isPending;
+  const renderSection = () => {
+    switch (activeSection) {
+      case "overview":
+        return (
+          <AgentProfileOverview
+            form={form}
+            profileName={profile?.name ?? null}
+          />
+        );
+      case "general":
+        return <GeneralSection form={form} />;
+      case "model":
+        return <ModelSection form={form} />;
+      case "tools-mcp":
+        return <ToolsMcpSection form={form} />;
+      case "memory":
+        return <MemorySection form={form} />;
+      case "verification":
+        return <VerificationSection form={form} />;
+      case "personality":
+        return <PersonalitySection form={form} />;
+      case "advanced":
+        return <AdvancedSection form={form} />;
+      case "provider-model":
+        return <ProviderModelSection form={form} />;
+      case "launch":
+        return <LaunchSection form={form} />;
+      case "mcp":
+        return <McpSection form={form} />;
+      case "authentication":
+        return <AuthenticationSection form={form} />;
+      default:
+        return null;
+    }
+  };
+
+  const kindLabel = form.isAcp
+    ? t(I18nKey.SETTINGS$AGENT_TYPE_ACP)
+    : t(I18nKey.SETTINGS$AGENT_TYPE_OPENHANDS);
 
   return (
-    <div className="flex flex-col gap-6 pb-8 max-w-2xl">
+    <div className="flex flex-col gap-5 pb-8">
       <div className="flex flex-col gap-2">
         <BackNavButton testId="back-to-agent-profiles" onClick={onCancel}>
           {t(I18nKey.BUTTON$BACK)}
         </BackNavButton>
-        <Typography.H2 testId="agent-profile-editor-title">
-          {mode === "create"
-            ? t(I18nKey.SETTINGS$ADD_AGENT_PROFILE)
-            : t(I18nKey.SETTINGS$EDIT_AGENT_PROFILE)}
-        </Typography.H2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Typography.H2 testId="agent-profile-editor-title">
+              {form.name.trim() ||
+                (mode === "create"
+                  ? t(I18nKey.SETTINGS$ADD_AGENT_PROFILE)
+                  : t(I18nKey.SETTINGS$EDIT_AGENT_PROFILE))}
+            </Typography.H2>
+            <span className="rounded-full bg-tertiary px-2 py-0.5 text-xs text-[#A3A3A3]">
+              {kindLabel}
+            </span>
+            {isActive && (
+              <span
+                data-testid="agent-profile-default-badge"
+                className="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-primary"
+              >
+                {t(I18nKey.SETTINGS$PROFILE_ACTIVE)}
+              </span>
+            )}
+          </div>
+          {canSetDefault && (
+            <BrandButton
+              testId="set-default-agent-profile-btn"
+              type="button"
+              variant="secondary"
+              onClick={handleSetDefault}
+              isDisabled={activate.isPending}
+            >
+              {t(I18nKey.SETTINGS$SET_AS_DEFAULT)}
+            </BrandButton>
+          )}
+        </div>
       </div>
 
-      <ProfileNameInput
-        testId="agent-profile-name-input"
-        value={name}
-        onChange={setName}
-        isRequired
-      />
+      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+        <AgentProfileSectionNav
+          sections={sections}
+          activeId={activeSection}
+          onSelect={setActiveSection}
+          errorSections={errorSections}
+        />
+        <div className="min-w-0 flex-1 max-w-2xl">{renderSection()}</div>
+      </div>
 
-      <SettingsDropdownInput
-        testId="agent-profile-kind-selector"
-        name="agent-profile-kind"
-        label={t(I18nKey.SETTINGS$NAV_AGENT)}
-        items={[
-          { key: "openhands", label: t(I18nKey.SETTINGS$AGENT_TYPE_OPENHANDS) },
-          { key: "acp", label: t(I18nKey.SETTINGS$AGENT_TYPE_ACP) },
-        ]}
-        selectedKey={agentKind}
-        isClearable={false}
-        onSelectionChange={(key) => {
-          if (key) handleKindChange(key as AgentKind);
-        }}
-      />
-
-      {!isAcp && (
-        <>
-          <SettingsDropdownInput
-            testId="agent-profile-llm-ref"
-            name="llm-profile-ref"
-            label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_REF_LABEL)}
-            items={llmProfiles.map((p) => ({ key: p.name, label: p.name }))}
-            selectedKey={llmProfileRef || undefined}
-            placeholder={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_REF_REQUIRED)}
-            isClearable={false}
-            required
-            onSelectionChange={(key) => {
-              if (key) setLlmProfileRef(String(key));
-            }}
-          />
-
-          <McpServerRefsSelect
-            availableServers={mcpServerNames}
-            value={mcpServerRefs}
-            onChange={setMcpServerRefs}
-          />
-
-          <SettingsInput
-            testId="agent-profile-system-suffix"
-            label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_SUFFIX_LABEL)}
-            type="text"
-            className="w-full"
-            showOptionalTag
-            value={systemSuffix}
-            onChange={setSystemSuffix}
-          />
-
-          <SettingsSwitch
-            testId="agent-profile-sub-agents"
-            isToggled={enableSubAgents}
-            onToggle={setEnableSubAgents}
-          >
-            {t(I18nKey.SCHEMA$ENABLE_SUB_AGENTS$LABEL)}
-          </SettingsSwitch>
-
-          <SettingsInput
-            testId="agent-profile-tool-concurrency"
-            label={t(I18nKey.SETTINGS$AGENT_PROFILE_TOOL_CONCURRENCY_LABEL)}
-            type="number"
-            min={1}
-            step={1}
-            className="w-full"
-            value={toolConcurrency}
-            onChange={setToolConcurrency}
-          />
-
-          <hr className="border-[#3D4046]" />
-          <AgentProfileVerificationFields
-            value={verification}
-            onChange={setVerification}
-          />
-        </>
-      )}
-
-      {isAcp && (
-        <>
-          <SettingsDropdownInput
-            testId="agent-profile-preset-selector"
-            name="agent-profile-preset"
-            label={t(I18nKey.SETTINGS$AGENT_PRESET)}
-            items={[
-              ...ACP_PROVIDERS.map((provider) => ({
-                key: provider.key,
-                label: provider.display_name,
-              })),
-              {
-                key: ACP_CUSTOM_PRESET_KEY,
-                label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
-              },
-            ]}
-            selectedKey={selectedPreset}
-            isClearable={false}
-            onSelectionChange={(key) => {
-              if (key) handlePresetChange(String(key));
-            }}
-          />
-
-          <div className="flex flex-col gap-2.5">
-            <Typography.Text className="text-sm">
-              {t(I18nKey.SETTINGS$AGENT_COMMAND)}
-            </Typography.Text>
-            <textarea
-              data-testid="agent-profile-command-input"
-              className="bg-tertiary border border-[#717888] rounded-sm p-2 text-sm font-mono text-white placeholder:text-[#717888] min-h-[60px] resize-y focus:outline-none focus:border-white"
-              value={commandText}
-              placeholder={formatCommand(
-                ACP_PROVIDERS[0]?.default_command ?? [],
-              )}
-              onChange={(e) => setCommandText(e.target.value)}
-            />
-            <Typography.Text className="text-xs text-[#717888]">
-              {t(I18nKey.SETTINGS$AGENT_COMMAND_HINT)}
-            </Typography.Text>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            {hasModelSuggestions && (
-              <SettingsDropdownInput
-                testId="agent-profile-model-selector"
-                name="agent-profile-model"
-                label={t(I18nKey.SETTINGS$AGENT_MODEL)}
-                items={[
-                  ...modelSuggestions.map((m) => ({
-                    key: m.id,
-                    label: m.label,
-                  })),
-                  {
-                    key: ACP_CUSTOM_MODEL_KEY,
-                    label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
-                  },
-                ]}
-                selectedKey={selectedModelKey}
-                isClearable={false}
-                onSelectionChange={(key) => {
-                  if (!key) return;
-                  const modelKey = String(key);
-                  if (modelKey === ACP_CUSTOM_MODEL_KEY) {
-                    setIsCustomAcpModel(true);
-                    setAcpModel("");
-                  } else {
-                    setIsCustomAcpModel(false);
-                    setAcpModel(modelKey);
-                  }
-                }}
-              />
-            )}
-            {selectedModelKey === ACP_CUSTOM_MODEL_KEY && (
-              <SettingsInput
-                testId="agent-profile-model-input"
-                label={
-                  hasModelSuggestions
-                    ? t(I18nKey.SETTINGS$AGENT_CUSTOM_MODEL)
-                    : t(I18nKey.SETTINGS$AGENT_MODEL)
-                }
-                type="text"
-                className="w-full"
-                value={acpModel}
-                showOptionalTag
-                onChange={setAcpModel}
-              />
-            )}
-            <Typography.Text className="text-xs text-[#717888]">
-              {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
-            </Typography.Text>
-          </div>
-
-          <SettingsInput
-            testId="agent-profile-session-mode"
-            label={t(I18nKey.SETTINGS$AGENT_PROFILE_SESSION_MODE_LABEL)}
-            type="text"
-            className="w-full"
-            showOptionalTag
-            value={sessionMode}
-            onChange={setSessionMode}
-          />
-
-          <SettingsInput
-            testId="agent-profile-prompt-timeout"
-            label={t(I18nKey.SETTINGS$AGENT_PROFILE_PROMPT_TIMEOUT_LABEL)}
-            type="number"
-            min={1}
-            step={1}
-            className="w-full"
-            value={promptTimeout}
-            onChange={setPromptTimeout}
-          />
-
-          <McpServerRefsSelect
-            availableServers={mcpServerNames}
-            value={mcpServerRefs}
-            onChange={setMcpServerRefs}
-          />
-
-          {selectedPreset !== ACP_CUSTOM_PRESET_KEY && (
-            <>
-              <hr className="border-[#3D4046]" />
-              <AcpCredentialsSection
-                form={acpCredentialForm}
-                providerKey={selectedPreset}
-              />
-            </>
-          )}
-        </>
-      )}
-
-      <div className="flex justify-start gap-3 pt-2">
+      <div className="flex justify-start gap-3 border-t border-[#3D4046] pt-4">
         <BrandButton
           testId="cancel-agent-profile-btn"
           type="button"
           variant="secondary"
           onClick={onCancel}
-          isDisabled={isSaving}
+          isDisabled={form.isSaving}
         >
           {t(I18nKey.BUTTON$CANCEL)}
         </BrandButton>
@@ -596,11 +201,11 @@ export function AgentProfileEditor({
           testId="save-agent-profile-btn"
           type="button"
           variant="primary"
-          onClick={handleSave}
-          isDisabled={!canSave || isSaving}
-          aria-busy={isSaving}
+          onClick={form.handleSave}
+          isDisabled={!form.canSave || form.isSaving}
+          aria-busy={form.isSaving}
         >
-          {isSaving ? t(I18nKey.SETTINGS$SAVING) : t(I18nKey.BUTTON$SAVE)}
+          {form.isSaving ? t(I18nKey.SETTINGS$SAVING) : t(I18nKey.BUTTON$SAVE)}
         </BrandButton>
       </div>
     </div>

@@ -3,8 +3,10 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { AgentProfilesBody } from "./agent-profiles-body";
 import { AgentProfileEditor } from "./agent-profile-editor";
+import { CreateAgentProfileModal } from "./create-agent-profile-modal";
 import { RenameAgentProfileModal } from "./rename-agent-profile-modal";
 import { DeleteAgentProfileModal } from "./delete-agent-profile-modal";
+import type { AgentKind } from "./editor/use-agent-profile-form";
 import AgentProfilesService, {
   type AgentProfile,
   type AgentProfileSummary,
@@ -61,6 +63,8 @@ export function AgentProfilesManager() {
   const saveProfile = useSaveAgentProfile();
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createKind, setCreateKind] = useState<AgentKind>("openhands");
   const [editingProfile, setEditingProfile] = useState<AgentProfile | null>(
     null,
   );
@@ -96,7 +100,13 @@ export function AgentProfilesManager() {
   );
 
   const handleAdd = useCallback(() => {
+    setIsCreateModalOpen(true);
+  }, []);
+
+  const handleSelectKind = useCallback((kind: AgentKind) => {
+    setCreateKind(kind);
     setEditingProfile(null);
+    setIsCreateModalOpen(false);
     setViewMode("create");
   }, []);
 
@@ -163,10 +173,12 @@ export function AgentProfilesManager() {
   if (viewMode !== "list") {
     return (
       <AgentProfileEditor
-        key={editingProfile?.id ?? "new-agent-profile"}
+        key={editingProfile?.id ?? `new-${createKind}`}
         mode={viewMode}
         profile={editingProfile}
+        createKind={createKind}
         existingNames={existingNames}
+        activeId={activeId}
         onCancel={handleBackToList}
         onSaved={handleBackToList}
       />
@@ -205,6 +217,11 @@ export function AgentProfilesManager() {
         />
       </div>
 
+      <CreateAgentProfileModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSelect={handleSelectKind}
+      />
       <RenameAgentProfileModal
         profile={profileToRename}
         onClose={() => setProfileToRename(null)}

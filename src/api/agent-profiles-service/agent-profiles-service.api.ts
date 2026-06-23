@@ -18,6 +18,7 @@ import type {
   AgentProfileDetailResponse,
   AgentProfileMutationResponse,
   ActivateAgentProfileResponse,
+  AgentProfileDiagnostics,
   ExposeSecretsMode,
 } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
@@ -31,6 +32,7 @@ export type {
   AgentProfileDetailResponse,
   AgentProfileMutationResponse,
   ActivateAgentProfileResponse,
+  AgentProfileDiagnostics,
   ExposeSecretsMode,
 };
 
@@ -87,6 +89,21 @@ class AgentProfilesService {
     return new AgentProfilesClient(
       getAgentServerClientOptions(),
     ).activateAgentProfile(profileId);
+  }
+
+  /**
+   * Dry-run resolve a stored profile's LLM/MCP references into the settings the
+   * server would actually launch with. Powers the editor's "What this agent
+   * will do" overview. Never throws on dangling refs — they come back in the
+   * body as `valid: false` + `dangling_mcp_server_refs`. 404 only if `name` is
+   * unknown (e.g. an unsaved create).
+   */
+  static async materializeProfile(
+    name: string,
+  ): Promise<AgentProfileDiagnostics> {
+    return new AgentProfilesClient(
+      getAgentServerClientOptions(),
+    ).materializeAgentProfile(name);
   }
 }
 
