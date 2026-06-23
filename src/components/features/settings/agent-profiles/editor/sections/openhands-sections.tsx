@@ -119,26 +119,6 @@ export function CondenserSection({ form }: SectionProps) {
   );
 }
 
-export function PersonalitySection({ form }: SectionProps) {
-  const { t } = useTranslation("openhands");
-  return (
-    <SectionShell
-      title={t(I18nKey.SETTINGS$AGENT_SECTION_PERSONALITY)}
-      description={t(I18nKey.SETTINGS$AGENT_SECTION_PERSONALITY_DESC)}
-    >
-      <SettingsInput
-        testId="agent-profile-system-suffix"
-        label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_SUFFIX_LABEL)}
-        type="text"
-        className="w-full"
-        showOptionalTag
-        value={form.systemSuffix}
-        onChange={form.setSystemSuffix}
-      />
-    </SectionShell>
-  );
-}
-
 /** A "Manage ↗" link to the relevant building-block catalog. The catalogs move
  * under the Agents hub later (#1456 step 3); for now this is a hint that the
  * pool of LLM profiles / MCP servers is configured elsewhere, not inline. */

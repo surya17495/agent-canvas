@@ -156,11 +156,6 @@ export function AgentProfileOverview({
               ? t(I18nKey.SETTINGS$AGENT_OVERVIEW_ENABLED)
               : t(I18nKey.SETTINGS$AGENT_OVERVIEW_DISABLED)}
           </Row>
-          {form.systemSuffix.trim() && (
-            <Row label={t(I18nKey.SETTINGS$AGENT_SECTION_PERSONALITY)}>
-              {t(I18nKey.SETTINGS$AGENT_OVERVIEW_CUSTOM_PROMPT)}
-            </Row>
-          )}
         </>
       );
     }

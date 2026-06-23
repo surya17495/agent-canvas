@@ -7,7 +7,6 @@ export type SectionId =
   | "model"
   | "tools-mcp"
   | "condenser"
-  | "personality"
   | "provider-model"
   | "launch"
   | "mcp"
@@ -50,11 +49,6 @@ const SECTIONS: SectionDef[] = [
   {
     id: "condenser",
     labelKey: I18nKey.SETTINGS$NAV_CONDENSER,
-    kinds: ["openhands"],
-  },
-  {
-    id: "personality",
-    labelKey: I18nKey.SETTINGS$AGENT_SECTION_PERSONALITY,
     kinds: ["openhands"],
   },
   // ACP

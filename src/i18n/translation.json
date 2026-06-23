@@ -31466,23 +31466,6 @@
     "tr": "Bu aracının kullanabileceği yapılandırılmış MCP sunucularını seçin.",
     "uk": "Виберіть, які налаштовані сервери MCP може використовувати цей агент."
   },
-  "SETTINGS$AGENT_PROFILE_SYSTEM_SUFFIX_LABEL": {
-    "en": "System prompt suffix",
-    "ja": "システムプロンプトのサフィックス",
-    "zh-CN": "系统提示词后缀",
-    "zh-TW": "系統提示詞後綴",
-    "ko-KR": "시스템 프롬프트 접미사",
-    "no": "Suffiks for systemledetekst",
-    "ar": "لاحقة موجّه النظام",
-    "de": "System-Prompt-Suffix",
-    "fr": "Suffixe d'invite système",
-    "it": "Suffisso del prompt di sistema",
-    "pt": "Sufixo do prompt do sistema",
-    "es": "Sufijo del prompt del sistema",
-    "ca": "Sufix de l'indicador del sistema",
-    "tr": "Sistem istemi son eki",
-    "uk": "Суфікс системного запиту"
-  },
   "SETTINGS$AGENT_PROFILE_TOOL_CONCURRENCY_LABEL": {
     "en": "Parallel tool calls",
     "ja": "並列ツール呼び出し",
@@ -31959,23 +31942,6 @@
     "zh-CN": "记忆",
     "zh-TW": "記憶"
   },
-  "SETTINGS$AGENT_SECTION_PERSONALITY": {
-    "en": "Personality",
-    "ar": "الشخصية",
-    "ca": "Personalitat",
-    "de": "Persönlichkeit",
-    "es": "Personalidad",
-    "fr": "Personnalité",
-    "it": "Personalità",
-    "ja": "性格",
-    "ko-KR": "성격",
-    "no": "Personlighet",
-    "pt": "Personalidade",
-    "tr": "Kişilik",
-    "uk": "Особистість",
-    "zh-CN": "个性",
-    "zh-TW": "個性"
-  },
   "SETTINGS$AGENT_SECTION_ADVANCED": {
     "en": "Advanced",
     "ar": "متقدم",
@@ -32128,23 +32094,6 @@
     "uk": "Керуйте тим, як старіший контекст підсумовується, щоб уміститися у вікно контексту.",
     "zh-CN": "控制如何对较早的上下文进行摘要，以适应上下文窗口。",
     "zh-TW": "控制如何摘要較早的上下文，以符合上下文視窗。"
-  },
-  "SETTINGS$AGENT_SECTION_PERSONALITY_DESC": {
-    "en": "Add instructions appended to the system prompt.",
-    "ar": "أضف تعليمات تُلحق بموجّه النظام.",
-    "ca": "Afegiu instruccions que s'afegeixen al prompt del sistema.",
-    "de": "Fügen Sie Anweisungen hinzu, die an den System-Prompt angehängt werden.",
-    "es": "Añade instrucciones que se agregan al prompt del sistema.",
-    "fr": "Ajoutez des instructions ajoutées à l'invite système.",
-    "it": "Aggiungi istruzioni accodate al prompt di sistema.",
-    "ja": "システムプロンプトに追加する指示を加えます。",
-    "ko-KR": "시스템 프롬프트에 덧붙일 지침을 추가합니다.",
-    "no": "Legg til instruksjoner som føyes til systemprompten.",
-    "pt": "Adicione instruções anexadas ao prompt do sistema.",
-    "tr": "Sistem istemine eklenen yönergeler ekleyin.",
-    "uk": "Додайте інструкції, що додаються до системного промпту.",
-    "zh-CN": "添加附加到系统提示词的指令。",
-    "zh-TW": "新增附加到系統提示的指示。"
   },
   "SETTINGS$AGENT_SECTION_ADVANCED_DESC": {
     "en": "Sub-agents and tool concurrency.",
@@ -32706,23 +32655,6 @@
     "uk": "Вимкнено",
     "zh-CN": "已禁用",
     "zh-TW": "已停用"
-  },
-  "SETTINGS$AGENT_OVERVIEW_CUSTOM_PROMPT": {
-    "en": "Custom system prompt",
-    "ar": "موجّه نظام مخصّص",
-    "ca": "Prompt de sistema personalitzat",
-    "de": "Benutzerdefinierter System-Prompt",
-    "es": "Prompt de sistema personalizado",
-    "fr": "Invite système personnalisée",
-    "it": "Prompt di sistema personalizzato",
-    "ja": "カスタムシステムプロンプト",
-    "ko-KR": "사용자 지정 시스템 프롬프트",
-    "no": "Egendefinert systemprompt",
-    "pt": "Prompt de sistema personalizado",
-    "tr": "Özel sistem istemi",
-    "uk": "Власний системний промпт",
-    "zh-CN": "自定义系统提示词",
-    "zh-TW": "自訂系統提示"
   },
   "SETTINGS$AGENT_OVERVIEW_PROVIDER_DEFAULT_MODEL": {
     "en": "Provider default",

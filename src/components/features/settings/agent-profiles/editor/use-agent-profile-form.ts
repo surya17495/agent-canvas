@@ -143,9 +143,9 @@ export function useAgentProfileForm({
   const [enableSubAgents, setEnableSubAgents] = useState(
     openhands?.enable_sub_agents ?? false,
   );
-  const [systemSuffix, setSystemSuffix] = useState(
-    openhands?.system_message_suffix ?? "",
-  );
+  // The system-prompt suffix is not editable in the UI for now, but we still
+  // round-trip the stored value on save so an edit never drops it.
+  const systemSuffix = openhands?.system_message_suffix ?? "";
   const [toolConcurrency, setToolConcurrency] = useState(
     String(openhands?.tool_concurrency_limit ?? 1),
   );
@@ -386,8 +386,6 @@ export function useAgentProfileForm({
     setLlmProfileRef,
     enableSubAgents,
     setEnableSubAgents,
-    systemSuffix,
-    setSystemSuffix,
     toolConcurrency,
     setToolConcurrency,
     condenser,

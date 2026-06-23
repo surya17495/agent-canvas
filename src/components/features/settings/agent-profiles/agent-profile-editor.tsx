@@ -22,7 +22,6 @@ import {
   ModelSection,
   ToolsMcpSection,
   CondenserSection,
-  PersonalitySection,
 } from "./editor/sections/openhands-sections";
 import {
   ProviderModelSection,
@@ -112,8 +111,6 @@ export function AgentProfileEditor({
         return <ToolsMcpSection form={form} />;
       case "condenser":
         return <CondenserSection form={form} />;
-      case "personality":
-        return <PersonalitySection form={form} />;
       default:
         return null;
     }
