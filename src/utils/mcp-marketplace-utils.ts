@@ -86,7 +86,12 @@ export function getDefaultMcpTransport(
 export function getMcpMarketplaceCatalog(
   catalog: MarketplaceEntry[],
 ): MarketplaceEntry[] {
-  return catalog.filter((entry) => !!getDefaultMcpConnectionOption(entry));
+  // A card is only useful if there's an option the local install modal can
+  // actually render (i.e. a non-OAuth MCP option with a transport). Filtering
+  // by the *default* option instead would surface OAuth-only entries whose
+  // install modal is empty (e.g. the published Datadog entry before its `api`
+  // option lands).
+  return catalog.filter((entry) => !!getInstallableMcpConnectionOption(entry));
 }
 
 const tryUrl = (raw: string): URL | null => {
