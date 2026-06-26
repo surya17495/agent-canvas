@@ -1,3 +1,5 @@
+import type { Capability } from "./manifest";
+
 /**
  * Shared types for the UI extension system.
  *
@@ -66,6 +68,10 @@ export interface ViewItem {
   name: string;
   /** Only `"webview"` is supported initially. */
   type: "webview";
+  /** Resolved URL of the webview's HTML document (from the bundle). */
+  pageUrl?: string;
+  /** Capabilities granted to the owning extension (gates the webview's host API). */
+  capabilities?: Capability[];
 }
 
 /**

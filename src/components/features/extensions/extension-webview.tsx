@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   createHostMethods,
   type HostApiDeps,
@@ -44,25 +44,37 @@ export function ExtensionWebview({
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const endpointRef = useRef<RpcEndpoint | null>(null);
 
-  useEffect(() => {
-    const frame = frameRef.current;
-    const contentWindow = frame?.contentWindow;
-    if (!frame || !contentWindow) return undefined;
+  // Latest host inputs, read at (re)connect time so reconnecting on load never forces
+  // the iframe to reload. These are stable in practice (memoized deps, registry-owned
+  // capabilities), so the iframe only reloads when `src`/`extensionId` change.
+  const capabilitiesRef = useRef(capabilities);
+  const depsRef = useRef(deps);
+  capabilitiesRef.current = capabilities;
+  depsRef.current = deps;
 
+  // Establish the RPC endpoint against the *loaded* document's window. A sandboxed
+  // iframe (no allow-same-origin) gets a fresh window once it navigates to `src`, so
+  // binding on `load` — not on mount — is required for `event.source` to match.
+  const connect = useCallback(() => {
+    const contentWindow = frameRef.current?.contentWindow;
+    if (!contentWindow) return;
+    endpointRef.current?.dispose();
     const transport = createWebviewTransport(contentWindow, {
       source: contentWindow,
     });
-    const endpoint = new RpcEndpoint(
+    endpointRef.current = new RpcEndpoint(
       transport,
-      createHostMethods(extensionId, capabilities, deps),
+      createHostMethods(extensionId, capabilitiesRef.current, depsRef.current),
     );
-    endpointRef.current = endpoint;
+  }, [extensionId]);
 
-    return () => {
-      endpoint.dispose();
+  useEffect(
+    () => () => {
+      endpointRef.current?.dispose();
       endpointRef.current = null;
-    };
-  }, [extensionId, capabilities, deps, src]);
+    },
+    [],
+  );
 
   return (
     <iframe
@@ -70,6 +82,7 @@ export function ExtensionWebview({
       data-testid={`extension-webview-${extensionId}`}
       title={title}
       src={src}
+      onLoad={connect}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       className="h-full w-full border-0"

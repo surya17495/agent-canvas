@@ -95,6 +95,17 @@ describe("ExtensionHost", () => {
     expect(createWorker).toHaveBeenCalledTimes(1);
   });
 
+  it("notifies the UI hook when a view is opened, even with no worker", () => {
+    const onOpenView = vi.fn();
+    const host = new ExtensionHost(makeDeps(), { onOpenView });
+
+    // No worker registered/active for this extension — opening a view should still
+    // notify the host UI (webview-only extensions have no worker).
+    host.openView("acme.ext", "acme.view");
+
+    expect(onOpenView).toHaveBeenCalledWith("acme.ext", "acme.view");
+  });
+
   it("runs a contributed command end-to-end, reaching a host API method", async () => {
     const showInformationMessage = vi.fn();
     // The extension registers a command that calls the host UI API.

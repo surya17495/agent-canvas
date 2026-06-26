@@ -21,6 +21,12 @@ export interface WorkerLike {
   terminate(): void;
 }
 
+/** Host-side UI hooks, wired by the React layer (kept out of the pure host core). */
+export interface ExtensionHostHooks {
+  /** Called when a view should be shown (e.g. mount its webview panel). */
+  onOpenView?: (extensionId: string, viewId: string) => void;
+}
+
 /** How the host spins up (and identifies) an extension's worker. */
 export interface ExtensionWorkerRegistration {
   capabilities: Capability[];
@@ -62,7 +68,10 @@ export class ExtensionHost implements ExtensionHostBridge {
     { worker: WorkerLike; endpoint: RpcEndpoint }
   >();
 
-  constructor(private readonly deps: HostApiDeps) {}
+  constructor(
+    private readonly deps: HostApiDeps,
+    private readonly hooks: ExtensionHostHooks = {},
+  ) {}
 
   /** Register how to activate an extension's worker. Called by the loader/manager. */
   register(
@@ -116,10 +125,14 @@ export class ExtensionHost implements ExtensionHostBridge {
   }
 
   openView(extensionId: string, viewId: string): void {
+    // Notify the host UI so it can mount the view's webview panel. This happens
+    // regardless of worker state (webview-only extensions have no worker).
+    this.hooks.onOpenView?.(extensionId, viewId);
+
     const entry = this.active.get(extensionId);
     if (!entry) return;
-    // Fire-and-forget notification; the webview host (M4) does the actual mounting.
-    // Swallow rejections (e.g. the endpoint being disposed during deactivation).
+    // Fire-and-forget notification to the worker; swallow rejections (e.g. the
+    // endpoint being disposed during deactivation).
     entry.endpoint.request("openView", { viewId }).catch(() => {});
   }
 

@@ -9,7 +9,8 @@ function makeEventTarget() {
     removeEventListener: (_type, listener) => listeners.delete(listener),
   };
   const emit = (event: { source: unknown; data: unknown }) => {
-    for (const listener of listeners) listener(event as unknown as MessageEvent);
+    for (const listener of listeners)
+      listener(event as unknown as MessageEvent);
   };
   return { target, emit, size: () => listeners.size };
 }

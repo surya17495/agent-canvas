@@ -25,27 +25,70 @@
     <p id="status">Loading active conversation…</p>
     <button id="say">Show a host message</button>
 
-    <script type="module">
-      // In a real bundle this import resolves to the published webview client.
-      // Here it illustrates the contract: acquire the API, then call host methods.
-      import { acquireAgentCanvasApi } from "@agent-canvas/extension-api/webview";
+    <script>
+      // Self-contained webview client. A real bundle would instead `import` the
+      // published SDK:
+      //   import { acquireAgentCanvasApi } from "@agent-canvas/extension-api/webview";
+      // which speaks this exact postMessage RPC protocol to the host. It is inlined
+      // here so the sample runs as a static file with no build step.
+      (function () {
+        var parentWindow = window.parent;
+        var nextId = 1;
+        var pending = {};
 
-      const api = acquireAgentCanvasApi();
-
-      api.conversation
-        .getActive()
-        .then((c) => {
-          document.getElementById("status").textContent = c
-            ? `Active conversation: ${c.title ?? c.id}`
-            : "No active conversation.";
-        })
-        .catch((e) => {
-          document.getElementById("status").textContent = `Error: ${e.message}`;
+        window.addEventListener("message", function (event) {
+          if (event.source !== parentWindow) return;
+          var msg = event.data;
+          if (!msg || msg.kind !== "response") return;
+          var entry = pending[msg.id];
+          if (!entry) return;
+          delete pending[msg.id];
+          if (msg.error !== undefined) entry.reject(new Error(msg.error));
+          else entry.resolve(msg.result);
         });
 
-      document.getElementById("say").addEventListener("click", () => {
-        api.window.showInformationMessage("Hello from the webview button!");
-      });
+        function request(method, params) {
+          var id = nextId++;
+          return new Promise(function (resolve, reject) {
+            pending[id] = { resolve: resolve, reject: reject };
+            parentWindow.postMessage(
+              { kind: "request", id: id, method: method, params: params },
+              "*",
+            );
+          });
+        }
+
+        var api = {
+          conversation: {
+            getActive: function () {
+              return request("conversation.getActive");
+            },
+          },
+          window: {
+            showInformationMessage: function (message) {
+              return request("window.showInformationMessage", {
+                message: message,
+              });
+            },
+          },
+        };
+
+        api.conversation
+          .getActive()
+          .then(function (c) {
+            document.getElementById("status").textContent = c
+              ? "Active conversation: " + (c.title || c.id)
+              : "No active conversation.";
+          })
+          .catch(function (e) {
+            document.getElementById("status").textContent =
+              "Error: " + e.message;
+          });
+
+        document.getElementById("say").addEventListener("click", function () {
+          api.window.showInformationMessage("Hello from the webview button!");
+        });
+      })();
     </script>
   </body>
 </html>

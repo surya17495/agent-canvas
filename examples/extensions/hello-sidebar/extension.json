@@ -15,7 +15,12 @@
     },
     "views": {
       "hello.container": [
-        { "id": "hello.panel", "name": "Hello", "type": "webview" }
+        {
+          "id": "hello.panel",
+          "name": "Hello",
+          "type": "webview",
+          "page": "panel.html"
+        }
       ]
     },
     "commands": [{ "command": "hello.say", "title": "Hello: Say hi" }]

@@ -1,4 +1,8 @@
-import { ExtensionHost, type WorkerLike } from "./host/extension-host";
+import {
+  ExtensionHost,
+  type ExtensionHostHooks,
+  type WorkerLike,
+} from "./host/extension-host";
 import type { HostApiDeps } from "./host/host-api";
 import {
   loadExtension,
@@ -31,8 +35,9 @@ export class ExtensionManager {
   constructor(
     deps: HostApiDeps,
     private readonly createWorker: () => WorkerLike = defaultWorkerFactory,
+    hooks: ExtensionHostHooks = {},
   ) {
-    this.host = new ExtensionHost(deps);
+    this.host = new ExtensionHost(deps, hooks);
   }
 
   /**

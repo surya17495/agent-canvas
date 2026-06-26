@@ -44,5 +44,11 @@ describe("examples/extensions/hello-sidebar", () => {
 
     const commands = contributionRegistry.getCommands();
     expect(commands.map((c) => c.command)).toEqual(["hello.say"]);
+
+    const views = contributionRegistry.getViews();
+    expect(views.map((v) => v.id)).toEqual(["hello.panel"]);
+    // The view's `page` is resolved to an asset URL for the webview panel.
+    expect(views[0].pageUrl).toBe("blob:panel.html");
+    expect(views[0].capabilities).toEqual(["conversation:read"]);
   });
 });
