@@ -420,7 +420,7 @@ export function MCPServerForm({
               rows={4}
               defaultValue={formatHeaders(server?.headers)}
               // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
-              placeholder="DD-API-KEY=xxxxxxxx&#10;DD-APPLICATION-KEY=xxxxxxxx"
+              placeholder="HEADER_NAME_1=value1&#10;HEADER_NAME_2=value2"
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
