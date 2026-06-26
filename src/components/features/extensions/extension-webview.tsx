@@ -6,6 +6,10 @@ import {
 import { RpcEndpoint } from "#/extensions/host/rpc";
 import { createWebviewTransport } from "#/extensions/host/webview-transport";
 import type { Capability } from "#/extensions/manifest";
+import {
+  WEBVIEW_OPAQUE_ORIGIN,
+  WEBVIEW_SANDBOX,
+} from "#/extensions/webview-security";
 
 interface ExtensionWebviewProps {
   /** Owning extension id (namespaces storage / capability checks). */
@@ -61,6 +65,7 @@ export function ExtensionWebview({
     endpointRef.current?.dispose();
     const transport = createWebviewTransport(contentWindow, {
       source: contentWindow,
+      expectedOrigin: WEBVIEW_OPAQUE_ORIGIN,
     });
     endpointRef.current = new RpcEndpoint(
       transport,
@@ -83,7 +88,7 @@ export function ExtensionWebview({
       title={title}
       src={src}
       onLoad={connect}
-      sandbox="allow-scripts"
+      sandbox={WEBVIEW_SANDBOX}
       referrerPolicy="no-referrer"
       className="h-full w-full border-0"
     />

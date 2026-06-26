@@ -8,7 +8,7 @@ function makeEventTarget() {
     addEventListener: (_type, listener) => listeners.add(listener),
     removeEventListener: (_type, listener) => listeners.delete(listener),
   };
-  const emit = (event: { source: unknown; data: unknown }) => {
+  const emit = (event: { source: unknown; data: unknown; origin?: string }) => {
     for (const listener of listeners)
       listener(event as unknown as MessageEvent);
   };
@@ -52,6 +52,41 @@ describe("createWebviewTransport", () => {
 
     // Message from the expected frame is delivered.
     emit({ source, data: { kind: "request", id: 2, method: "y" } });
+    expect(handler).toHaveBeenCalledWith({
+      kind: "request",
+      id: 2,
+      method: "y",
+    });
+  });
+
+  it("drops messages whose origin does not match expectedOrigin", () => {
+    const frame = { postMessage: vi.fn() };
+    const source = { marker: "iframe" };
+    const { target, emit } = makeEventTarget();
+    const transport = createWebviewTransport(frame, {
+      source,
+      expectedOrigin: "null",
+      eventTarget: target,
+    });
+
+    const handler = vi.fn();
+    transport.subscribe(handler);
+
+    // Right source but wrong origin (e.g. sandbox loosened to allow-same-origin) is
+    // rejected — defence-in-depth against a widened trust boundary.
+    emit({
+      source,
+      origin: "https://evil.example",
+      data: { kind: "request", id: 1, method: "x" },
+    });
+    expect(handler).not.toHaveBeenCalled();
+
+    // Right source AND expected opaque origin is delivered.
+    emit({
+      source,
+      origin: "null",
+      data: { kind: "request", id: 2, method: "y" },
+    });
     expect(handler).toHaveBeenCalledWith({
       kind: "request",
       id: 2,

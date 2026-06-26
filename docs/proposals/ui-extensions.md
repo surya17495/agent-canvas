@@ -499,19 +499,39 @@ Built and tested:
   end-to-end in tests (declarative button appears on install → selecting it activates
   the worker → worker calls a host API).
 
+Also built and tested since (this branch):
+
+- **App mounting (flag-gated):** a single `ExtensionManager` is instantiated at app
+  start by `ExtensionManagerProvider` (mounted in `root-layout.tsx`) with *real*
+  `HostApiDeps` from `host/create-app-host-deps.ts` (active conversation from
+  `ConversationService`, `showInformationMessage` via the toast system, `executeCommand`
+  via the contribution registry, namespaced `localStorage`). Opened webviews render in a
+  host-owned `ExtensionPanel`; the host is notified via the new `ExtensionHost`
+  `onOpenView` hook + `panel-store.ts`. Gated by `VITE_ENABLE_EXTENSIONS` (`feature-flag.ts`)
+  so the app ships unchanged until enabled. A dev `BundleSource` (`dev-bundle-source.ts`)
+  plus a vite middleware serve example bundles under `/__extensions/*`. (Command-K
+  integration is deferred — the palette is strictly `I18nKey`-typed; see open questions.)
+- **CSP/origin hardening (round 1):** `webview-security.ts` is the single source of
+  truth for the sandbox, the expected opaque origin, and a strict CSP. The dev asset
+  server sends the CSP + `X-Content-Type-Options: nosniff` as HTTP headers
+  (authoritative over bundle `<meta>`); `connect-src 'none'` removes every exfiltration
+  channel. `host/webview-transport.ts` now validates `event.origin` (opaque `"null"`)
+  in addition to `event.source`, so loosening the sandbox fails loudly. Verified via a
+  running dev server (CSP present on webview HTML, absent on JSON; path-traversal guard
+  returns 403 on encoded escapes).
+
 Not yet done (remaining work):
 
-- **App mounting:** instantiate a single `ExtensionManager` at app start with *real*
-  `HostApiDeps` (active conversation from the conversation store, `showInformationMessage`
-  via the toast system, `executeCommand` via the command registry), mount opened
-  webview panels into a host-owned panel container, and surface contributed commands in
-  the Command-K menu.
 - **M5 – Distribution + management UI:** `ui-extensions-service` /
   `ui-extensions-management-service`, `use-ui-extensions-*` hooks, a `/extensions` route,
   install-time capability consent, and cloud-backend gating (mirroring the plugins
   pipeline).
-- **CSP/origin hardening:** serve webview assets from an isolated origin (or finalize
-  the `blob:` + CSP approach) and add the security review.
+- **CSP/origin hardening (round 2):** serve webview assets from a *dedicated isolated
+  origin/subdomain* (defence in depth beyond the sandbox), move `script-src` to per-load
+  nonces, restrict `frame-ancestors` to the host origin, and complete a formal security
+  review.
+- **Command palette:** surface contributed commands in the Command-K menu (needs the
+  palette item model widened beyond `I18nKey` to accept plain-string extension titles).
 - **Real `BundleSource` implementations:** installed-folder source (agent-server) and a
   default `Worker` factory verified in a browser (the unit tests use an in-memory fake
   worker).

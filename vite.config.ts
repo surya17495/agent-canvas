@@ -14,6 +14,7 @@ import {
   AGENT_SERVER_UI_SCOPE_SELECTOR,
   transformAgentServerUISelector,
 } from "./src/styles/agent-server-ui-style-scope";
+import { WEBVIEW_CSP } from "./src/extensions/webview-security";
 
 const LIB_ENTRY = fileURLToPath(new URL("./src/index.ts", import.meta.url));
 const LIB_EXTERNALS = [
@@ -185,12 +186,20 @@ export default defineConfig(({ mode }) => {
             const ext = filePath.slice(filePath.lastIndexOf("."));
             try {
               const content = await readFile(filePath);
-              res.writeHead(200, {
+              const headers: Record<string, string> = {
                 "Content-Type":
                   EXTENSION_ASSET_CONTENT_TYPES[ext] ??
                   "application/octet-stream",
                 "Cache-Control": "no-cache",
-              });
+                "X-Content-Type-Options": "nosniff",
+              };
+              // Webview documents run untrusted code: enforce the strict CSP host-side
+              // (authoritative over any <meta> the bundle ships). A real deployment
+              // must send the same header from its asset server.
+              if (ext === ".html") {
+                headers["Content-Security-Policy"] = WEBVIEW_CSP;
+              }
+              res.writeHead(200, headers);
               res.end(method === "HEAD" ? "" : content);
             } catch {
               next();

@@ -32,6 +32,13 @@ export interface MessageEventTarget {
 export interface WebviewTransportOptions {
   /** The iframe's `contentWindow`; inbound messages must originate from it. */
   source: unknown;
+  /**
+   * Expected `event.origin` of inbound messages. When set, messages whose origin does
+   * not match are dropped — defence-in-depth on top of the `source` check. For a
+   * sandboxed webview (no `allow-same-origin`) this is the opaque origin `"null"`, so
+   * loosening the sandbox would break RPC loudly instead of silently widening trust.
+   */
+  expectedOrigin?: string;
   /** Where to listen for `message` events. Defaults to the global `window`. */
   eventTarget?: MessageEventTarget;
 }
@@ -44,10 +51,19 @@ export function createWebviewTransport(
     options.eventTarget ?? (window as unknown as MessageEventTarget);
 
   return {
+    // Target origin is "*" because a sandboxed frame's origin is opaque ("null") and
+    // cannot be addressed directly; this is safe as the channel carries no secrets and
+    // every inbound message is validated (source + origin) and the RPC layer is typed.
     post: (message) => frame.postMessage(message, "*"),
     subscribe: (handler) => {
       const listener = (event: MessageEvent) => {
         if (event.source !== options.source) return;
+        if (
+          options.expectedOrigin !== undefined &&
+          event.origin !== options.expectedOrigin
+        ) {
+          return;
+        }
         handler(event.data as RpcMessage);
       };
       target.addEventListener("message", listener);

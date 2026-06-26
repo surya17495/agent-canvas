@@ -2,9 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!--
+      Defence-in-depth only: the host serves this document with an authoritative
+      Content-Security-Policy header (see src/extensions/webview-security.ts). The
+      key restriction is `connect-src 'none'` — the webview has no network channel and
+      can only reach the host via the capability-gated postMessage RPC.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none';"
     />
     <title>Hello panel</title>
     <style>
