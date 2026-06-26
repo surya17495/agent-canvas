@@ -27,6 +27,8 @@ export interface ViewManifest {
   id: string;
   name: string;
   type: "webview";
+  /** Relative path within the bundle to the webview's HTML document. */
+  page?: string;
 }
 
 export interface CommandManifest {
@@ -144,6 +146,10 @@ function validateContributes(
             id: v.requireString(obj.id, `${itemPath}.id`) ?? "",
             name: v.requireString(obj.name, `${itemPath}.name`) ?? "",
             type: "webview",
+            page:
+              obj.page === undefined
+                ? undefined
+                : v.requireString(obj.page, `${itemPath}.page`),
           };
         });
       }

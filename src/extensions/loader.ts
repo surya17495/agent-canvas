@@ -100,15 +100,24 @@ function buildCommands(
   }));
 }
 
-function buildViews(manifest: ExtensionManifest): ViewItem[] {
+async function buildViews(
+  manifest: ExtensionManifest,
+  source: BundleSource,
+): Promise<ViewItem[]> {
   const views = manifest.contributes?.views ?? {};
-  return Object.entries(views).flatMap(([containerId, list]) =>
-    list.map((view) => ({
+  const capabilities = manifest.capabilities ?? [];
+  const entries = Object.entries(views).flatMap(([containerId, list]) =>
+    list.map((view) => ({ containerId, view })),
+  );
+  return Promise.all(
+    entries.map(async ({ containerId, view }) => ({
       extensionId: manifest.id,
       id: view.id,
       containerId,
       name: view.name,
       type: view.type,
+      pageUrl: view.page ? await source.assetUrl(view.page) : undefined,
+      capabilities,
     })),
   );
 }
@@ -144,7 +153,7 @@ export async function loadExtension(
   const contributions: ExtensionContributions = {
     activityBarItems: await buildActivityBarItems(manifest, source, host),
     commands: buildCommands(manifest, host),
-    views: buildViews(manifest),
+    views: await buildViews(manifest, source),
   };
 
   contributionRegistry.register(manifest.id, contributions);

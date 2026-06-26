@@ -35,6 +35,17 @@ const EXTENSIONS_SKILLS_DIR = resolve(
   "skills",
 );
 const PUBLIC_LOCALES_DIR = resolve(process.cwd(), "public", "locales");
+const EXAMPLE_EXTENSIONS_DIR = resolve(process.cwd(), "examples", "extensions");
+
+// Content types for files served from example extension bundles in dev.
+const EXTENSION_ASSET_CONTENT_TYPES: Record<string, string> = {
+  ".json": "application/json; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+};
 
 const appBuildConfig = {
   rolldownOptions: {
@@ -131,6 +142,53 @@ export default defineConfig(({ mode }) => {
               const content = await readFile(filePath);
               res.writeHead(200, {
                 "Content-Type": "application/json; charset=utf-8",
+                "Cache-Control": "no-cache",
+              });
+              res.end(method === "HEAD" ? "" : content);
+            } catch {
+              next();
+            }
+          });
+        },
+      },
+      {
+        // Dev-only: serve example extension bundles under `/__extensions/<...>` so the
+        // UI extension system (feature-flagged) can load them via an HTTP BundleSource.
+        name: "serve-example-extensions",
+        apply: "serve",
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            const method = req.method ?? "GET";
+            if (method !== "GET" && method !== "HEAD") {
+              next();
+              return;
+            }
+
+            const pathname = new URL(req.url ?? "", "http://localhost")
+              .pathname;
+            if (!pathname.startsWith("/__extensions/")) {
+              next();
+              return;
+            }
+
+            const requestedPath = decodeURIComponent(
+              pathname.slice("/__extensions/".length),
+            );
+            const filePath = resolve(EXAMPLE_EXTENSIONS_DIR, requestedPath);
+            const relativePath = relative(EXAMPLE_EXTENSIONS_DIR, filePath);
+            if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+              res.writeHead(403);
+              res.end();
+              return;
+            }
+
+            const ext = filePath.slice(filePath.lastIndexOf("."));
+            try {
+              const content = await readFile(filePath);
+              res.writeHead(200, {
+                "Content-Type":
+                  EXTENSION_ASSET_CONTENT_TYPES[ext] ??
+                  "application/octet-stream",
                 "Cache-Control": "no-cache",
               });
               res.end(method === "HEAD" ? "" : content);
