@@ -18,6 +18,7 @@ export default [
     route("customize", "routes/extensions-hub.tsx"),
     route("skills", "routes/skills-settings.tsx"),
     route("plugins", "routes/skills-plugins.tsx"),
+    route("extensions", "routes/extensions.tsx"),
     route("mcp", "routes/mcp.tsx"),
     route("settings", "routes/settings.tsx", [
       index("routes/settings-index.tsx"),

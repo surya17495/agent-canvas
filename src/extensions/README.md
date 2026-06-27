@@ -46,6 +46,7 @@ Key properties:
 | Worker/webview SDK | `sdk/runtime.ts`, `sdk/worker-bootstrap.ts`, `sdk/api-proxy.ts`, `sdk/webview-client.ts` |
 | Security | `webview-security.ts` (canonical CSP / sandbox / origin) |
 | App mounting | `feature-flag.ts`, `panel-store.ts`, `dev-bundle-source.ts`, `../components/providers/extension-manager-provider.tsx`, `../components/features/extensions/extension-panel.tsx` |
+| Management UI | `installed-store.ts`, `installed-persistence.ts`, `../routes/extensions.tsx`, `../components/features/extensions/{installed-extension-card,add-extension-modal,capability-labels}.tsx` |
 | UI | `../components/features/sidebar/sidebar-contribution-button.tsx`, `../components/features/extensions/extension-webview.tsx` |
 
 ## Authoring an extension
@@ -109,10 +110,24 @@ exfiltrate. A future iteration can move to per-load nonces.
 (`vite.config.ts`); a real deployment **must** serve webview assets with the same
 `Content-Security-Policy` (ideally from a dedicated isolated origin/subdomain).
 
+## Managing extensions
+
+With the feature enabled, the **`/extensions`** route lists installed extensions and
+lets you **install from a URL**. Installing is two-step **capability consent**: the
+manifest is fetched and validated, its requested permissions are shown, and nothing is
+registered until you confirm (all-or-nothing, like VS Code). User installs are persisted
+to `localStorage` (URL + granted capabilities only — never code) and re-installed on
+startup by re-fetching and re-validating; `dev` bundles from `DEV_EXTENSION_BUNDLE_URLS`
+are config-driven and shown with a "Dev" badge. State lives in `installed-store.ts`
+(the reactive inventory the UI renders) rather than a backend, since UI extensions are
+entirely client-side.
+
 ## Status
 
-M1–M4 plus app mounting (flag-gated via `VITE_ENABLE_EXTENSIONS`) and the first round of
-CSP/origin hardening are implemented and tested (`__tests__/extensions/`). Remaining
-work (the `/extensions` management UI with install-time consent, a dedicated isolated
-asset origin, and nonce-based `script-src`) is tracked in the proposal's
+M1–M4, app mounting (flag-gated via `VITE_ENABLE_EXTENSIONS`), the first round of
+CSP/origin hardening, and the `/extensions` management UI with install-time capability
+consent are implemented and tested (`__tests__/extensions/`,
+`__tests__/components/features/extensions/`, `__tests__/routes/extensions.test.tsx`).
+Remaining work (a marketplace/catalog and cloud-backed distribution, a dedicated
+isolated asset origin, and nonce-based `script-src`) is tracked in the proposal's
 "Implementation status" section.

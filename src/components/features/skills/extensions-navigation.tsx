@@ -9,6 +9,7 @@ import {
   sidebarNavRowClassName,
 } from "#/components/features/sidebar/sidebar-layout";
 import { I18nKey } from "#/i18n/declaration";
+import { EXTENSIONS_ENABLED } from "#/extensions/feature-flag";
 
 interface ExtensionNavItem {
   to: string;
@@ -17,6 +18,29 @@ interface ExtensionNavItem {
   end?: boolean;
   comingSoon?: boolean;
 }
+
+const EXTENSIONS_MANAGE_NAV_ITEM: ExtensionNavItem = {
+  to: "/extensions",
+  label: "Extensions",
+  icon: (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={16}
+      height={16}
+      aria-hidden="true"
+    >
+      <path d="M6.3 12.3a3 3 0 0 0-3.6 3.6l1.4-1.4a1 1 0 0 1 1.4 1.4l-1.4 1.4a3 3 0 0 0 3.6-3.6Z" />
+      <path d="M14 4a2 2 0 1 0-4 0v2H7a1 1 0 0 0-1 1v3h2a2 2 0 1 1 0 4H6v3a1 1 0 0 0 1 1h3v-2a2 2 0 1 1 4 0v2h3a1 1 0 0 0 1-1v-3h-2a2 2 0 1 1 0-4h2V7a1 1 0 0 0-1-1h-3Z" />
+    </svg>
+  ),
+  end: true,
+};
 
 export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
   {
@@ -55,6 +79,7 @@ export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
     end: true,
     comingSoon: true,
   },
+  ...(EXTENSIONS_ENABLED ? [EXTENSIONS_MANAGE_NAV_ITEM] : []),
 ];
 
 export function ExtensionsNavigation() {

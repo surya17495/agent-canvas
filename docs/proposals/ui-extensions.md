@@ -520,12 +520,23 @@ Also built and tested since (this branch):
   running dev server (CSP present on webview HTML, absent on JSON; path-traversal guard
   returns 403 on encoded escapes).
 
+- **M5 (part 1) – Management UI + install-time consent:** a `/extensions` route
+  (`routes/extensions.tsx`) lists installed extensions and installs new ones from a URL.
+  Because UI extensions are entirely client-side (no per-user backend like plugins),
+  the inventory is a reactive client store (`installed-store.ts`) populated by the
+  provider, not a TanStack-Query-over-HTTP service. Install is two-step **capability
+  consent**: `previewManifest` fetches + validates the manifest and surfaces requested
+  capabilities (`AddExtensionModal`), and nothing is registered until the user confirms
+  (all-or-nothing). User installs persist to `localStorage` (URL + granted capabilities
+  only, never code — `installed-persistence.ts`) and are re-installed on startup by
+  re-fetching/re-validating; `dev` bundles stay config-driven. Nav entry is flag-gated.
+
 Not yet done (remaining work):
 
-- **M5 – Distribution + management UI:** `ui-extensions-service` /
-  `ui-extensions-management-service`, `use-ui-extensions-*` hooks, a `/extensions` route,
-  install-time capability consent, and cloud-backend gating (mirroring the plugins
-  pipeline).
+- **M5 (part 2) – Distribution / marketplace:** a catalog/marketplace of discoverable
+  extensions and cloud-backed distribution + storage (the same gap plugins fill via
+  their backend), so installs aren't limited to URLs the user already knows. Partial
+  capability grants (subset consent) and an enable/disable toggle are natural follow-ons.
 - **CSP/origin hardening (round 2):** serve webview assets from a *dedicated isolated
   origin/subdomain* (defence in depth beyond the sandbox), move `script-src` to per-load
   nonces, restrict `frame-ancestors` to the host origin, and complete a formal security
