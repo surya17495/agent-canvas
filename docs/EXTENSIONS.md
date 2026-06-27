@@ -252,4 +252,6 @@ subdomain) - see **section 6** of the [Self-hosting guide](./SELF_HOSTING.md).
   manifest schema, source-ref resolution, security model, and publishing.
 - [`examples/extensions/hello-sidebar/`](../examples/extensions/hello-sidebar/) - the working
   sample bundle.
+- [UI extension points (roadmap)](./EXTENSION_POINTS.md) - the contribution points available
+  today and where the system is designed to grow next (for contributors).
 - [Self-hosting guide](./SELF_HOSTING.md) - hosting extension files on your own origin.

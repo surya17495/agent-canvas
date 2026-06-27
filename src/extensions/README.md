@@ -4,7 +4,9 @@ A VS Code–style mechanism that lets customer-supplied bundles contribute UI (s
 buttons, panels, commands) **without modifying Agent-Canvas source** and **without
 giving third-party code access to the host DOM, cookies, or credentials**.
 
-See `docs/proposals/ui-extensions.md` for the full design and rationale.
+See `docs/proposals/ui-extensions.md` for the full design and rationale, and
+`docs/EXTENSION_POINTS.md` for the catalog of current/future contribution points and the
+recipe for adding a new one.
 
 ## Architecture at a glance
 
