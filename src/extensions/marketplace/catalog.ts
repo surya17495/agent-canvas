@@ -3,11 +3,11 @@
  * (`marketplace.json`), mirroring the schema used by `software-agent-sdk` and
  * `Plugin-Directory`, which itself mirrors the official Claude Code marketplace schema.
  *
- * UI extensions live within this spec as ordinary plugin entries, disambiguated by
- * `category: "ui-extension"` and/or a `uiExtension` marker. Both Claude Code and the
- * OpenHands SDK allow unknown fields and contribute no agent behaviour for an entry
- * with no `commands`/`agents`/`hooks`/`mcpServers`, so a UI-extension entry lives
- * safely alongside regular plugins without affecting the agent.
+ * UI extensions live in a dedicated top-level `uiExtensions` array — NOT in `plugins`.
+ * Agent tooling (Claude Code, the OpenHands plugin loader) only reads `plugins`, and
+ * both parsers ignore unknown top-level keys, so a UI extension never appears as an
+ * installable plugin in contexts that can't render it. The file stays a valid
+ * (possibly empty-`plugins`) marketplace.json, so it still "lives within" the spec.
  */
 
 import {
@@ -18,10 +18,7 @@ import {
   type MarketplaceSource,
 } from "./source";
 
-/** Marker value placed on a plugin entry's `category` to flag it as a UI extension. */
-export const UI_EXTENSION_CATEGORY = "ui-extension";
-
-/** Default UI manifest filename within a plugin directory. */
+/** Default UI manifest filename within a bundle directory. */
 export const DEFAULT_UI_EXTENSION_MANIFEST = "extension.json";
 
 export interface CatalogOwner {
@@ -72,7 +69,10 @@ export interface MarketplaceEntry {
 export interface MarketplaceCatalog {
   name: string;
   owner: CatalogOwner;
-  plugins: MarketplaceEntry[];
+  /** Agent plugins (read by Claude Code / the OpenHands plugin loader). */
+  plugins?: MarketplaceEntry[];
+  /** UI extensions — read only by Agent Canvas, never listed as agent plugins. */
+  uiExtensions?: MarketplaceEntry[];
   metadata?: { description?: string; version?: string; pluginRoot?: string };
 }
 
@@ -107,7 +107,33 @@ function validateEntrySource(value: unknown, path: string, errors: string[]) {
   }
 }
 
-/** Parse + validate raw catalog JSON. Unknown fields are preserved/ignored, not rejected. */
+function validateEntryArray(value: unknown, key: string, errors: string[]) {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    errors.push(`${key}: expected an array`);
+    return;
+  }
+  value.forEach((entry, i) => {
+    const path = `${key}[${i}]`;
+    if (!isObject(entry)) {
+      errors.push(`${path}: expected an object`);
+      return;
+    }
+    if (typeof entry.name !== "string" || !entry.name.trim()) {
+      errors.push(`${path}.name: expected a non-empty string`);
+    }
+    if (entry.source === undefined) {
+      errors.push(`${path}.source: required`);
+    } else {
+      validateEntrySource(entry.source, `${path}.source`, errors);
+    }
+  });
+}
+
+/**
+ * Parse + validate raw catalog JSON. `plugins` and `uiExtensions` are both optional
+ * (a UI-only marketplace may omit `plugins`). Unknown fields are ignored, not rejected.
+ */
 export function parseCatalog(input: unknown): CatalogParseResult {
   const errors: string[] = [];
   if (!isObject(input)) {
@@ -119,34 +145,11 @@ export function parseCatalog(input: unknown): CatalogParseResult {
   if (!isObject(input.owner) || typeof input.owner.name !== "string") {
     errors.push("owner.name: expected a non-empty string");
   }
-  if (!Array.isArray(input.plugins)) {
-    errors.push("plugins: expected an array");
-  } else {
-    input.plugins.forEach((entry, i) => {
-      const path = `plugins[${i}]`;
-      if (!isObject(entry)) {
-        errors.push(`${path}: expected an object`);
-        return;
-      }
-      if (typeof entry.name !== "string" || !entry.name.trim()) {
-        errors.push(`${path}.name: expected a non-empty string`);
-      }
-      if (entry.source === undefined) {
-        errors.push(`${path}.source: required`);
-      } else {
-        validateEntrySource(entry.source, `${path}.source`, errors);
-      }
-    });
-  }
+  validateEntryArray(input.plugins, "plugins", errors);
+  validateEntryArray(input.uiExtensions, "uiExtensions", errors);
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, catalog: input as unknown as MarketplaceCatalog };
-}
-
-export function isUiExtensionEntry(entry: MarketplaceEntry): boolean {
-  return (
-    entry.category === UI_EXTENSION_CATEGORY || entry.uiExtension !== undefined
-  );
 }
 
 export function uiExtensionManifestPath(entry: MarketplaceEntry): string {

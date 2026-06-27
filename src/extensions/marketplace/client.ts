@@ -4,7 +4,6 @@
  */
 
 import {
-  isUiExtensionEntry,
   parseCatalog,
   resolveEntryBundleUrl,
   uiExtensionManifestPath,
@@ -74,8 +73,7 @@ export async function fetchMarketplace(
   }
 
   const listings: UiExtensionListing[] = [];
-  for (const entry of parsed.catalog.plugins) {
-    if (!isUiExtensionEntry(entry)) continue;
+  for (const entry of parsed.catalog.uiExtensions ?? []) {
     const bundleUrl = resolveEntryBundleUrl(source, catalogUrl, entry);
     if (!bundleUrl) continue;
     listings.push({

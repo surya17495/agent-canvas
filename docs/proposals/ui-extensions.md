@@ -542,13 +542,18 @@ Also built and tested since (this branch):
   installable UI extensions. The `AddExtensionModal` gains a "From marketplace" mode that
   lists extensions and installs them through the same capability-consent flow.
 
-  **Living within the plugin spec (disambiguated):** a UI extension is an ordinary
-  marketplace plugin entry marked with `category: "ui-extension"` and/or a `uiExtension`
-  marker (`{ "manifest": "extension.json" }`). Both Claude Code and the SDK allow unknown
-  fields (`extra=allow`), and the entry contributes no `commands`/`agents`/`hooks`/
-  `mcpServers`, so it loads safely alongside regular plugins without affecting the agent.
-  No git clone or backend is required — public repos are fetched directly over CORS-
-  enabled raw HTTPS. Example: `examples/extensions/.plugin/marketplace.json`.
+  **Living within the plugin spec without polluting agent contexts:** UI extensions are
+  listed under a **dedicated top-level `uiExtensions` array — never in `plugins`**.
+  Claude Code and the OpenHands plugin loader only enumerate `plugins`, so a UI extension
+  is never offered as an installable plugin in a context that can't render it; both
+  parsers ignore unknown top-level keys, so the file remains a valid marketplace
+  manifest. (A per-entry `category`/flag was rejected: those tools list every `plugins`
+  entry regardless of category, so the extension would still appear and be "installable"
+  as an inert plugin.) A second layer of separation: authoring at `.plugin/marketplace.json`
+  (the OpenHands-native dir) keeps the file invisible to Claude Code, which only discovers
+  `.claude-plugin/marketplace.json`. No git clone or backend is required — public repos
+  are fetched directly over CORS-enabled raw HTTPS. Example:
+  `examples/extensions/.plugin/marketplace.json`.
 
 Not yet done (remaining work):
 

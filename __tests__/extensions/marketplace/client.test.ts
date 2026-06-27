@@ -8,18 +8,17 @@ function jsonResponse(data: unknown, ok = true, status = 200) {
 const CATALOG = {
   name: "Examples",
   owner: { name: "Acme" },
-  plugins: [
+  // A regular agent plugin must NOT surface as a UI extension.
+  plugins: [{ name: "linter", source: "./linter", commands: "./commands" }],
+  uiExtensions: [
     {
       name: "hello-sidebar",
       source: "./hello-sidebar",
       description: "Hello panel",
       version: "1.0.0",
       author: { name: "Acme" },
-      category: "ui-extension",
       uiExtension: { manifest: "extension.json" },
     },
-    // A regular agent plugin is ignored by the UI-extension listing.
-    { name: "linter", source: "./linter", commands: "./commands" },
   ],
 };
 

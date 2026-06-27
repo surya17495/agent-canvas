@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  isUiExtensionEntry,
   parseCatalog,
   resolveEntryBundleUrl,
   uiExtensionManifestPath,
@@ -16,61 +15,41 @@ const github: MarketplaceSource = {
 };
 
 describe("parseCatalog", () => {
-  it("accepts a valid catalog and preserves unknown fields", () => {
+  it("accepts a UI-only catalog (no plugins) and preserves unknown fields", () => {
     const result = parseCatalog({
       name: "Examples",
       owner: { name: "Acme" },
-      plugins: [{ name: "hello", source: "./hello", category: "ui-extension" }],
+      uiExtensions: [{ name: "hello", source: "./hello" }],
       extraTopLevel: true,
     });
     expect(result.ok).toBe(true);
   });
 
   it("reports missing required fields", () => {
-    const result = parseCatalog({ plugins: "nope" });
+    const result = parseCatalog({ uiExtensions: "nope" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors).toEqual(
         expect.arrayContaining([
           expect.stringContaining("name"),
           expect.stringContaining("owner.name"),
-          expect.stringContaining("plugins"),
+          expect.stringContaining("uiExtensions"),
         ]),
       );
     }
   });
 
-  it("validates plugin entry sources", () => {
+  it("validates entry sources", () => {
     const result = parseCatalog({
       name: "x",
       owner: { name: "y" },
-      plugins: [{ name: "bad", source: { source: "svn" } }],
+      uiExtensions: [{ name: "bad", source: { source: "svn" } }],
     });
     expect(result.ok).toBe(false);
   });
 });
 
-describe("isUiExtensionEntry / manifest path", () => {
-  it("recognises the category marker", () => {
-    expect(
-      isUiExtensionEntry({
-        name: "a",
-        source: "./a",
-        category: "ui-extension",
-      }),
-    ).toBe(true);
-  });
-
-  it("recognises the uiExtension marker", () => {
-    expect(
-      isUiExtensionEntry({ name: "a", source: "./a", uiExtension: {} }),
-    ).toBe(true);
-  });
-
-  it("ignores regular plugins", () => {
-    expect(isUiExtensionEntry({ name: "a", source: "./a" })).toBe(false);
-  });
-
+describe("manifest path", () => {
   it("defaults the manifest filename and honours overrides", () => {
     expect(uiExtensionManifestPath({ name: "a", source: "./a" })).toBe(
       "extension.json",

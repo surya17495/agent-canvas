@@ -135,24 +135,36 @@ entirely client-side.
 
 ## Distributing extensions (plugin marketplace)
 
-UI extensions are distributed as **OpenHands plugins** (which mirror the Claude Code
-plugin spec — see `software-agent-sdk` and `Plugin-Directory`). A UI extension lives
-inside that spec as an ordinary marketplace **plugin entry**, disambiguated from a
-regular agent plugin by:
+UI extensions are distributed via an **OpenHands plugin marketplace** file (which mirrors
+the Claude Code marketplace spec — see `software-agent-sdk` and `Plugin-Directory`), but
+they are listed under a **dedicated `uiExtensions` array — never in `plugins`**:
 
-- `category: "ui-extension"`, and/or
-- a `uiExtension` marker, e.g. `{ "manifest": "extension.json" }`, pointing at the UI
-  manifest within the plugin directory.
+```jsonc
+{
+  "name": "My extensions",
+  "owner": { "name": "Acme" },
+  "plugins": [],            // agent plugins (Claude Code / OpenHands plugin loader)
+  "uiExtensions": [         // read ONLY by Agent Canvas
+    {
+      "name": "hello-sidebar",
+      "source": "./hello-sidebar",
+      "uiExtension": { "manifest": "extension.json" }
+    }
+  ]
+}
+```
 
-Because both Claude Code and the OpenHands SDK allow unknown fields and a UI-extension
-entry contributes **no** `commands`/`agents`/`hooks`/`mcpServers`, it loads safely
-alongside regular plugins without affecting the agent. A marketplace repo therefore
-looks like:
+This is deliberate: Claude Code and the OpenHands plugin loader only enumerate `plugins`,
+so a UI extension **never appears as an installable plugin in a context that can't render
+it**. Both parsers ignore unknown top-level keys, so the file stays a valid marketplace
+manifest. (A per-entry `category`/flag would not work — those tools list every `plugins`
+entry regardless.) As a second layer, putting the file at `.plugin/marketplace.json` (the
+OpenHands-native location) keeps it invisible to Claude Code, which only discovers
+`.claude-plugin/marketplace.json`. A repo therefore looks like:
 
 ```
-.plugin/marketplace.json          # lists plugins (incl. UI extensions)
+.plugin/marketplace.json          # plugins: [] + uiExtensions: [...]
 hello-sidebar/
-  .claude-plugin/plugin.json      # optional: marks it a ui-extension plugin
   extension.json                  # the UI extension manifest
   main.js, panel.html, icon.svg   # the bundle
 ```

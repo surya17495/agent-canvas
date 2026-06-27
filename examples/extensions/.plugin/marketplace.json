@@ -2,10 +2,11 @@
   "name": "Agent Canvas example extensions",
   "owner": { "name": "Acme", "email": "devs@example.com" },
   "metadata": {
-    "description": "Example UI extensions distributed as OpenHands plugins.",
+    "description": "Example UI extensions distributed via an OpenHands marketplace.",
     "version": "1.0.0"
   },
-  "plugins": [
+  "plugins": [],
+  "uiExtensions": [
     {
       "name": "hello-sidebar",
       "source": "./hello-sidebar",
@@ -13,7 +14,6 @@
       "version": "1.0.0",
       "author": { "name": "Acme" },
       "homepage": "https://example.com/hello-sidebar",
-      "category": "ui-extension",
       "uiExtension": { "manifest": "extension.json" }
     }
   ]
