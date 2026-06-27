@@ -86,6 +86,52 @@ export function activate(ctx) {
 }
 ```
 
+## Publishing a versioned release
+
+Authors **don't host anything** — you publish the bundle directory (the folder containing
+`extension.json`) to npm or tag it in a public GitHub repo, and the browser loads the
+pinned files from jsDelivr. Pick the channel that matches how you want users to reference
+it (see "Installing & versioning" for the ref grammar):
+
+**npm (`npm:<pkg>[@<range>]`)** — best for per-package versioning, including monorepos:
+
+1. Make the bundle folder an npm package. The package root **is** the bundle directory, so
+   `extension.json` sits next to `package.json`, and `files` must ship every asset the
+   manifest references (`main`, webview `page`s, icons):
+   ```jsonc
+   // package.json
+   {
+     "name": "@acme/hello-extension",
+     "version": "1.0.0",
+     "files": ["extension.json", "main.js", "panel.html", "icon.svg"]
+   }
+   ```
+2. Keep `package.json` `version` and `extension.json` `version` in lockstep — the ref
+   resolves an npm version, and the management UI shows `extension.json`'s `version`.
+3. `npm publish` (use `--access public` for a first scoped publish).
+4. Users install `npm:@acme/hello-extension@^1`; jsDelivr serves the pinned files.
+
+**GitHub (`gh:<owner>/<repo>[/<subpath>][@<range>]`)** — best when the source already
+lives in a repo; no npm account needed:
+
+1. Commit the bundle directory. For a single extension it can be the repo root; in a
+   monorepo each extension is a subdirectory (the `subpath`).
+2. Bump `extension.json` `version`, then **`git tag`** a matching semver tag (e.g.
+   `v1.2.0`) and push it — ranges resolve against tags.
+3. Users install `gh:acme/extensions/packages/hello@^1` (omit the subpath when the bundle
+   is the repo root).
+
+**Releasing an update.** Bump `extension.json` `version` (and `package.json`/the git tag),
+republish/retag. Installed users see it via `checkForUpdate` when the new version still
+satisfies their recorded range — so honour semver: a release that needs **new
+capabilities** or a wider `engines.agentCanvas` range should be a new **major**, since the
+in-place update path refuses capability growth and host-incompatible versions (it re-runs
+consent instead). Unversioned `https://` URLs have no update channel.
+
+`examples/extensions/hello-sidebar/` is a complete bundle (with a `package.json` ready for
+`npm publish`); `examples/extensions/.plugin/marketplace.json` shows the same extension
+referenced as a local path, an `npm:` ref, and a `gh:` monorepo ref.
+
 ## Security model
 
 Webviews run **untrusted, customer-supplied** HTML/JS, so defences are layered (no
@@ -245,11 +291,13 @@ M1–M4, app mounting (flag-gated via `VITE_ENABLE_EXTENSIONS`), CSP/origin hard
 (sandbox + opaque origin, `connect-src 'none'`, per-load nonce `script-src`,
 `frame-ancestors`, document-level `sandbox`), the `/extensions` management UI with
 install-time capability consent, git/marketplace distribution (loading UI extensions
-from a plugin marketplace in a git repo), and **versioned `npm:`/`gh:` source refs
-resolved via jsDelivr with `engines.agentCanvas` host-compatibility enforcement** are
-implemented and tested (`__tests__/extensions/`, `__tests__/extensions/sources/`,
+from a plugin marketplace in a git repo), **versioned `npm:`/`gh:` source refs
+resolved via jsDelivr with `engines.agentCanvas` host-compatibility enforcement**, and
+**in-place update detection/application** (`checkForUpdate`/`updateExtension`, surfaced in
+the management UI alongside each install's source ref) are implemented and tested
+(`__tests__/extensions/`, `__tests__/extensions/sources/`,
 `__tests__/extensions/marketplace/`, `__tests__/components/features/extensions/`,
-`__tests__/routes/extensions.test.tsx`). Remaining work (update detection, a `zip`
+`__tests__/routes/extensions.test.tsx`). Remaining work (a `zip`
 acquirer, a first-party `registry:` resolver + hosted marketplace/registry service with
 submission/approval, private-repo auth, deploying a dedicated isolated asset origin, and a
 formal security review) is tracked in the proposal's "Implementation status" section.
