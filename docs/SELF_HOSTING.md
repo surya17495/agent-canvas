@@ -273,3 +273,94 @@ as an additional backend and switch between local and remote from the UI.
    - **Session API key** — the `LOCAL_BACKEND_API_KEY` you chose in step 3.
 2. Save. The new backend should show as "Connected". Pick it from the
    backend switcher to talk to the remote machine.
+
+## 6. (Optional, advanced) Put UI extensions on their own subdomain
+
+> **Do you need this? Almost certainly not — skip it.**
+>
+> UI extensions are already locked down automatically. Each one runs inside a
+> **sandboxed frame** with **no access** to your data, your login session, or
+> the network — the extension's code literally cannot "phone home" or read
+> anything outside its own little box. This protection is always on and needs
+> **zero configuration**.
+>
+> You also don't host extension files yourself in the normal case: when you
+> add an extension, your browser downloads it straight from wherever it lives
+> (for example, a public GitHub link). Your server is never in the middle, so
+> there is nothing for you to set up.
+
+**This section applies to exactly one situation:** you run your *own* private
+catalog of in-house extensions and want to serve those files **from your own
+Agent Canvas machine**. If that's not you, stop here — you're already done.
+
+### Why bother (the one extra benefit)
+
+Serving extension files from a **separate web address** (a subdomain like
+`extensions.canvas.example.com`) adds one more safety layer: even in the
+extremely unlikely event a web-browser bug let an extension break out of its
+sandbox, it would land on a throwaway domain that holds *nothing* — not on the
+domain that carries your login session. It's a "belt and suspenders" measure,
+not a requirement.
+
+### How to set it up
+
+1. **Add a second DNS record** for the subdomain, pointing at the same machine
+   (just like the `A` record in step 4):
+
+   ```bash
+   dig +short extensions.canvas.example.com   # should show your machine's IP
+   ```
+
+2. **Put your extension files** in a folder on the machine, e.g.
+   `/var/www/canvas-extensions/`, with each extension in its own subfolder
+   containing its `extension.json` and assets.
+
+3. **Add an nginx server block** for the subdomain. It serves the files and
+   attaches the security headers. Two values must point back at your **main**
+   site: `frame-ancestors` (so only your Agent Canvas may embed the
+   extensions) and `Access-Control-Allow-Origin` (so your app is allowed to
+   read the extension's `extension.json`). Replace both `…example.com` names
+   with yours:
+
+   ```nginx
+   server {
+       listen 80;
+       listen [::]:80;
+       server_name extensions.canvas.example.com;
+       root /var/www/canvas-extensions;
+
+       location /.well-known/acme-challenge/ {
+           root /var/www/html;
+       }
+
+       location / {
+           add_header X-Content-Type-Options "nosniff" always;
+           add_header Access-Control-Allow-Origin "https://canvas.example.com" always;
+           add_header Content-Security-Policy "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors https://canvas.example.com; sandbox allow-scripts" always;
+       }
+   }
+   ```
+
+4. **Get a certificate** for the subdomain, exactly as in step 4:
+
+   ```bash
+   ln -sf /etc/nginx/sites-available/extensions.canvas.example.com \
+          /etc/nginx/sites-enabled/extensions.canvas.example.com
+   nginx -t && systemctl reload nginx
+
+   certbot --nginx -d extensions.canvas.example.com \
+       --non-interactive --agree-tos --email you@example.com --redirect
+   ```
+
+5. **Install from the subdomain.** When you add an extension in the UI, use its
+   `https://extensions.canvas.example.com/<name>` address. Your main site and
+   your extensions now live on separate origins.
+
+> **One caveat (safe to ignore).** Agent Canvas's built-in dev server gives
+> each extension page a one-time `script-src` *nonce* — the strongest form of
+> the script lock. A plain static nginx site can't mint a fresh nonce per
+> request, so the header above keeps the slightly looser `'unsafe-inline'`.
+> That is still safe here because the frame is sandboxed and has `connect-src
+> 'none'` (no network). Restoring nonces would require a small dynamic asset
+> server; the building blocks (`buildWebviewCsp` / `stampCspNonce`) live in
+> `src/extensions/webview-security.ts`.

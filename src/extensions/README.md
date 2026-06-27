@@ -113,11 +113,20 @@ server share one implementation. Where an asset server cannot rewrite HTML to st
 nonce, omitting it falls back to `script-src 'unsafe-inline'` — still acceptable because
 the frame is sandboxed and `connect-src 'none'` blocks exfiltration.
 
-**Production requirements:** the dev server applies these headers via middleware
-(`vite.config.ts`); a real deployment **must** serve webview assets with the same
-`Content-Security-Policy` (stamping a fresh nonce per response). Serve assets from a
-**dedicated isolated origin/subdomain** and set `frameAncestors` to the host app's
-origin so only the host can frame the webview.
+**Serving webview assets.** The core guarantees are enforced **client-side** — the
+sandboxed iframe has an opaque origin and `connect-src 'none'`, so wherever a bundle's
+HTML is served from, the webview cannot read host data or reach the network. In the
+default flow nothing extra is needed: bundles are fetched by the browser directly from
+the extension's own URL (e.g. `raw.githubusercontent.com`), already a separate origin.
+Whoever *does* serve webview HTML should additionally send the
+`Content-Security-Policy` above; the dev middleware (`vite.config.ts`) does this and
+stamps a fresh nonce per response via `stampCspNonce`.
+
+**Optional defence in depth:** an operator hosting their own bundles can serve them from
+a dedicated isolated origin and set `frameAncestors` to the host app's origin — a
+reverse-proxy recipe (and when it's actually worth doing) is in
+[`docs/SELF_HOSTING.md`](../../docs/SELF_HOSTING.md) § 6. This is optional, not required
+for the baseline guarantees.
 
 ## Managing extensions
 

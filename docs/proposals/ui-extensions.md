@@ -574,9 +574,11 @@ Not yet done (remaining work):
   nonce (the asset server stamps the matching nonce onto the bundle's `<script>` tags;
   see `buildWebviewCsp`/`generateCspNonce`/`stampCspNonce` in `webview-security.ts`),
   `frame-ancestors` is enforced (defaults to `'self'`, overridable to the host origin),
-  and a document-level `sandbox allow-scripts` mirrors the iframe sandbox. _Still
-  remaining:_ serve webview assets from a *dedicated isolated origin/subdomain* (an infra
-  change — the in-code hook is `frameAncestors`), and a formal security review.
+  and a document-level `sandbox allow-scripts` mirrors the iframe sandbox. Serving from
+  a *dedicated isolated origin/subdomain* is an operator-side infra choice (not required
+  for the baseline guarantees, which are client-side) — a reverse-proxy recipe using the
+  `frameAncestors` hook is documented in `docs/SELF_HOSTING.md` § 6. _Still remaining:_ a
+  formal security review.
 - **Command palette:** surface contributed commands in the Command-K menu (needs the
   palette item model widened beyond `I18nKey` to accept plain-string extension titles).
 - **Real `BundleSource` implementations:** installed-folder source (agent-server) and a
