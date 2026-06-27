@@ -170,18 +170,26 @@ export function AddExtensionModal({ onClose }: AddExtensionModalProps) {
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 custom-scrollbar">
           {!preview && mode === "url" ? (
-            <SettingsInput
-              testId="add-extension-source-input"
-              label={t(I18nKey.EXTENSIONS$SOURCE_LABEL)}
-              type="text"
-              value={source}
-              onChange={(value) => {
-                setSource(value);
-                setError(null);
-              }}
-              placeholder={t(I18nKey.EXTENSIONS$SOURCE_PLACEHOLDER)}
-              showRequiredTag
-            />
+            <div className="flex flex-col gap-1.5">
+              <SettingsInput
+                testId="add-extension-source-input"
+                label={t(I18nKey.EXTENSIONS$SOURCE_LABEL)}
+                type="text"
+                value={source}
+                onChange={(value) => {
+                  setSource(value);
+                  setError(null);
+                }}
+                placeholder={t(I18nKey.EXTENSIONS$SOURCE_PLACEHOLDER)}
+                showRequiredTag
+              />
+              <p
+                data-testid="add-extension-source-help"
+                className="text-xs text-tertiary-alt"
+              >
+                {t(I18nKey.EXTENSIONS$SOURCE_HELP)}
+              </p>
+            </div>
           ) : null}
 
           {!preview && mode === "marketplace" ? (
@@ -226,6 +234,13 @@ export function AddExtensionModal({ onClose }: AddExtensionModalProps) {
                               {listing.description}
                             </span>
                           ) : null}
+                          <span
+                            data-testid={`marketplace-listing-source-${listing.name}`}
+                            className="mt-0.5 block truncate font-mono text-[11px] text-tertiary-light"
+                            title={listing.installSource}
+                          >
+                            {listing.installSource}
+                          </span>
                         </button>
                       </li>
                     ))

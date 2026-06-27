@@ -33,6 +33,11 @@ describe("AddExtensionModal", () => {
     expect(screen.getByTestId("add-extension-review")).toBeDisabled();
   });
 
+  it("shows source-format help for the URL field", () => {
+    render(<AddExtensionModal onClose={vi.fn()} />);
+    expect(screen.getByTestId("add-extension-source-help")).toBeInTheDocument();
+  });
+
   it("reviews permissions before installing", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -76,7 +81,7 @@ describe("AddExtensionModal", () => {
         {
           name: "hello-sidebar",
           description: "Adds a Hello panel.",
-          installSource: "https://raw.example/hello-sidebar",
+          installSource: "npm:@acme/hello-sidebar@^1",
         },
       ],
     });
@@ -101,22 +106,22 @@ describe("AddExtensionModal", () => {
       "marketplace-listing-hello-sidebar",
     );
     expect(marketplaceMock).toHaveBeenCalledWith("github://acme/extensions");
+    // The versioned source ref is surfaced on the listing.
+    expect(
+      screen.getByTestId("marketplace-listing-source-hello-sidebar"),
+    ).toHaveTextContent("npm:@acme/hello-sidebar@^1");
 
     // Selecting a listing surfaces its permissions; nothing installed yet.
     await user.click(listing);
     await waitFor(() =>
       expect(screen.getByTestId("extension-permissions")).toBeInTheDocument(),
     );
-    expect(previewMock).toHaveBeenCalledWith(
-      "https://raw.example/hello-sidebar",
-    );
+    expect(previewMock).toHaveBeenCalledWith("npm:@acme/hello-sidebar@^1");
     expect(installMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByTestId("add-extension-install"));
     await waitFor(() =>
-      expect(installMock).toHaveBeenCalledWith(
-        "https://raw.example/hello-sidebar",
-      ),
+      expect(installMock).toHaveBeenCalledWith("npm:@acme/hello-sidebar@^1"),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });
