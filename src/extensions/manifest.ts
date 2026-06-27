@@ -36,11 +36,20 @@ export interface CommandManifest {
   title: string;
 }
 
+export interface MenuItemManifest {
+  /** Id of a contributed `command` to run when the item is selected. */
+  command: string;
+  /** Optional ordering group within the slot (lower groups sort first). */
+  group?: string;
+}
+
 export interface ContributesManifest {
   viewsContainers?: { activitybar?: ActivityBarContainerManifest[] };
   /** Map of container id → views contributed into it. */
   views?: Record<string, ViewManifest[]>;
   commands?: CommandManifest[];
+  /** Map of menu-slot id (e.g. `"conversationTabs/context"`) → items. */
+  menus?: Record<string, MenuItemManifest[]>;
 }
 
 export interface ExtensionManifest {
@@ -170,6 +179,34 @@ function validateContributes(
           title: v.requireString(obj.title, `${path}.title`) ?? "",
         };
       });
+    }
+  }
+
+  if (raw.menus !== undefined) {
+    if (!isObject(raw.menus)) {
+      v.fail("contributes.menus", "expected an object");
+    } else {
+      const menus: Record<string, MenuItemManifest[]> = {};
+      for (const [slotId, list] of Object.entries(raw.menus)) {
+        const path = `contributes.menus.${slotId}`;
+        if (!Array.isArray(list)) {
+          v.fail(path, "expected an array");
+          continue;
+        }
+        menus[slotId] = list.map((entry, i) => {
+          const itemPath = `${path}[${i}]`;
+          const obj = isObject(entry) ? entry : {};
+          if (!isObject(entry)) v.fail(itemPath, "expected an object");
+          return {
+            command: v.requireString(obj.command, `${itemPath}.command`) ?? "",
+            group:
+              obj.group === undefined
+                ? undefined
+                : v.requireString(obj.group, `${itemPath}.group`),
+          };
+        });
+      }
+      contributes.menus = menus;
     }
   }
 

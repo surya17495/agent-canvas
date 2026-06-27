@@ -3,6 +3,7 @@ import type {
   ActivityBarItem,
   CommandItem,
   ExtensionContributions,
+  MenuItem,
   ViewItem,
 } from "./types";
 
@@ -31,6 +32,13 @@ interface ContributionRegistryState {
   commands: CommandItem[];
   /** Derived flat list of all contributed views. */
   views: ViewItem[];
+  /** Derived flat list of all contributed menu items. */
+  menuItems: MenuItem[];
+  /**
+   * Derived map of menu-slot id → items, so a host menu can select a single slot's
+   * items by a stable reference (avoids re-deriving / re-render loops).
+   */
+  menuItemsBySlot: Record<string, MenuItem[]>;
 
   /** Register (or replace) all contributions for an extension. */
   register: (
@@ -50,12 +58,23 @@ function flatten<T>(
   return Object.values(byExtension).flatMap((c) => pick(c) ?? []);
 }
 
+function groupBySlot(menuItems: MenuItem[]): Record<string, MenuItem[]> {
+  const bySlot: Record<string, MenuItem[]> = {};
+  for (const item of menuItems) {
+    (bySlot[item.menu] ??= []).push(item);
+  }
+  return bySlot;
+}
+
 function derive(byExtension: Record<string, ExtensionContributions>) {
+  const menuItems = flatten(byExtension, (c) => c.menus);
   return {
     byExtension,
     activityBarItems: flatten(byExtension, (c) => c.activityBarItems),
     commands: flatten(byExtension, (c) => c.commands),
     views: flatten(byExtension, (c) => c.views),
+    menuItems,
+    menuItemsBySlot: groupBySlot(menuItems),
   };
 }
 
@@ -65,6 +84,8 @@ export const useContributionRegistry = create<ContributionRegistryState>(
     activityBarItems: [],
     commands: [],
     views: [],
+    menuItems: [],
+    menuItemsBySlot: {},
 
     register: (extensionId, contributions) =>
       set((state) =>
@@ -101,6 +122,19 @@ export function selectViews(state: ContributionRegistryState): ViewItem[] {
   return state.views;
 }
 
+export function selectMenuItems(state: ContributionRegistryState): MenuItem[] {
+  return state.menuItems;
+}
+
+/** Stable empty array for slots with no contributions (avoids re-render loops). */
+const EMPTY_MENU_ITEMS: MenuItem[] = [];
+
+export function selectMenuItemsForSlot(
+  slot: string,
+): (state: ContributionRegistryState) => MenuItem[] {
+  return (state) => state.menuItemsBySlot[slot] ?? EMPTY_MENU_ITEMS;
+}
+
 /**
  * Non-reactive accessors for use outside React (loader, extension host, tests).
  * Components should prefer the hooks in `use-contributions.ts`.
@@ -115,6 +149,10 @@ export const contributionRegistry = {
     useContributionRegistry.getState().activityBarItems,
   getCommands: () => useContributionRegistry.getState().commands,
   getViews: () => useContributionRegistry.getState().views,
+  getMenuItems: () => useContributionRegistry.getState().menuItems,
+  /** All menu items targeting a given slot, in extension insertion order. */
+  getMenuItemsForSlot: (slot: string): MenuItem[] =>
+    useContributionRegistry.getState().menuItemsBySlot[slot] ?? [],
   /** Resolve a single contributed view by id (used by the webview host). */
   getView: (viewId: string): ViewItem | undefined =>
     useContributionRegistry.getState().views.find((v) => v.id === viewId),

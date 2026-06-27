@@ -75,6 +75,26 @@ export interface ViewItem {
 }
 
 /**
+ * A resolved menu item contributed by an extension into a named menu slot (see
+ * `menu-slots.ts`). It binds to an existing contributed `command`; the host renders
+ * the item declaratively and runs the bound command on selection. Showing it executes
+ * no extension code, so no capability is required.
+ */
+export interface MenuItem {
+  extensionId: string;
+  /** Menu-slot id this item targets (e.g. `"conversationTabs/context"`). */
+  menu: string;
+  /** Id of the contributed command this item runs. */
+  command: string;
+  /** Display label, resolved from the bound command's title. */
+  title: string;
+  /** Optional ordering group within the slot (lower groups sort first). */
+  group?: string;
+  /** Invoked when the item is selected. Wired by the loader/host. */
+  run: () => void | Promise<void>;
+}
+
+/**
  * The full set of resolved contributions for a single extension, handed to the
  * `ContributionRegistry` as one unit so registration/unregistration is atomic.
  */
@@ -82,4 +102,5 @@ export interface ExtensionContributions {
   activityBarItems?: ActivityBarItem[];
   commands?: CommandItem[];
   views?: ViewItem[];
+  menus?: MenuItem[];
 }

@@ -5,6 +5,7 @@ import type {
   ActivityBarItem,
   CommandItem,
   ExtensionContributions,
+  MenuItem,
   ViewItem,
 } from "./types";
 
@@ -100,6 +101,40 @@ function buildCommands(
   }));
 }
 
+/**
+ * Build resolved {@link MenuItem}s for each `contributes.menus` slot. Each item binds
+ * to one of the extension's own contributed commands: its label is resolved from that
+ * command's title, and selecting it activates the worker (`onCommand:<id>`) and
+ * dispatches the command — the same path the Command-K menu uses. No extension code
+ * runs here. An item whose `command` isn't declared still renders (falling back to the
+ * command id as its label) so a typo degrades gracefully instead of breaking the menu.
+ */
+function buildMenuItems(
+  manifest: ExtensionManifest,
+  host: ExtensionHostBridge,
+): MenuItem[] {
+  const menus = manifest.contributes?.menus ?? {};
+  const titleByCommand = new Map(
+    (manifest.contributes?.commands ?? []).map((c) => [c.command, c.title]),
+  );
+
+  return Object.entries(menus).flatMap(([menu, items]) =>
+    items.map((item) => ({
+      extensionId: manifest.id,
+      menu,
+      command: item.command,
+      title: titleByCommand.get(item.command) ?? item.command,
+      group: item.group,
+      run: () => {
+        Promise.resolve(
+          host.activate(manifest, `onCommand:${item.command}`),
+        ).catch(() => {});
+        return host.runCommand(manifest.id, item.command);
+      },
+    })),
+  );
+}
+
 async function buildViews(
   manifest: ExtensionManifest,
   source: BundleSource,
@@ -154,6 +189,7 @@ export async function loadExtension(
     activityBarItems: await buildActivityBarItems(manifest, source, host),
     commands: buildCommands(manifest, host),
     views: await buildViews(manifest, source),
+    menus: buildMenuItems(manifest, host),
   };
 
   contributionRegistry.register(manifest.id, contributions);

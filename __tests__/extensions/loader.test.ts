@@ -25,6 +25,11 @@ const manifest = {
       ],
     },
     commands: [{ command: "compliance.scan", title: "Scan" }],
+    menus: {
+      "conversationTabs/context": [
+        { command: "compliance.scan", group: "extensions" },
+      ],
+    },
   },
 };
 
@@ -97,6 +102,62 @@ describe("loadExtension", () => {
       "acme.compliance",
       "compliance.scan",
     );
+  });
+
+  it("resolves menu items, labelling them from the bound command's title", async () => {
+    await loadExtension(makeSource(), makeHost());
+
+    const items = contributionRegistry.getMenuItemsForSlot(
+      "conversationTabs/context",
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      extensionId: "acme.compliance",
+      menu: "conversationTabs/context",
+      command: "compliance.scan",
+      title: "Scan",
+      group: "extensions",
+    });
+  });
+
+  it("wires menu selection to activate + runCommand for the bound command", async () => {
+    const host = makeHost();
+    await loadExtension(makeSource(), host);
+
+    await contributionRegistry
+      .getMenuItemsForSlot("conversationTabs/context")[0]
+      .run();
+
+    expect(host.activate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "acme.compliance" }),
+      "onCommand:compliance.scan",
+    );
+    expect(host.runCommand).toHaveBeenCalledWith(
+      "acme.compliance",
+      "compliance.scan",
+    );
+  });
+
+  it("falls back to the command id as the label when it isn't declared", async () => {
+    const host = makeHost();
+    await loadExtension(
+      makeSource({
+        readManifest: async () => ({
+          ...manifest,
+          contributes: {
+            menus: {
+              "conversationTabs/context": [{ command: "compliance.ghost" }],
+            },
+          },
+        }),
+      }),
+      host,
+    );
+
+    const items = contributionRegistry.getMenuItemsForSlot(
+      "conversationTabs/context",
+    );
+    expect(items[0].title).toBe("compliance.ghost");
   });
 
   it("returns validation errors and registers nothing for a bad manifest", async () => {

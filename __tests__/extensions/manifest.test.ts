@@ -114,4 +114,66 @@ describe("parseManifest", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.length).toBeGreaterThan(1);
   });
+
+  it("accepts contributes.menus binding items to a slot", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: {
+        ...validManifest.contributes,
+        menus: {
+          "conversationTabs/context": [
+            { command: "compliance.scan", group: "extensions" },
+            { command: "compliance.scan" },
+          ],
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const slot =
+        result.manifest.contributes?.menus?.["conversationTabs/context"];
+      expect(slot).toHaveLength(2);
+      expect(slot?.[0]).toEqual({
+        command: "compliance.scan",
+        group: "extensions",
+      });
+      expect(slot?.[1].group).toBeUndefined();
+    }
+  });
+
+  it("rejects a non-object contributes.menus", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: { menus: [] },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.join()).toMatch(/contributes\.menus: expected/);
+  });
+
+  it("rejects a menu slot whose value is not an array", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: { menus: { "conversationTabs/context": {} } },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.join()).toMatch(
+        /contributes\.menus\.conversationTabs\/context: expected an array/,
+      );
+  });
+
+  it("rejects a menu item missing its command with a precise path", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: {
+        menus: { "conversationTabs/context": [{ group: "x" }] },
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.join()).toMatch(
+        /contributes\.menus\.conversationTabs\/context\[0\]\.command/,
+      );
+  });
 });

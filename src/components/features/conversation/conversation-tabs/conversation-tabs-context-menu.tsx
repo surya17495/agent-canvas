@@ -20,6 +20,8 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { ArchivedDisabledTooltip } from "../../context-menu/archived-disabled-tooltip";
+import { ExtensionMenuItems } from "#/components/features/extensions/extension-menu-items";
+import { MENU_SLOTS } from "#/extensions/menu-slots";
 import { cn } from "#/utils/utils";
 import {
   dropdownInstantColorClassName,
@@ -245,6 +247,10 @@ export function ConversationTabsContextMenu({
           </li>
         );
       })}
+      <ExtensionMenuItems
+        slot={MENU_SLOTS.conversationTabsContext}
+        onAfterSelect={onClose}
+      />
     </ContextMenu>
   );
 

@@ -50,5 +50,12 @@ describe("examples/extensions/hello-sidebar", () => {
     // The view's `page` is resolved to an asset URL for the webview panel.
     expect(views[0].pageUrl).toBe("blob:panel.html");
     expect(views[0].capabilities).toEqual(["conversation:read"]);
+
+    // The menu item binds to the contributed command and inherits its title.
+    const menuItems = contributionRegistry.getMenuItemsForSlot(
+      "conversationTabs/context",
+    );
+    expect(menuItems.map((m) => m.command)).toEqual(["hello.say"]);
+    expect(menuItems[0].title).toBe("Hello: Say hi");
   });
 });

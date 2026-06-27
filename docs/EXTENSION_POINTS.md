@@ -28,6 +28,7 @@ narrow:
    | Activity-bar (rail) button | `contributes.viewsContainers.activitybar` | `src/components/features/sidebar/sidebar-rail-body.tsx` |
    | View / panel (webview) | `contributes.views` | the panel host + `extension-webview.tsx` |
    | Command | `contributes.commands` | the Command-K menu (`src/components/features/command-menu/`) |
+   | Menu item | `contributes.menus` | named menu slots, e.g. `conversation-tabs-context-menu.tsx` (`src/extensions/menu-slots.ts` + `extension-menu-items.tsx`) |
 
 2. **A capability-gated host API** - the imperative surface an extension's **Web Worker**
    (and sandboxed webview) calls over RPC. Today (`src/extensions/host/host-api.ts`):
@@ -99,15 +100,30 @@ This uniformity is the point: a new surface is "schema + type + registry + hook 
 Each entry lists the **host surface** (a real component today), the **VS Code analog**, the
 **shape** it would take, and the **trust** implications. Roughly ordered by value/effort.
 
-### 1. Menus (`contributes.menus`)
-- **Surface:** context/overflow menus - e.g. `conversation-tabs-context-menu.tsx`, and other
-  per-item menus.
+### 1. Menus (`contributes.menus`) — ✅ implemented
+
+Shipped as the first declarative point built on this recipe (see the "today" table above).
+
+- **Surface:** named menu slots. The first host slot is the conversation-tabs context menu
+  (`conversation-tabs-context-menu.tsx`); add a slot by registering its id in
+  `src/extensions/menu-slots.ts` and rendering `<ExtensionMenuItems slot={…} />`.
 - **Analog:** VS Code `contributes.menus`.
-- **Shape:** declarative items bound to a contributed `command`, placed into named menu slots
-  (with optional `when`/grouping). Already called out as Phase 2 in the proposal.
-- **Trust:** declarative; the action is just an existing contributed command, so no new
-  capability. Needs a small "menu contribution location" registry so host menus can query
-  "items for slot X".
+- **Shape:** a `contributes.menus` map of *slot id → items*; each item is
+  `{ "command": "<id>", "group"?: "<name>" }`, bound to one of the extension's own
+  contributed `commands`. The item's label is resolved from that command's title, and
+  selecting it activates the worker (`onCommand:<id>`) and runs the command — the same path
+  the Command-K menu uses.
+  ```jsonc
+  "contributes": {
+    "commands": [{ "command": "hello.say", "title": "Hello: Say hi" }],
+    "menus": { "conversationTabs/context": [{ "command": "hello.say" }] }
+  }
+  ```
+- **Trust:** declarative; the action is just an existing contributed command, so **no new
+  capability**. The "menu contribution location" registry is `menu-slots.ts` (the `MENU_SLOTS`
+  ids) plus the registry's derived `menuItemsBySlot`, queried via `useMenuItems(slot)`.
+- **Not yet:** `when`-clause visibility (there is no host `when` evaluator) and an
+  `onMenu:<slot>` activation event (unnecessary — command activation already covers it).
 
 ### 2. Chat-input actions and slash commands
 - **Surface:** `src/components/features/chat/components/chat-input-actions.tsx`,

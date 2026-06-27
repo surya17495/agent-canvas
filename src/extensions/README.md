@@ -14,7 +14,7 @@ recipe for adding a new one.
 extension.json (declarative)        ──parse──▶  manifest.ts
         │                                            │
         ▼                                            ▼
-   loader.ts  ──register──▶  contribution-registry.ts  ──▶  Sidebar / Command menu (native UI)
+   loader.ts  ──register──▶  contribution-registry.ts  ──▶  Sidebar / Command menu / Menus (native UI)
         │                                            ▲
         │ (on select)                                │ useContributions()
         ▼
@@ -42,7 +42,7 @@ Key properties:
 |---|---|
 | Types | `types.ts`, `sdk/types.ts` |
 | Manifest | `manifest.ts` |
-| Registry | `contribution-registry.ts`, `use-contributions.ts` |
+| Registry | `contribution-registry.ts`, `use-contributions.ts`, `menu-slots.ts` |
 | Loader / manager | `loader.ts`, `extension-manager.ts` |
 | Host runtime | `host/rpc.ts`, `host/host-api.ts`, `host/extension-host.ts`, `host/webview-transport.ts`, `host/create-app-host-deps.ts` |
 | Worker/webview SDK | `sdk/runtime.ts`, `sdk/worker-bootstrap.ts`, `sdk/api-proxy.ts`, `sdk/webview-client.ts` |
@@ -52,7 +52,7 @@ Key properties:
 | Management UI | `installed-store.ts`, `installed-persistence.ts`, `../routes/extensions.tsx`, `../components/features/extensions/{installed-extension-card,add-extension-modal,capability-labels}.tsx` |
 | Source resolution | `sources/{ref,resolve,jsdelivr}.ts` (npm/gh/url → pinned bundle) |
 | Distribution | `marketplace/{source,catalog,client}.ts` (git/marketplace loading) |
-| UI | `../components/features/sidebar/sidebar-contribution-button.tsx`, `../components/features/extensions/extension-webview.tsx` |
+| UI | `../components/features/sidebar/sidebar-contribution-button.tsx`, `../components/features/extensions/extension-webview.tsx`, `../components/features/extensions/extension-menu-items.tsx` |
 
 ## Authoring an extension
 
@@ -71,7 +71,8 @@ webview assets. See `examples/extensions/hello-sidebar/` for a minimal working s
   "contributes": {
     "viewsContainers": { "activitybar": [{ "id": "hello.container", "title": "Hello", "icon": "icon.svg" }] },
     "views": { "hello.container": [{ "id": "hello.panel", "name": "Hello", "type": "webview" }] },
-    "commands": [{ "command": "hello.say", "title": "Hello: Say hi" }]
+    "commands": [{ "command": "hello.say", "title": "Hello: Say hi" }],
+    "menus": { "conversationTabs/context": [{ "command": "hello.say" }] }
   }
 }
 ```

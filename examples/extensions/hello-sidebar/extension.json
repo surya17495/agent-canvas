@@ -23,6 +23,9 @@
         }
       ]
     },
-    "commands": [{ "command": "hello.say", "title": "Hello: Say hi" }]
+    "commands": [{ "command": "hello.say", "title": "Hello: Say hi" }],
+    "menus": {
+      "conversationTabs/context": [{ "command": "hello.say" }]
+    }
   }
 }
