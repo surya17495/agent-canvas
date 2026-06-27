@@ -12,8 +12,10 @@ export interface InstalledExtension {
   publisher?: string;
   /** Capabilities the user granted at install time (currently == requested). */
   capabilities: Capability[];
-  /** Bundle base URL the extension was installed from. */
+  /** Resolved, pinned bundle base URL the extension was installed from. */
   sourceUrl: string;
+  /** The `npm:`/`gh:`/`url` ref the user installed (when known); for display/updates. */
+  sourceRef?: string;
   /**
    * `dev` entries come from `DEV_EXTENSION_BUNDLE_URLS` (config, not persisted);
    * `user` entries were installed via the UI and persist across reloads.

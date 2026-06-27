@@ -563,13 +563,47 @@ Also built and tested since (this branch):
   `.claude-plugin/marketplace.json`. No git clone or backend is required — public repos
   are fetched directly over CORS-enabled raw HTTPS. Example:
   `examples/extensions/.plugin/marketplace.json`.
+- **Distribution & versioning via source refs (Phase 1 — `npm:`/`gh:`):** authors host
+  nothing — they `git tag` or `npm publish`, and the browser loads the pinned files from
+  a CDN. A **source ref** (`sources/ref.ts`) names *which* extension and *what* version,
+  decoupled from where the bytes live:
+  - `npm:<pkg>[@<range>]` — per-package versioning (the natural fit for monorepos),
+  - `gh:<owner>/<repo>[/<subpath>][@<range>]` — a repo at a tag; the optional `subpath`
+    selects one extension inside a **monorepo** (no subpath = repo root, zero-config),
+  - `https://…` — a raw bundle directory (dev / self-hosted).
+
+  The install pipeline has a single per-source seam:
+  `parse → ExtensionSourceRef → resolve → ArtifactDescriptor → toBundleSource → loadExtension`.
+  `npm:`/`gh:` resolve a semver range (default `*` = latest) to a concrete version via
+  `data.jsdelivr.com`, then point at the pinned `cdn.jsdelivr.net/...@<version>` directory
+  (`sources/{resolve,jsdelivr}.ts`). jsDelivr supplies `Access-Control-Allow-Origin: *`,
+  correct MIME, and immutable caching — so the manifest fetch, the worker's dynamic
+  `import()`, and the webview framing all work with no per-author hosting (this also fixes
+  the `raw.githubusercontent.com` `text/plain` problem). `engines.agentCanvas` is now
+  **enforced** against `AGENT_CANVAS_HOST_VERSION` (`engines.ts`) at the consent boundary
+  and on startup restore. The *resolved* base URL is persisted so reloads are
+  deterministic; `sourceRef` + `version` are kept for display and a future update check.
+  Tests: `__tests__/extensions/sources/`, `__tests__/extensions/engines.test.ts`.
+
+  Design intent — this is **forward-compatible with a first-party registry (option C)**:
+  `ArtifactDescriptor` is the stable contract (`{ sourceRef, kind, version, baseUrl,
+  format }`), so a `registry:` resolver is purely additive (it returns the same shape,
+  likely `format: "zip"` + an `integrity` hash). The only extra shared piece a registry
+  needs is a zip→`blob:` acquirer in `toBundleSource`; the loader and persistence are
+  unchanged, and installs are keyed on `manifest.id` so distribution can migrate to the
+  registry without breaking existing installs.
 
 Not yet done (remaining work):
 
-- **Hosted marketplace / registry service:** a discoverable catalog with submission and
-  approval, ratings/reviews, and cloud-backed storage (the role `Plugin-Directory`
-  plays for agent plugins), plus **private-repo auth** for browser installs. Partial
-  capability grants (subset consent) and an enable/disable toggle are natural follow-ons.
+- **Update detection & `zip` acquirer:** compare the installed `version` against
+  `resolveLatest()` per source and surface an "update available" affordance; add a
+  zip/tarball → `blob:` acquirer (also the enabler for single-file registry artifacts).
+- **Hosted marketplace / registry service (option C):** a discoverable catalog with
+  submission and approval, ratings/reviews, and cloud-backed storage (the role
+  `Plugin-Directory` plays for agent plugins), exposed as a `registry:` resolver behind
+  the existing `ArtifactDescriptor` seam, plus **private-repo auth** for browser installs.
+  Partial capability grants (subset consent) and an enable/disable toggle are natural
+  follow-ons.
 - **CSP/origin hardening (round 2):** _partly done_ — `script-src` now uses a per-load
   nonce (the asset server stamps the matching nonce onto the bundle's `<script>` tags;
   see `buildWebviewCsp`/`generateCspNonce`/`stampCspNonce` in `webview-security.ts`),

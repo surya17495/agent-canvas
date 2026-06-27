@@ -15,6 +15,12 @@ import {
   removePersistedInstall,
 } from "#/extensions/installed-persistence";
 import { parseManifest, type ExtensionManifest } from "#/extensions/manifest";
+import { assertHostCompatible } from "#/extensions/engines";
+import {
+  resolveSource,
+  toBundleSource,
+  type ArtifactDescriptor,
+} from "#/extensions/sources/resolve";
 import {
   githubUrlPath,
   githubUrlToSource,
@@ -34,21 +40,30 @@ interface ExtensionContextValue {
   manager: ExtensionManager;
   deps: HostApiDeps;
   /** Fetch + validate a bundle manifest to show its requested permissions (consent). */
-  previewManifest: (url: string) => Promise<ManifestPreview>;
-  /** Install a bundle from a URL and record it as a persisted user install. */
-  installFromUrl: (url: string) => Promise<InstalledExtension>;
+  previewManifest: (source: string) => Promise<ManifestPreview>;
+  /** Install a bundle from a source ref and record it as a persisted user install. */
+  installFromUrl: (source: string) => Promise<InstalledExtension>;
   /** Load a plugin marketplace (git repo or URL) and list its UI extensions. */
   fetchMarketplace: (source: string) => Promise<MarketplaceResult>;
   /** Remove an extension and forget any persisted user install. */
   uninstall: (id: string) => void;
 }
 
-/** Convert a github.com folder/tree URL to a raw bundle base; pass other inputs through. */
-function resolveBundleUrl(input: string): string {
+/**
+ * Normalize a pasted `github.com` folder/tree URL into a raw bundle base URL so it
+ * parses as a `url` source. `npm:`/`gh:`/raw `https://` inputs pass straight through to
+ * the source-ref resolver.
+ */
+function normalizeLegacyInput(input: string): string {
   const trimmed = input.trim();
   const github = githubUrlToSource(trimmed);
   if (github) return rawGithubUrl(github, githubUrlPath(trimmed) ?? "");
   return trimmed;
+}
+
+/** Parse + resolve any supported source string to a pinned artifact descriptor. */
+function resolveDescriptor(input: string): Promise<ArtifactDescriptor> {
+  return resolveSource(normalizeLegacyInput(input));
 }
 
 const ExtensionContext = React.createContext<ExtensionContextValue | null>(
@@ -64,6 +79,7 @@ function toInstalledExtension(
   manifest: ExtensionManifest,
   sourceUrl: string,
   origin: InstalledExtensionOrigin,
+  sourceRef?: string,
 ): InstalledExtension {
   return {
     id: manifest.id,
@@ -72,6 +88,7 @@ function toInstalledExtension(
     publisher: manifest.publisher,
     capabilities: manifest.capabilities ?? [],
     sourceUrl,
+    sourceRef,
     origin,
   };
 }
@@ -93,15 +110,16 @@ function ExtensionManagerProviderInner({
   const manager = managerRef.current;
 
   const previewManifest = React.useCallback(
-    async (url: string): Promise<ManifestPreview> => {
-      const raw = await createHttpBundleSource(
-        resolveBundleUrl(url),
-      ).readManifest();
+    async (source: string): Promise<ManifestPreview> => {
+      const descriptor = await resolveDescriptor(source);
+      const raw = await toBundleSource(descriptor).readManifest();
       const parsed = parseManifest(raw);
       if (!parsed.ok) {
         throw new Error(parsed.errors.join("; "));
       }
       const { manifest } = parsed;
+      // Surface incompatibility before the user grants consent.
+      assertHostCompatible(manifest.engines.agentCanvas);
       return {
         id: manifest.id,
         name: manifest.name,
@@ -114,17 +132,31 @@ function ExtensionManagerProviderInner({
   );
 
   const installFromUrl = React.useCallback(
-    async (url: string): Promise<InstalledExtension> => {
-      const baseUrl = resolveBundleUrl(url);
-      const result = await manager.install(createHttpBundleSource(baseUrl));
+    async (source: string): Promise<InstalledExtension> => {
+      const descriptor = await resolveDescriptor(source);
+      const result = await manager.install(toBundleSource(descriptor));
       if (!result.ok) {
         throw new Error(result.errors.join("; "));
       }
-      const extension = toInstalledExtension(result.manifest, baseUrl, "user");
+      // Roll back the install if the resolved version is host-incompatible.
+      try {
+        assertHostCompatible(result.manifest.engines.agentCanvas);
+      } catch (error) {
+        manager.uninstall(result.manifest.id);
+        throw error;
+      }
+      const extension = toInstalledExtension(
+        result.manifest,
+        descriptor.baseUrl,
+        "user",
+        descriptor.sourceRef,
+      );
       useInstalledExtensionsStore.getState().add(extension);
       addPersistedInstall({
         id: extension.id,
         sourceUrl: extension.sourceUrl,
+        sourceRef: descriptor.sourceRef,
+        version: descriptor.version ?? extension.version,
         capabilities: extension.capabilities,
       });
       return extension;
@@ -150,14 +182,24 @@ function ExtensionManagerProviderInner({
     const installFrom = async (
       url: string,
       origin: InstalledExtensionOrigin,
+      sourceRef?: string,
     ) => {
+      // Restore re-installs from the *pinned* base URL recorded at install time, so it
+      // is deterministic and needs no version re-resolution.
       const result = await manager.install(createHttpBundleSource(url));
       if (cancelled) return;
-      if (result.ok) {
-        store.add(toInstalledExtension(result.manifest, url, origin));
-      } else {
+      if (!result.ok) {
         console.warn(`[extensions] failed to install ${url}:`, result.errors);
+        return;
       }
+      try {
+        assertHostCompatible(result.manifest.engines.agentCanvas);
+      } catch (error) {
+        manager.uninstall(result.manifest.id);
+        console.warn(`[extensions] skipped ${url}:`, error);
+        return;
+      }
+      store.add(toInstalledExtension(result.manifest, url, origin, sourceRef));
     };
 
     (async () => {
@@ -165,7 +207,7 @@ function ExtensionManagerProviderInner({
         await installFrom(url, "dev");
       }
       for (const persisted of loadPersistedInstalls()) {
-        await installFrom(persisted.sourceUrl, "user");
+        await installFrom(persisted.sourceUrl, "user", persisted.sourceRef);
       }
     })();
 

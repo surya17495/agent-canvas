@@ -45,8 +45,10 @@ Key properties:
 | Host runtime | `host/rpc.ts`, `host/host-api.ts`, `host/extension-host.ts`, `host/webview-transport.ts`, `host/create-app-host-deps.ts` |
 | Worker/webview SDK | `sdk/runtime.ts`, `sdk/worker-bootstrap.ts`, `sdk/api-proxy.ts`, `sdk/webview-client.ts` |
 | Security | `webview-security.ts` (canonical CSP / sandbox / origin) |
+| Compatibility | `engines.ts` (`engines.agentCanvas` host-range check) |
 | App mounting | `feature-flag.ts`, `panel-store.ts`, `dev-bundle-source.ts`, `../components/providers/extension-manager-provider.tsx`, `../components/features/extensions/extension-panel.tsx` |
 | Management UI | `installed-store.ts`, `installed-persistence.ts`, `../routes/extensions.tsx`, `../components/features/extensions/{installed-extension-card,add-extension-modal,capability-labels}.tsx` |
+| Source resolution | `sources/{ref,resolve,jsdelivr}.ts` (npm/gh/url → pinned bundle) |
 | Distribution | `marketplace/{source,catalog,client}.ts` (git/marketplace loading) |
 | UI | `../components/features/sidebar/sidebar-contribution-button.tsx`, `../components/features/extensions/extension-webview.tsx` |
 
@@ -133,8 +135,9 @@ for the baseline guarantees.
 With the feature enabled, the **`/extensions`** route lists installed extensions and
 opens an install modal with two sources:
 
-- **From URL / git** — a bundle base URL (or a `github.com` folder URL, resolved to
-  `raw.githubusercontent.com`).
+- **From a source ref** — `npm:<pkg>`, `gh:<owner>/<repo>[/<subpath>]`, or a raw
+  `https://` bundle URL (a `github.com` folder URL is normalized to
+  `raw.githubusercontent.com`). See "Installing & versioning" below.
 - **From marketplace** — a plugin marketplace in a git repo (`github://owner/repo`,
   `owner/repo`, a `github.com` URL, or a direct catalog URL). The catalog is read from
   `.plugin/marketplace.json` (preferred) or `.claude-plugin/marketplace.json`, its UI
@@ -143,12 +146,51 @@ opens an install modal with two sources:
 
 Installing is two-step **capability consent**: the manifest is fetched and validated,
 its requested permissions are shown, and nothing is registered until you confirm
-(all-or-nothing, like VS Code). User installs are persisted to `localStorage` (bundle
-URL + manifest path + granted capabilities only — never code) and re-installed on
-startup by re-fetching and re-validating; `dev` bundles from `DEV_EXTENSION_BUNDLE_URLS`
-are config-driven and shown with a "Dev" badge. State lives in `installed-store.ts` (the
-reactive inventory the UI renders) rather than a backend, since UI extensions are
-entirely client-side.
+(all-or-nothing, like VS Code). User installs are persisted to `localStorage` (the
+resolved bundle URL + source ref + version + granted capabilities only — never code) and
+re-installed on startup by re-fetching and re-validating; `dev` bundles from
+`DEV_EXTENSION_BUNDLE_URLS` are config-driven and shown with a "Dev" badge. State lives in
+`installed-store.ts` (the reactive inventory the UI renders) rather than a backend, since
+UI extensions are entirely client-side.
+
+## Installing & versioning (source refs)
+
+Authors **don't host anything**: they `git tag` or `npm publish`, and the browser loads
+the pinned files from a CDN. A **source ref** names *which* extension and *what* version,
+independent of where the bytes live (`sources/ref.ts`):
+
+| Ref | Example | Notes |
+|---|---|---|
+| `npm:<pkg>[@<range>]` | `npm:@acme/hello@^1` | per-package versioning; best for monorepos |
+| `gh:<owner>/<repo>[/<subpath>][@<range>]` | `gh:acme/exts/packages/hello@^1` | a repo at a tag; `subpath` selects one extension in a monorepo |
+| `https://…` | `https://cdn.example.com/ext` | a raw bundle **directory** (dev / self-hosted) |
+
+A ref with **no subpath resolves to the package/repo root — the zero-config default**;
+the monorepo case just adds a `subpath`. The manifest filename is always
+`extension.json`.
+
+Resolution is a single per-source seam, so a future first-party registry (`registry:`)
+slots in without touching the loader:
+
+```
+source string ─parse→ ExtensionSourceRef ─resolve→ ArtifactDescriptor ─acquire→ BundleSource ─→ loadExtension
+                       (ref.ts)            (resolve.ts)                 (toBundleSource)
+```
+
+- **Resolve** (`sources/resolve.ts`, `sources/jsdelivr.ts`): `npm:`/`gh:` use
+  `data.jsdelivr.com` to turn a semver range (default `*` = latest) into a concrete
+  version, then point at the pinned `cdn.jsdelivr.net/...@<version>` directory — which
+  serves loose files with `Access-Control-Allow-Origin: *` and correct MIME, so dynamic
+  `import()` of the worker and framing of the webview "just work". `url:` passes through.
+- **`ArtifactDescriptor`** is the stable contract: `{ sourceRef, kind, version, baseUrl,
+  format: "dir" }`. `format` is `"dir"` today; `"zip"` is reserved for a registry that
+  ships single archives (it would unpack + mint `blob:` URLs in `toBundleSource`).
+- **Host compatibility** is enforced at the consent boundary: `engines.agentCanvas` is
+  checked against `AGENT_CANVAS_HOST_VERSION` (`engines.ts`) and an incompatible version
+  is rejected before anything registers (and skipped on startup restore).
+- **Determinism:** the *resolved, pinned* base URL is persisted, so reloads re-install the
+  exact same version without re-hitting the registry. `sourceRef` + `version` are kept for
+  display and a future update check.
 
 ## Distributing extensions (plugin marketplace)
 
@@ -193,10 +235,12 @@ no git clone or backend. Private repos are not yet supported from the browser.
 M1–M4, app mounting (flag-gated via `VITE_ENABLE_EXTENSIONS`), CSP/origin hardening
 (sandbox + opaque origin, `connect-src 'none'`, per-load nonce `script-src`,
 `frame-ancestors`, document-level `sandbox`), the `/extensions` management UI with
-install-time capability consent, and git/marketplace distribution (loading UI
-extensions from a plugin marketplace in a git repo) are implemented and tested
-(`__tests__/extensions/`, `__tests__/extensions/marketplace/`,
-`__tests__/components/features/extensions/`, `__tests__/routes/extensions.test.tsx`).
-Remaining work (a hosted marketplace/registry service with submission/approval,
-private-repo auth, deploying a dedicated isolated asset origin, and a formal security
-review) is tracked in the proposal's "Implementation status" section.
+install-time capability consent, git/marketplace distribution (loading UI extensions
+from a plugin marketplace in a git repo), and **versioned `npm:`/`gh:` source refs
+resolved via jsDelivr with `engines.agentCanvas` host-compatibility enforcement** are
+implemented and tested (`__tests__/extensions/`, `__tests__/extensions/sources/`,
+`__tests__/extensions/marketplace/`, `__tests__/components/features/extensions/`,
+`__tests__/routes/extensions.test.tsx`). Remaining work (update detection, a `zip`
+acquirer, a first-party `registry:` resolver + hosted marketplace/registry service with
+submission/approval, private-repo auth, deploying a dedicated isolated asset origin, and a
+formal security review) is tracked in the proposal's "Implementation status" section.

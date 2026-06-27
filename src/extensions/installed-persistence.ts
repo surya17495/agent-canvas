@@ -1,13 +1,20 @@
 import type { Capability } from "./manifest";
 
 /**
- * A user-installed bundle remembered across reloads. Only the bundle URL and the
- * granted capabilities are stored — never executable code — so restoring on startup
- * means re-fetching and re-installing from `sourceUrl`, re-running validation.
+ * A user-installed bundle remembered across reloads. Only metadata and the granted
+ * capabilities are stored — never executable code — so restoring on startup means
+ * re-fetching and re-installing from `sourceUrl`, re-running validation.
+ *
+ * `sourceUrl` is the *resolved, pinned* bundle base URL, so restore is deterministic
+ * and offline-of-the-registry (no version re-resolution on every load). `sourceRef`
+ * (the `npm:`/`gh:`/`url` the user installed) and `version` are kept for display and a
+ * future update check, and are optional for backward compatibility with older records.
  */
 export interface PersistedInstall {
   id: string;
   sourceUrl: string;
+  sourceRef?: string;
+  version?: string;
   capabilities: Capability[];
 }
 
