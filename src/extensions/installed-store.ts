@@ -23,6 +23,17 @@ export interface InstalledExtension {
   origin: InstalledExtensionOrigin;
 }
 
+/** A newer pinned artifact found for an installed extension (within its recorded range). */
+export interface ExtensionUpdate {
+  id: string;
+  /** Version currently installed. */
+  currentVersion: string;
+  /** Resolved version of the newer artifact. */
+  latestVersion: string;
+  /** The source ref the update was resolved from. */
+  sourceRef: string;
+}
+
 /** Manifest metadata shown to the user for consent before an install proceeds. */
 export interface ManifestPreview {
   id: string;

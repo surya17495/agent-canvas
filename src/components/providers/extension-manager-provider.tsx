@@ -5,6 +5,7 @@ import { createHttpBundleSource } from "#/extensions/dev-bundle-source";
 import { useExtensionPanelStore } from "#/extensions/panel-store";
 import {
   useInstalledExtensionsStore,
+  type ExtensionUpdate,
   type InstalledExtension,
   type InstalledExtensionOrigin,
   type ManifestPreview,
@@ -45,6 +46,17 @@ interface ExtensionContextValue {
   installFromUrl: (source: string) => Promise<InstalledExtension>;
   /** Load a plugin marketplace (git repo or URL) and list its UI extensions. */
   fetchMarketplace: (source: string) => Promise<MarketplaceResult>;
+  /**
+   * Re-resolve an installed extension's source ref and report a newer pinned artifact
+   * (within its recorded range), or null if it is current / has no update channel.
+   */
+  checkForUpdate: (id: string) => Promise<ExtensionUpdate | null>;
+  /**
+   * Update an installed extension to the latest within its range. Throws (non-destructively)
+   * when the new version is host-incompatible or requests capabilities beyond those already
+   * granted — the caller should then re-run the consent flow with the source ref.
+   */
+  updateExtension: (id: string) => Promise<InstalledExtension>;
   /** Remove an extension and forget any persisted user install. */
   uninstall: (id: string) => void;
 }
@@ -93,7 +105,8 @@ function toInstalledExtension(
   };
 }
 
-function ExtensionManagerProviderInner({
+// Exported for tests: renders the live provider without the feature-flag gate.
+export function ExtensionManagerProviderInner({
   children,
 }: {
   children: React.ReactNode;
@@ -145,6 +158,78 @@ function ExtensionManagerProviderInner({
         manager.uninstall(result.manifest.id);
         throw error;
       }
+      const extension = toInstalledExtension(
+        result.manifest,
+        descriptor.baseUrl,
+        "user",
+        descriptor.sourceRef,
+      );
+      useInstalledExtensionsStore.getState().add(extension);
+      addPersistedInstall({
+        id: extension.id,
+        sourceUrl: extension.sourceUrl,
+        sourceRef: descriptor.sourceRef,
+        version: descriptor.version ?? extension.version,
+        capabilities: extension.capabilities,
+      });
+      return extension;
+    },
+    [manager],
+  );
+
+  const checkForUpdate = React.useCallback(
+    async (id: string): Promise<ExtensionUpdate | null> => {
+      const installed = useInstalledExtensionsStore
+        .getState()
+        .installed.find((e) => e.id === id);
+      // No update channel for dev bundles or installs without a recorded ref.
+      if (!installed?.sourceRef) return null;
+      const descriptor = await resolveDescriptor(installed.sourceRef);
+      // The pinned base URL encodes the version, so a changed URL means a newer artifact.
+      // `url` sources resolve to the same base, so they naturally report "no update".
+      if (descriptor.baseUrl === installed.sourceUrl) return null;
+      return {
+        id,
+        currentVersion: installed.version,
+        latestVersion: descriptor.version ?? installed.version,
+        sourceRef: installed.sourceRef,
+      };
+    },
+    [],
+  );
+
+  const updateExtension = React.useCallback(
+    async (id: string): Promise<InstalledExtension> => {
+      const installed = useInstalledExtensionsStore
+        .getState()
+        .installed.find((e) => e.id === id);
+      if (!installed?.sourceRef) {
+        throw new Error(`extension "${id}" has no update channel`);
+      }
+      const descriptor = await resolveDescriptor(installed.sourceRef);
+
+      // Validate the candidate *before* tearing down the running version so a rejected
+      // update is non-destructive.
+      const raw = await toBundleSource(descriptor).readManifest();
+      const parsed = parseManifest(raw);
+      if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+      const next = parsed.manifest;
+      assertHostCompatible(next.engines.agentCanvas);
+      const grantsNewCapability = (next.capabilities ?? []).some(
+        (cap) => !installed.capabilities.includes(cap),
+      );
+      if (grantsNewCapability) {
+        throw new Error(
+          `update to ${next.name} requests new permissions; reinstall to grant them`,
+        );
+      }
+
+      // Swap: the contribution registry and host are keyed by id, so installing the new
+      // bundle replaces the old contributions; uninstall first to terminate the old worker.
+      manager.uninstall(id);
+      const result = await manager.install(toBundleSource(descriptor));
+      if (!result.ok) throw new Error(result.errors.join("; "));
+
       const extension = toInstalledExtension(
         result.manifest,
         descriptor.baseUrl,
@@ -234,6 +319,8 @@ function ExtensionManagerProviderInner({
       previewManifest,
       installFromUrl,
       fetchMarketplace: loadMarketplace,
+      checkForUpdate,
+      updateExtension,
       uninstall,
     }),
     [
@@ -242,6 +329,8 @@ function ExtensionManagerProviderInner({
       previewManifest,
       installFromUrl,
       loadMarketplace,
+      checkForUpdate,
+      updateExtension,
       uninstall,
     ],
   );

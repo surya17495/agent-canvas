@@ -595,9 +595,13 @@ Also built and tested since (this branch):
 
 Not yet done (remaining work):
 
-- **Update detection & `zip` acquirer:** compare the installed `version` against
-  `resolveLatest()` per source and surface an "update available" affordance; add a
-  zip/tarball → `blob:` acquirer (also the enabler for single-file registry artifacts).
+- **Update detection:** _done_ - `checkForUpdate(id)` re-resolves the stored ref within
+  its range and reports a newer pinned artifact; `updateExtension(id)` applies it,
+  non-destructively refusing host-incompatible updates or ones requesting new capabilities
+  (the UI affordance for this lands with the management-UI work).
+- **`zip`/tarball -> `blob:` acquirer:** add a single-file artifact format (the enabler for
+  single-file registry artifacts; not needed for the `dir`-format npm/gh sources). Tracked
+  with the registry below.
 - **Hosted marketplace / registry service (option C):** a discoverable catalog with
   submission and approval, ratings/reviews, and cloud-backed storage (the role
   `Plugin-Directory` plays for agent plugins), exposed as a `registry:` resolver behind

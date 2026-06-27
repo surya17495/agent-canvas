@@ -190,7 +190,12 @@ source string â”€parseâ†’ ExtensionSourceRef â”€resolveâ†’ ArtifactDescriptor â”
   is rejected before anything registers (and skipped on startup restore).
 - **Determinism:** the *resolved, pinned* base URL is persisted, so reloads re-install the
   exact same version without re-hitting the registry. `sourceRef` + `version` are kept for
-  display and a future update check.
+  display and updates.
+- **Updates:** `checkForUpdate(id)` re-resolves the stored ref within its recorded range
+  and reports a newer pinned artifact (a `url` source has no update channel);
+  `updateExtension(id)` applies it, but **non-destructively refuses** - leaving the running
+  version intact - when the new version is host-incompatible or requests capabilities
+  beyond those already granted (the caller re-runs the consent flow for the latter).
 
 ## Distributing extensions (plugin marketplace)
 
@@ -210,9 +215,9 @@ they are listed under a **dedicated `uiExtensions` array â€” never in `plugins`*
 ```
 
 Each entry's `source` points at a bundle directory containing an `extension.json`
-manifest. It may be a **versioned source ref** Ñ `npm:<pkg>[@<range>]` or
-`gh:<owner>/<repo>[/<subpath>][@<range>]` (string, or the `{ "source": "npm"|"gh", É }`
-object form) Ñ so marketplace installs are pinned and host-checked exactly like the
+manifest. It may be a **versioned source ref** - `npm:<pkg>[@<range>]` or
+`gh:<owner>/<repo>[/<subpath>][@<range>]` (string, or the `{ "source": "npm"|"gh", ... }`
+object form) - so marketplace installs are pinned and host-checked exactly like the
 install box; or a path relative to the catalog repo / absolute `https://` URL (legacy,
 unversioned). This separation is
 deliberate: Claude Code and the OpenHands plugin loader only enumerate `plugins`, so a UI
