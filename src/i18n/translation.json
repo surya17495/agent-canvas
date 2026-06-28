@@ -33556,5 +33556,22 @@
     "uk": "У цьому маркетплейсі не знайдено розширень інтерфейсу.",
     "zh-CN": "在此市场中未找到 UI 扩展。",
     "zh-TW": "在此市集中找不到 UI 擴充功能。"
+  },
+  "SETTINGS$EXTENSION_PAGE_UNAVAILABLE": {
+    "en": "This settings page is unavailable.",
+    "ja": "この設定ページは利用できません。",
+    "zh-CN": "此设置页面不可用。",
+    "zh-TW": "此設定頁面無法使用。",
+    "ko-KR": "이 설정 페이지를 사용할 수 없습니다.",
+    "no": "Denne innstillingssiden er utilgjengelig.",
+    "it": "Questa pagina delle impostazioni non è disponibile.",
+    "pt": "Esta página de configurações está indisponível.",
+    "es": "Esta página de configuración no está disponible.",
+    "ar": "صفحة الإعدادات هذه غير متوفرة.",
+    "fr": "Cette page de paramètres est indisponible.",
+    "tr": "Bu ayarlar sayfası kullanılamıyor.",
+    "de": "Diese Einstellungsseite ist nicht verfügbar.",
+    "uk": "Ця сторінка налаштувань недоступна.",
+    "ca": "Aquesta pàgina de configuració no està disponible."
   }
 }

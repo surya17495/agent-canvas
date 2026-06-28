@@ -77,10 +77,20 @@ webview assets. See `examples/extensions/hello-sidebar/` for a minimal working s
       "conversationTabs/context": [
         { "command": "hello.say", "when": "backend == cloud" }
       ]
-    }
+    },
+    "settingsPages": [
+      { "id": "general", "title": "Hello", "page": "settings.html", "when": "backend == cloud" }
+    ]
   }
 }
 ```
+
+A **`contributes.settingsPages`** entry (`{ id, title, page, when? }`) merges one nav
+item per extension into the Settings sidebar (`useSettingsNavItems()`) and mounts its
+sandboxed webview body at the catch-all route `/settings/x/:extensionId`
+(`routes/extension-settings.tsx`). The nav item is `when`-gated exactly like a menu
+item — showing/hiding it runs **no** extension code. The page persists through the
+extension's existing **`storage`** capability, so it needs **no new capability**.
 
 A menu item's optional **`when`** clause gates its visibility against a small,
 whitelisted, read-only **UI-context** of host facts (`when.ts` + `ui-context.tsx`).
@@ -317,7 +327,11 @@ are the conversation-tabs context menu and the chat input "add"/overflow menu
 (`chatInput/actions`)), and the **`when` / UI-context
 visibility primitive** (a tiny `&&`-conjunction evaluator in `when.ts` over a
 whitelisted, read-only host UI-context in `ui-context.tsx`, applied by `useMenuItems`
-so hidden items render no extension code and need no capability) are implemented and tested
+so hidden items render no extension code and need no capability), and the
+**`contributes.settingsPages` declarative contribution point** (one `when`-gated nav item
+per extension merged into `useSettingsNavItems()`, body mounted as a sandboxed
+`ExtensionWebview` at the catch-all `/settings/x/:extensionId` route — persists via the
+extension's existing `storage` capability, so no new capability) are implemented and tested
 (`__tests__/extensions/`, `__tests__/extensions/sources/`,
 `__tests__/extensions/marketplace/`, `__tests__/components/features/extensions/`,
 `__tests__/routes/extensions.test.tsx`). Remaining work (a `zip`

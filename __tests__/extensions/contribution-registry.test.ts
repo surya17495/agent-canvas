@@ -49,6 +49,14 @@ function makeContributions(
         run: vi.fn(),
       },
     ],
+    settingsPages: [
+      {
+        extensionId,
+        id: `${extensionId}.settings`,
+        title: `${extensionId} Settings`,
+        pageUrl: `blob:${extensionId}-settings`,
+      },
+    ],
     ...overrides,
   };
 }
@@ -63,6 +71,7 @@ describe("ContributionRegistry", () => {
     expect(contributionRegistry.getCommands()).toEqual([]);
     expect(contributionRegistry.getViews()).toEqual([]);
     expect(contributionRegistry.getMenuItems()).toEqual([]);
+    expect(contributionRegistry.getSettingsPages()).toEqual([]);
     expect(
       contributionRegistry.getMenuItemsForSlot("conversationTabs/context"),
     ).toEqual([]);
@@ -77,6 +86,24 @@ describe("ContributionRegistry", () => {
     );
     expect(contributionRegistry.getCommands()[0].command).toBe("acme.a.run");
     expect(contributionRegistry.getViews()[0].id).toBe("acme.a.view");
+    expect(contributionRegistry.getSettingsPages()[0].id).toBe(
+      "acme.a.settings",
+    );
+  });
+
+  it("aggregates and unregisters settings pages by owning extension", () => {
+    contributionRegistry.register("acme.a", makeContributions("acme.a"));
+    contributionRegistry.register("acme.b", makeContributions("acme.b"));
+
+    expect(
+      contributionRegistry.getSettingsPages().map((p) => p.extensionId),
+    ).toEqual(["acme.a", "acme.b"]);
+
+    contributionRegistry.unregister("acme.a");
+
+    expect(
+      contributionRegistry.getSettingsPages().map((p) => p.extensionId),
+    ).toEqual(["acme.b"]);
   });
 
   it("aggregates contributions from multiple extensions in insertion order", () => {

@@ -4,6 +4,7 @@ import type {
   CommandItem,
   ExtensionContributions,
   MenuItem,
+  SettingsPageItem,
   ViewItem,
 } from "./types";
 
@@ -39,6 +40,8 @@ interface ContributionRegistryState {
    * items by a stable reference (avoids re-deriving / re-render loops).
    */
   menuItemsBySlot: Record<string, MenuItem[]>;
+  /** Derived flat list of all contributed settings pages. */
+  settingsPages: SettingsPageItem[];
 
   /** Register (or replace) all contributions for an extension. */
   register: (
@@ -75,6 +78,7 @@ function derive(byExtension: Record<string, ExtensionContributions>) {
     views: flatten(byExtension, (c) => c.views),
     menuItems,
     menuItemsBySlot: groupBySlot(menuItems),
+    settingsPages: flatten(byExtension, (c) => c.settingsPages),
   };
 }
 
@@ -86,6 +90,7 @@ export const useContributionRegistry = create<ContributionRegistryState>(
     views: [],
     menuItems: [],
     menuItemsBySlot: {},
+    settingsPages: [],
 
     register: (extensionId, contributions) =>
       set((state) =>
@@ -122,6 +127,12 @@ export function selectViews(state: ContributionRegistryState): ViewItem[] {
   return state.views;
 }
 
+export function selectSettingsPages(
+  state: ContributionRegistryState,
+): SettingsPageItem[] {
+  return state.settingsPages;
+}
+
 export function selectMenuItems(state: ContributionRegistryState): MenuItem[] {
   return state.menuItems;
 }
@@ -149,6 +160,7 @@ export const contributionRegistry = {
     useContributionRegistry.getState().activityBarItems,
   getCommands: () => useContributionRegistry.getState().commands,
   getViews: () => useContributionRegistry.getState().views,
+  getSettingsPages: () => useContributionRegistry.getState().settingsPages,
   getMenuItems: () => useContributionRegistry.getState().menuItems,
   /** All menu items targeting a given slot, in extension insertion order. */
   getMenuItemsForSlot: (slot: string): MenuItem[] =>

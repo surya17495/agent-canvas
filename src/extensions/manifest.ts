@@ -49,6 +49,20 @@ export interface MenuItemManifest {
   when?: string;
 }
 
+export interface SettingsPageManifest {
+  /** Page id, namespaces the page within its extension (e.g. `"general"`). */
+  id: string;
+  /** Nav-item label shown in the Settings sidebar. */
+  title: string;
+  /** Relative path within the bundle to the page's webview HTML document. */
+  page?: string;
+  /**
+   * Optional visibility clause evaluated against the host UI-context (see `when.ts`).
+   * Hiding the page's nav item runs no extension code — it reads host facts only.
+   */
+  when?: string;
+}
+
 export interface ContributesManifest {
   viewsContainers?: { activitybar?: ActivityBarContainerManifest[] };
   /** Map of container id → views contributed into it. */
@@ -56,6 +70,8 @@ export interface ContributesManifest {
   commands?: CommandManifest[];
   /** Map of menu-slot id (e.g. `"conversationTabs/context"`) → items. */
   menus?: Record<string, MenuItemManifest[]>;
+  /** Settings pages, each merged into the Settings nav and mounted as a webview. */
+  settingsPages?: SettingsPageManifest[];
 }
 
 export interface ExtensionManifest {
@@ -217,6 +233,30 @@ function validateContributes(
         });
       }
       contributes.menus = menus;
+    }
+  }
+
+  if (raw.settingsPages !== undefined) {
+    if (!Array.isArray(raw.settingsPages)) {
+      v.fail("contributes.settingsPages", "expected an array");
+    } else {
+      contributes.settingsPages = raw.settingsPages.map((entry, i) => {
+        const path = `contributes.settingsPages[${i}]`;
+        const obj = isObject(entry) ? entry : {};
+        if (!isObject(entry)) v.fail(path, "expected an object");
+        return {
+          id: v.requireString(obj.id, `${path}.id`) ?? "",
+          title: v.requireString(obj.title, `${path}.title`) ?? "",
+          page:
+            obj.page === undefined
+              ? undefined
+              : v.requireString(obj.page, `${path}.page`),
+          when:
+            obj.when === undefined
+              ? undefined
+              : v.requireString(obj.when, `${path}.when`),
+        };
+      });
     }
   }
 

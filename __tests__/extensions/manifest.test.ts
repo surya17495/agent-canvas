@@ -212,4 +212,74 @@ describe("parseManifest", () => {
         /contributes\.menus\.conversationTabs\/context\[0\]\.command/,
       );
   });
+
+  it("accepts contributes.settingsPages with an optional when clause", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: {
+        ...validManifest.contributes,
+        settingsPages: [
+          {
+            id: "general",
+            title: "Compliance",
+            page: "settings.html",
+            when: "backend == cloud",
+          },
+          { id: "advanced", title: "Advanced" },
+        ],
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const pages = result.manifest.contributes?.settingsPages;
+      expect(pages).toHaveLength(2);
+      expect(pages?.[0]).toEqual({
+        id: "general",
+        title: "Compliance",
+        page: "settings.html",
+        when: "backend == cloud",
+      });
+      expect(pages?.[1].page).toBeUndefined();
+      expect(pages?.[1].when).toBeUndefined();
+    }
+  });
+
+  it("rejects a non-array contributes.settingsPages", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: { settingsPages: {} },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.join()).toMatch(
+        /contributes\.settingsPages: expected an array/,
+      );
+  });
+
+  it("rejects a settings page missing its id/title with precise paths", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: { settingsPages: [{ page: "settings.html" }] },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const joined = result.errors.join();
+      expect(joined).toMatch(/contributes\.settingsPages\[0\]\.id/);
+      expect(joined).toMatch(/contributes\.settingsPages\[0\]\.title/);
+    }
+  });
+
+  it("rejects a non-string when clause on a settings page", () => {
+    const result = parseManifest({
+      ...validManifest,
+      contributes: {
+        settingsPages: [{ id: "general", title: "Compliance", when: 3 }],
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.join()).toMatch(
+        /contributes\.settingsPages\[0\]\.when/,
+      );
+  });
 });

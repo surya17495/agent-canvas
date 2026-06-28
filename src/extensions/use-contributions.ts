@@ -3,10 +3,17 @@ import {
   selectActivityBarItems,
   selectCommands,
   selectMenuItemsForSlot,
+  selectSettingsPages,
   selectViews,
   useContributionRegistry,
 } from "./contribution-registry";
-import type { ActivityBarItem, CommandItem, MenuItem, ViewItem } from "./types";
+import type {
+  ActivityBarItem,
+  CommandItem,
+  MenuItem,
+  SettingsPageItem,
+  ViewItem,
+} from "./types";
 import { useUiContext } from "./ui-context";
 import { evaluateWhen } from "./when";
 
@@ -43,5 +50,20 @@ export function useMenuItems(slot: string): MenuItem[] {
   return useMemo(
     () => items.filter((item) => evaluateWhen(item.when, context)),
     [items, context],
+  );
+}
+
+/**
+ * Contributed settings pages, filtered by each page's optional `when` clause against
+ * the host UI-context (see `ui-context.tsx`). Filtering reads host facts only — it
+ * runs no extension code, so a hidden page is simply never surfaced (neither its nav
+ * item nor its route body). Memoised on the (stable) registry slice + UI-context.
+ */
+export function useSettingsPages(): SettingsPageItem[] {
+  const pages = useContributionRegistry(selectSettingsPages);
+  const context = useUiContext();
+  return useMemo(
+    () => pages.filter((page) => evaluateWhen(page.when, context)),
+    [pages, context],
   );
 }

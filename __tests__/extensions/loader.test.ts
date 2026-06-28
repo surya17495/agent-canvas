@@ -30,7 +30,16 @@ const manifest = {
         { command: "compliance.scan", group: "extensions" },
       ],
     },
+    settingsPages: [
+      {
+        id: "general",
+        title: "Compliance",
+        page: "settings.html",
+        when: "backend == cloud",
+      },
+    ],
   },
+  capabilities: ["storage"],
 };
 
 function makeSource(overrides: Partial<BundleSource> = {}): BundleSource {
@@ -117,6 +126,21 @@ describe("loadExtension", () => {
       command: "compliance.scan",
       title: "Scan",
       group: "extensions",
+    });
+  });
+
+  it("resolves settings pages, carrying page URL, when, and capabilities", async () => {
+    await loadExtension(makeSource(), makeHost());
+
+    const pages = contributionRegistry.getSettingsPages();
+    expect(pages).toHaveLength(1);
+    expect(pages[0]).toMatchObject({
+      extensionId: "acme.compliance",
+      id: "general",
+      title: "Compliance",
+      pageUrl: "blob:settings.html",
+      when: "backend == cloud",
+      capabilities: ["storage"],
     });
   });
 

@@ -101,6 +101,31 @@ export interface MenuItem {
 }
 
 /**
+ * A resolved settings page contributed by an extension. The host merges it into the
+ * Settings navigation (see `use-settings-nav-items.ts`) and mounts its webview body at
+ * the catch-all `/settings/x/:extensionId` route (`routes/extension-settings.tsx`).
+ * Showing the nav item executes no extension code; the page persists via the
+ * extension's existing `storage` capability, so no new capability is required.
+ */
+export interface SettingsPageItem {
+  extensionId: string;
+  /** Page id from `contributes.settingsPages[].id`. */
+  id: string;
+  /** Nav-item label. */
+  title: string;
+  /** Resolved URL of the page's webview HTML document (from the bundle). */
+  pageUrl?: string;
+  /**
+   * Optional visibility clause evaluated against the host UI-context (see `when.ts`).
+   * The host filters pages by this before rendering the nav item / route body; hiding
+   * one runs no extension code. Absent means always visible.
+   */
+  when?: string;
+  /** Capabilities granted to the owning extension (gates the webview's host API). */
+  capabilities?: Capability[];
+}
+
+/**
  * The full set of resolved contributions for a single extension, handed to the
  * `ContributionRegistry` as one unit so registration/unregistration is atomic.
  */
@@ -109,4 +134,5 @@ export interface ExtensionContributions {
   commands?: CommandItem[];
   views?: ViewItem[];
   menus?: MenuItem[];
+  settingsPages?: SettingsPageItem[];
 }

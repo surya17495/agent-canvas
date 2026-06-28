@@ -1,8 +1,10 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import { WebClientConfig } from "#/api/option-service/option.types";
+import { contributionRegistry } from "#/extensions/contribution-registry";
+import type { SettingsPageItem } from "#/extensions/types";
 
 const useConfigMock = vi.fn();
 const useSettingsMock = vi.fn();
@@ -184,5 +186,82 @@ describe("useSettingsNavItems", () => {
         expect(rendered.disabled).toBeFalsy();
       }
     }
+  });
+
+  describe("extension-contributed settings pages", () => {
+    afterEach(() => {
+      contributionRegistry.clear();
+    });
+
+    const registerPage = (overrides: Partial<SettingsPageItem> = {}) =>
+      contributionRegistry.register("acme.compliance", {
+        settingsPages: [
+          {
+            extensionId: "acme.compliance",
+            id: "general",
+            title: "Compliance",
+            pageUrl: "blob:settings.html",
+            ...overrides,
+          },
+        ],
+      });
+
+    it("merges a contributed page as a nav item after the built-ins", () => {
+      useConfigMock.mockReturnValue({ data: createConfig() });
+      registerPage();
+
+      const { result } = renderHook(() => useSettingsNavItems());
+      const item = result.current.find(
+        (r) =>
+          r.type === "item" && r.item.to === "/settings/x/acme.compliance",
+      );
+      expect(item).toBeDefined();
+      if (item?.type === "item") {
+        expect(item.item.text).toBe("Compliance");
+      }
+      // Contributed items come last (after the OSS nav items).
+      expect(result.current.at(-1)).toBe(item);
+    });
+
+    it("hides a contributed page whose when clause is unsatisfied", () => {
+      useConfigMock.mockReturnValue({ data: createConfig() });
+      // The default UI-context is empty, so `backend == cloud` is false.
+      registerPage({ when: "backend == cloud" });
+
+      const { result } = renderHook(() => useSettingsNavItems());
+      expect(
+        result.current.some(
+          (r) =>
+            r.type === "item" && r.item.to === "/settings/x/acme.compliance",
+        ),
+      ).toBe(false);
+    });
+
+    it("surfaces one nav item per extension even with multiple pages", () => {
+      useConfigMock.mockReturnValue({ data: createConfig() });
+      contributionRegistry.register("acme.compliance", {
+        settingsPages: [
+          {
+            extensionId: "acme.compliance",
+            id: "general",
+            title: "Compliance",
+            pageUrl: "blob:a.html",
+          },
+          {
+            extensionId: "acme.compliance",
+            id: "advanced",
+            title: "Advanced",
+            pageUrl: "blob:b.html",
+          },
+        ],
+      });
+
+      const { result } = renderHook(() => useSettingsNavItems());
+      const contributed = result.current.filter(
+        (r) =>
+          r.type === "item" && r.item.to === "/settings/x/acme.compliance",
+      );
+      expect(contributed).toHaveLength(1);
+    });
   });
 });

@@ -153,9 +153,9 @@ Grounded surface map:
    primitive".
 2. **Chat "add" menu slot** — ✅ implemented (XS; pure reuse of the menus mechanism). See
    § "2. Chat "add" menu".
-3. **Settings page contribution** — webview body + merge into `use-settings-nav-items` + one
-   catch-all `/settings/x/:extensionId` route; **no new capability** if the page persists via
-   the extension's existing `storage`.
+3. **Settings page contribution** — ✅ implemented (webview body + merge into
+   `use-settings-nav-items` + one catch-all `/settings/x/:extensionId` route; **no new
+   capability** — persists via the extension's existing `storage`). See § "5. Settings pages".
 4. **Right-panel tab/panel** — webview + a tab-slot.
 5. **Conversation / card context-menu slots** — add on demand (card menu has destructive
    items → keep contributed items in their own group below built-ins).
@@ -247,7 +247,7 @@ Shipped as the first declarative point built on this recipe (see the "today" tab
 - **Trust:** declarative shell; live values would use the existing `commands`/API surface.
   Larger because it adds a brand-new host surface, not just a contribution slot.
 
-### 5. Settings pages (gear → `/settings`)
+### 5. Settings pages (gear → `/settings`) — ✅ implemented
 - **Surface:** the settings nav is **already a data-driven, context-gated list** —
   `OSS_NAV_ITEMS` → `useSettingsNavItems()` returns `{ type: "item" | "header" | "divider" }`
   entries, filtered by feature flags and disabled by agent kind, rendered by
@@ -258,12 +258,40 @@ Shipped as the first declarative point built on this recipe (see the "today" tab
   is **merged into `useSettingsNavItems()`** and whose body is a **sandboxed webview** (reuse
   `contributes.views` / `ExtensionWebview`).
 - **The one piece of new plumbing:** settings pages are static file-routes, so contributed
-  pages can't add routes at runtime — add a single **catch-all child route**
-  (`/settings/x/:extensionId`) that mounts the host `ExtensionWebview` for the selected page
-  (mirrors the main-area `ExtensionPanel`).
-- **Trust:** **no new capability** if the page is *extension-owned* and persists through the
+  pages can't add routes at runtime — added a single **catch-all child route**
+  (`/settings/x/:extensionId`, `routes/extension-settings.tsx`) that mounts the host
+  `ExtensionWebview` for the selected extension's page (mirrors the main-area `ExtensionPanel`).
+- **Trust:** **no new capability** — the page is *extension-owned* and persists through the
   existing `storage` capability. A host-schema-driven settings form that writes *host* settings
   is a separate, sensitive, later capability — defer it.
+
+**Implementation notes (as shipped):**
+- Schema/types: `SettingsPageManifest` (`manifest.ts`) + validator; resolved `SettingsPageItem`
+  (`types.ts`); `ExtensionContributions.settingsPages`.
+- Registry/loader/hook: `selectSettingsPages` + `getSettingsPages()`
+  (`contribution-registry.ts`); `buildSettingsPages()` resolves `page` → a sandboxed webview URL
+  and carries the owning extension's capabilities (`loader.ts`); `useSettingsPages()`
+  `when`-filters against the UI-context (`use-contributions.ts`).
+- Host rendering: `useSettingsNavItems()` appends one nav item **per extension** (after the
+  built-ins) linking to `/settings/x/:extensionId`; `routes/extension-settings.tsx` resolves the
+  (already `when`-filtered) page and mounts `ExtensionWebview`, with a neutral fallback
+  (`SETTINGS$EXTENSION_PAGE_UNAVAILABLE`) for unknown/disabled/hidden pages. The path lives in
+  one place (`utils/extension-settings-path.ts`).
+- **Declarative-first:** showing/hiding the nav item or mounting the page runs **no extension
+  code** — `when` reads host facts only and the body is an isolated iframe.
+
+Manifest an author writes:
+
+```jsonc
+{
+  "capabilities": ["storage"],
+  "contributes": {
+    "settingsPages": [
+      { "id": "general", "title": "My Extension", "page": "settings.html", "when": "backend == cloud" }
+    ]
+  }
+}
+```
 
 ### 6. Custom event / message renderers
 - **Surface:** the conversation event renderers in `src/components/conversation-events/`.
