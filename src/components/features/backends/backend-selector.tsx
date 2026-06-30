@@ -22,10 +22,14 @@ import {
   ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS,
   triggerEnvironmentSwitch,
 } from "#/components/features/backends/environment-switch-store";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { useConversationStore } from "#/stores/conversation-store";
 import { AddBackendModal } from "./add-backend-modal";
 import { BackendStatusDot } from "./backend-status-dot";
 import { ManageBackendsModal } from "./manage-backends-modal";
 import { cn } from "#/utils/utils";
+import { formControlTransitionClassName } from "#/utils/form-control-classes";
 import {
   dropdownFooterActionClassName,
   dropdownMenuListClassName,
@@ -141,6 +145,7 @@ export function BackendSelector({
   onSelectOption,
   onOpenAddBackend,
   onOpenManageBackends,
+  sidebarCollapsed = false,
 }: BackendSelectorProps = {}) {
   const { t } = useTranslation("openhands");
   const { backends, active, setActive } = useActiveBackendContext();
@@ -149,6 +154,8 @@ export function BackendSelector({
   // Probe each registered backend every 10s.
   const healthByBackendId = useBackendsHealth(backends);
   const navigate = useNavigate();
+  const settingsMatch = useMatch("/settings");
+  const settingsSubrouteMatch = useMatch("/settings/*");
   const conversationMatch = useMatch("/conversations/:conversationId");
   const automationDetailMatch = useMatch("/automations/:automationId");
   const [addBackendModalOpen, setAddBackendModalOpen] = React.useState(false);
@@ -181,6 +188,18 @@ export function BackendSelector({
   const activeOption = noBackendSelected
     ? undefined
     : options.find((o) => o.value === activeValue);
+  const isSettingsActive = Boolean(settingsMatch || settingsSubrouteMatch);
+  const settingsLabel = t(I18nKey.SIDEBAR$SETTINGS);
+  const isRightPanelShown = useConversationStore(
+    (state) => state.isRightPanelShown,
+  );
+  // When the sidebar rail is expanded, `placement="left"` hugs the main
+  // canvas and reads awkwardly; prefer above the control. When the rail is
+  // collapsed, keep left except on active conversation + open right drawer.
+  const settingsTooltipPlacement =
+    !sidebarCollapsed || (conversationMatch && isRightPanelShown)
+      ? "top"
+      : "left";
 
   const someCloudLoading = Object.values(cloudOrgs).some((c) => c.isLoading);
 
@@ -377,6 +396,33 @@ export function BackendSelector({
             className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-[var(--oh-surface-raised)] focus-within:bg-[var(--oh-surface-raised)] focus-within:border-transparent focus-within:ring-0"
           />
         </div>
+        {!hideTrigger ? (
+          <StyledTooltip
+            content={settingsLabel}
+            placement={settingsTooltipPlacement}
+            offset={10}
+          >
+            <NavigationLink
+              to="/settings"
+              data-testid="backend-selector-settings-link"
+              data-active={isSettingsActive}
+              aria-label={settingsLabel}
+              className={
+                isSettingsActive
+                  ? cn(
+                      "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-white font-normal cursor-pointer",
+                      formControlTransitionClassName,
+                    )
+                  : cn(
+                      "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                      formControlTransitionClassName,
+                    )
+              }
+            >
+              <Settings width={16} height={16} />
+            </NavigationLink>
+          </StyledTooltip>
+        ) : null}
       </div>
       {addBackendModalOpen ? (
         <AddBackendModal onClose={() => setAddBackendModalOpen(false)} />

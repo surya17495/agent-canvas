@@ -1,4 +1,4 @@
-import { SettingsNavRenderedItem } from "#/constants/settings-nav";
+import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { SettingsDesktopSidebar } from "./settings-desktop-sidebar";
 import { SettingsMobileDrawer } from "./settings-mobile-drawer";
 

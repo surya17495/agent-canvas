@@ -3,18 +3,14 @@ import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsLayout } from "#/components/features/settings/settings-layout";
-import {
-  AGENTS_HUB_NAV_ITEMS,
-  type SettingsNavRenderedItem,
-} from "#/constants/settings-nav";
+import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
+import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 
-const navigationItems: SettingsNavRenderedItem[] = AGENTS_HUB_NAV_ITEMS.map(
-  (item) => ({
-    type: "item",
-    item,
-  }),
-);
+const navigationItems: SettingsNavRenderedItem[] = OSS_NAV_ITEMS.map((item) => ({
+  type: "item",
+  item,
+}));
 
 describe("SettingsLayout", () => {
   it("renders the desktop sidebar alongside the provided child content", () => {

@@ -1,24 +1,20 @@
 import { useMemo, useState } from "react";
 import { Outlet, redirect, useLocation, useMatches } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Route } from "./+types/agents-hub";
+import { Route } from "./+types/settings";
 import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
 import { SettingsLayout } from "#/components/features/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { Typography } from "#/ui/typography";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
+import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import {
-  useBreakpoint,
-  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
-} from "#/hooks/use-breakpoint";
-import { useAgentsHubNavItems } from "#/hooks/use-agents-hub-nav-items";
-import {
-  getFirstAvailableAgentsPath,
+  getFirstAvailablePath,
   isSettingsPageHidden,
 } from "#/utils/settings-utils";
 import { SettingsSectionHeaderProvider } from "#/contexts/settings-section-header-context";
-import { I18nKey } from "#/i18n/declaration";
 
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
@@ -33,8 +29,8 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const featureFlags = config?.feature_flags;
 
   if (isSettingsPageHidden(pathname, featureFlags)) {
-    const fallbackPath = getFirstAvailableAgentsPath();
-    if (fallbackPath !== pathname) {
+    const fallbackPath = getFirstAvailablePath(featureFlags);
+    if (fallbackPath && fallbackPath !== pathname) {
       return redirect(fallbackPath);
     }
   }
@@ -42,14 +38,12 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   return null;
 };
 
-function AgentsHubScreen() {
+function SettingsScreen() {
   const { t } = useTranslation("openhands");
   const location = useLocation();
   const matches = useMatches();
-  const navItems = useAgentsHubNavItems();
-  // Match the CSS `md` boundary (and agents-index) so the mobile-hub title is
-  // hidden on exactly the widths the mobile hub actually renders.
-  const isMobile = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
+  const navItems = useSettingsNavItems();
+  const isMobile = useBreakpoint(768);
   const [hideSectionHeader, setHideSectionHeader] = useState(false);
 
   const { currentSectionTitle, currentSectionSubtitle } = useMemo(() => {
@@ -62,31 +56,38 @@ function AgentsHubScreen() {
         currentSectionSubtitle: currentRenderedItem.item.subtitle,
       };
     }
+    const firstItem = navItems.find((item) => item.type === "item");
+    if (firstItem?.type === "item") {
+      return {
+        currentSectionTitle: firstItem.item.text,
+        currentSectionSubtitle: firstItem.item.subtitle,
+      };
+    }
     return {
-      currentSectionTitle: "NAV$AGENTS",
+      currentSectionTitle: "SETTINGS$TITLE",
       currentSectionSubtitle: null as string | null,
     };
   }, [navItems, location.pathname]);
 
   const routeHandle = matches.find((m) => m.pathname === location.pathname)
     ?.handle as { hideTitle?: boolean } | undefined;
-  const isMobileHub = isMobile && location.pathname === "/agents";
+  const isMobileHub = isMobile && location.pathname === "/settings";
   const shouldHideTitle =
     routeHandle?.hideTitle === true || isMobileHub || hideSectionHeader;
 
   return (
-    <main data-testid="agents-hub-screen" className="min-h-0">
+    <main data-testid="settings-screen" className="min-h-0">
       <SettingsSectionHeaderProvider
         setHideSectionHeader={setHideSectionHeader}
       >
-        <SettingsLayout navigationItems={navItems} title={I18nKey.NAV$AGENTS}>
+        <SettingsLayout navigationItems={navItems}>
           <div className="flex flex-col gap-6 pb-8">
             {!shouldHideTitle && (
               <header className="space-y-1">
                 <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
                 {currentSectionSubtitle ? (
                   <p
-                    data-testid="agents-hub-page-subtitle"
+                    data-testid="settings-page-subtitle"
                     className="text-sm leading-5 text-tertiary-light"
                   >
                     {t(currentSectionSubtitle)}
@@ -102,4 +103,4 @@ function AgentsHubScreen() {
   );
 }
 
-export default AgentsHubScreen;
+export default SettingsScreen;

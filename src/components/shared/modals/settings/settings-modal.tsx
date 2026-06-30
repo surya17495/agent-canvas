@@ -34,7 +34,7 @@ export function SettingsModal({ onClose, settings }: SettingsModalProps) {
           testId="advanced-settings-link"
           text={`${t(I18nKey.SETTINGS$DESCRIPTION)}. ${t(I18nKey.SETTINGS$FOR_OTHER_OPTIONS)} ${t(I18nKey.COMMON$SEE)}`}
           linkText={t(I18nKey.COMMON$ADVANCED_SETTINGS)}
-          href="/agents/llm"
+          href="/settings"
           suffix="."
           size="settings"
           linkColor="white"

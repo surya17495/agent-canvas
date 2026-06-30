@@ -4,7 +4,7 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-import { SettingsNavRenderedItem } from "#/constants/settings-nav";
+import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { SettingsNavHeader } from "./settings-nav-header";
 import { SettingsNavDivider } from "./settings-nav-divider";
 import { SettingsNavLink } from "./settings-nav-link";

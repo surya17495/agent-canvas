@@ -111,7 +111,7 @@ export function Sidebar() {
   }, [isMobileNavOpen, closeMobileNav]);
 
   React.useEffect(() => {
-    if (currentPath === "/application" || currentPath.startsWith("/agents")) {
+    if (currentPath === "/settings") {
       setSettingsModalIsOpen(false);
     } else if (
       !isFetchingSettings &&
@@ -179,10 +179,7 @@ export function Sidebar() {
   const showCollapsedExpandButton =
     collapsed && collapsedRailHovered && !suppressCollapsedExpandRef.current;
 
-  // The rail "Agents" item covers the hub plus the legacy catalog paths that
-  // still redirect into it.
-  const isAgentsActive =
-    currentPath.startsWith("/agents") ||
+  const isExtensionsActive =
     currentPath === "/customize" ||
     currentPath.startsWith("/skills") ||
     currentPath === "/plugins" ||
@@ -194,7 +191,8 @@ export function Sidebar() {
     onCollapse: handleCollapse,
     onExpand: () => setCollapsed(false),
     showCollapsedExpandButton,
-    isAgentsActive,
+    isExtensionsActive,
+    currentPath,
     activeBackendHealth,
     collapsedBackendPopoverOpen,
     setCollapsedBackendPopoverOpen,

@@ -48,7 +48,7 @@ const acpContext = (
   isActiveAcpConversation: false,
   isHomeAcp: false,
   isAcpContext: false,
-  destinationPath: "/agents/llm",
+  destinationPath: "/settings",
   destinationLabel: "LLM Profiles",
   ...overrides,
 });
@@ -83,7 +83,7 @@ describe("useChatInputModelState", () => {
     expect(result.current.showAcpPicker).toBe(false);
     // switchConversationId is ACP-only — null for native conversations.
     expect(result.current.switchConversationId).toBeNull();
-    expect(result.current.destinationPath).toBe("/agents/llm");
+    expect(result.current.destinationPath).toBe("/settings");
   });
 
   it("non-ACP: falls back to settings.llm_model when the conversation has none", () => {

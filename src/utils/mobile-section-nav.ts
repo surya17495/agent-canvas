@@ -1,6 +1,8 @@
 import { I18nKey } from "#/i18n/declaration";
 
-const AGENTS_HUB = "/agents";
+const SETTINGS_PREFIX = "/settings";
+const CUSTOMIZE_HUB = "/customize";
+const EXTENSIONS_DETAIL_PATHS = ["/skills", "/mcp", "/plugins"] as const;
 
 export type MobileTopBarMode = "menu" | "back";
 
@@ -10,25 +12,46 @@ export interface MobileTopBarState {
   backLabelKey?: I18nKey;
 }
 
-/**
- * Drives the mobile top bar: the hamburger menu on hub landings, a contextual
- * "back to hub" arrow on a hub's sub-pages. After the Settings/Customize hubs
- * were folded into the Agents hub (#1456), `/agents` is the one multi-section
- * area whose sub-pages need that back affordance on mobile (the desktop section
- * sidebar is `hidden md:flex`).
- */
 export function getMobileTopBarState(pathname: string): MobileTopBarState {
-  if (pathname === AGENTS_HUB) {
+  if (pathname === SETTINGS_PREFIX) {
     return { mode: "menu" };
   }
 
-  if (pathname.startsWith(`${AGENTS_HUB}/`)) {
+  if (
+    pathname.startsWith(`${SETTINGS_PREFIX}/`) &&
+    pathname.length > SETTINGS_PREFIX.length
+  ) {
     return {
       mode: "back",
-      backTo: AGENTS_HUB,
-      backLabelKey: I18nKey.NAV$AGENTS,
+      backTo: SETTINGS_PREFIX,
+      backLabelKey: I18nKey.SETTINGS$TITLE,
+    };
+  }
+
+  if (pathname === CUSTOMIZE_HUB) {
+    return { mode: "menu" };
+  }
+
+  if (
+    EXTENSIONS_DETAIL_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    )
+  ) {
+    return {
+      mode: "back",
+      backTo: CUSTOMIZE_HUB,
+      backLabelKey: I18nKey.NAV$CUSTOMIZE,
     };
   }
 
   return { mode: "menu" };
+}
+
+export function isExtensionsSectionPath(pathname: string): boolean {
+  return (
+    pathname === CUSTOMIZE_HUB ||
+    EXTENSIONS_DETAIL_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    )
+  );
 }

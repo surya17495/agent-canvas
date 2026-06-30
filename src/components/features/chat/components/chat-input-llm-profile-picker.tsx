@@ -110,7 +110,7 @@ export function ChatInputLlmProfileMenuContent({
       {profiles.length > 0 && <Divider inset={dividerInset} />}
       <li className="text-sm">
         <NavigationLink
-          to="/agents/llm"
+          to="/settings/llm"
           onClick={onClose}
           className={cn(
             "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",

@@ -1,11 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  render,
-  screen,
-  within,
-  fireEvent,
-  waitFor,
-} from "@testing-library/react";
+import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsSettingsScreen from "#/routes/skills-settings";
@@ -46,8 +40,7 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   return {
     name: "deno",
     type: "knowledge",
-    source:
-      "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
+    source: "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
     description:
       "If the project uses deno, use this skill to initialize Deno projects.",
     triggers: ["deno", "deno.json", "deno.lock"],
@@ -94,6 +87,16 @@ describe("SkillsSettingsScreen", () => {
       "skills-settings-description",
     );
     expect(description).toHaveTextContent("SETTINGS$SKILLS_PAGE_DESCRIPTION");
+    expect(screen.getByText("NAV$CUSTOMIZE")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-extensions-/skills")).toHaveTextContent(
+      "Skills",
+    );
+    expect(screen.getByTestId("sidebar-extensions-/plugins")).toHaveTextContent(
+      "Plugins",
+    );
+    expect(screen.getByTestId("sidebar-extensions-/mcp")).toHaveTextContent(
+      "MCP Servers",
+    );
   });
 
   it("shows card subtitle text from skill content when description is omitted", async () => {
@@ -115,9 +118,7 @@ Full skill body.`,
 
     expect(
       within(card).getByTestId(`skill-description-${skill.name}`),
-    ).toHaveTextContent(
-      "Connect and run commands on remote machines over SSH.",
-    );
+    ).toHaveTextContent("Connect and run commands on remote machines over SSH.");
   });
 
   it("surfaces the YAML description under the card title with the source path beneath it", async () => {
@@ -246,9 +247,7 @@ Full skill body.`,
       within(modal).getByTestId(`skill-modal-pill-${skill.name}-tool-bash`),
     ).toHaveTextContent("bash");
     expect(
-      within(modal).getByTestId(
-        `skill-modal-pill-${skill.name}-tool-execute_bash`,
-      ),
+      within(modal).getByTestId(`skill-modal-pill-${skill.name}-tool-execute_bash`),
     ).toHaveTextContent("execute_bash");
     expect(
       within(modal).getByTestId(`skill-modal-toggle-${skill.name}`),
@@ -265,9 +264,7 @@ Full skill body.`,
     await user.click(card);
 
     const modal = await screen.findByTestId("skill-detail-modal");
-    expect(
-      within(modal).getByText("SETTINGS$SKILLS_ENABLED"),
-    ).toBeInTheDocument();
+    expect(within(modal).getByText("SETTINGS$SKILLS_ENABLED")).toBeInTheDocument();
 
     await user.click(
       within(modal).getByTestId(`skill-modal-toggle-${skill.name}`),
@@ -277,9 +274,7 @@ Full skill body.`,
     expect(
       within(card).getByTestId(`skill-toggle-${skill.name}`),
     ).toHaveAttribute("aria-checked", "false");
-    expect(
-      within(modal).getByText("SETTINGS$SKILLS_DISABLED"),
-    ).toBeInTheDocument();
+    expect(within(modal).getByText("SETTINGS$SKILLS_DISABLED")).toBeInTheDocument();
   });
 
   it("saves disabled_skills to the server when a skill is toggled off and settings has no prior disabled_skills field", async () => {

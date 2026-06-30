@@ -1,22 +1,16 @@
 import { useTranslation } from "react-i18next";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
-import { SettingsNavRenderedItem } from "#/constants/settings-nav";
+import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { SidebarNavLink } from "#/components/features/sidebar/sidebar-nav-link";
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import { CloudSettingsLink } from "#/components/features/settings/cloud-settings-link";
 
-interface AgentsMobileHubProps {
+interface SettingsMobileHubProps {
   navigationItems: SettingsNavRenderedItem[];
 }
 
-/**
- * Mobile landing for the Agents hub. The desktop sidebar is `hidden md:flex`,
- * so on a phone the hub index renders this navigable section list instead of
- * redirecting straight into Profiles (which would strand the user with no way
- * to reach the other sections). Mirrors the former Settings mobile hub.
- */
-export function AgentsMobileHub({ navigationItems }: AgentsMobileHubProps) {
+export function SettingsMobileHub({ navigationItems }: SettingsMobileHubProps) {
   const { t } = useTranslation("openhands");
 
   const navItems = navigationItems.filter(
@@ -26,10 +20,10 @@ export function AgentsMobileHub({ navigationItems }: AgentsMobileHubProps) {
 
   return (
     <div
-      data-testid="agents-mobile-hub"
+      data-testid="settings-mobile-hub"
       className="flex flex-col gap-4 px-4 py-2 md:hidden"
     >
-      <Typography.H2>{t(I18nKey.NAV$AGENTS)}</Typography.H2>
+      <Typography.H2>{t(I18nKey.SETTINGS$TITLE)}</Typography.H2>
       <nav className="flex flex-col gap-0.5">
         {navItems.map((renderedItem) => (
           <SidebarNavLink
@@ -37,7 +31,7 @@ export function AgentsMobileHub({ navigationItems }: AgentsMobileHubProps) {
             to={renderedItem.item.to}
             label={t(renderedItem.item.text as I18nKey)}
             end
-            testId={`sidebar-agents-${renderedItem.item.to}`}
+            testId={`sidebar-settings-${renderedItem.item.to}`}
             icon={renderedItem.item.icon}
           />
         ))}

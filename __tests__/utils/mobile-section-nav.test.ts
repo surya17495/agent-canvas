@@ -3,20 +3,29 @@ import { getMobileTopBarState } from "#/utils/mobile-section-nav";
 import { I18nKey } from "#/i18n/declaration";
 
 describe("getMobileTopBarState", () => {
-  it("shows the menu on the agents hub landing", () => {
-    expect(getMobileTopBarState("/agents")).toEqual({ mode: "menu" });
+  it("shows menu on settings and customize hubs", () => {
+    expect(getMobileTopBarState("/settings")).toEqual({ mode: "menu" });
+    expect(getMobileTopBarState("/customize")).toEqual({ mode: "menu" });
   });
 
-  it("backs from agents hub sub-pages to the hub", () => {
-    expect(getMobileTopBarState("/agents/profiles")).toEqual({
+  it("backs from settings detail pages to the settings hub", () => {
+    expect(getMobileTopBarState("/settings/llm")).toEqual({
       mode: "back",
-      backTo: "/agents",
-      backLabelKey: I18nKey.NAV$AGENTS,
+      backTo: "/settings",
+      backLabelKey: I18nKey.SETTINGS$TITLE,
     });
-    expect(getMobileTopBarState("/agents/llm")).toEqual({
+  });
+
+  it("backs from extension detail pages to the customize hub", () => {
+    expect(getMobileTopBarState("/skills")).toEqual({
       mode: "back",
-      backTo: "/agents",
-      backLabelKey: I18nKey.NAV$AGENTS,
+      backTo: "/customize",
+      backLabelKey: I18nKey.NAV$CUSTOMIZE,
+    });
+    expect(getMobileTopBarState("/mcp")).toEqual({
+      mode: "back",
+      backTo: "/customize",
+      backLabelKey: I18nKey.NAV$CUSTOMIZE,
     });
   });
 

@@ -17,7 +17,7 @@ export interface ChatInputModelState {
   availableAcpModels: ACPModelOption[];
   showAcpPicker: boolean;
   switchConversationId: string | null;
-  destinationPath: "/settings/agent" | "/agents/llm";
+  destinationPath: "/settings/agent" | "/settings";
   destinationLabel: string;
 }
 
