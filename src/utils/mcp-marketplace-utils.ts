@@ -58,10 +58,102 @@ export function getDefaultMcpTransport(
   return getDefaultMcpConnectionOption(entry)?.transport;
 }
 
+/**
+ * Injects the self-hosted `mcp-atlassian` stdio connection option into the
+ * Atlassian catalog entry when the bundled `@openhands/extensions` package
+ * does not yet include it (versions ≤ 0.7.0 only expose the Atlassian-hosted
+ * OAuth server, which is filtered out as non-locally-installable). This patch
+ * becomes a no-op once the entry already carries a stdio option.
+ */
+function patchAtlassianEntry(entry: MarketplaceEntry): MarketplaceEntry {
+  if (entry.id !== "atlassian") return entry;
+  const alreadyHasStdio = entry.connectionOptions.some(
+    (opt) => opt.provider === "mcp" && opt.transport?.kind === "stdio",
+  );
+  if (alreadyHasStdio) return entry;
+  return {
+    ...entry,
+    connectionOptions: [
+      ...entry.connectionOptions,
+      {
+        id: "api",
+        provider: "mcp",
+        transport: {
+          kind: "stdio",
+          serverName: "mcp-atlassian",
+          command: "uvx",
+          args: ["mcp-atlassian"],
+          envFields: [
+            {
+              key: "JIRA_URL",
+              label: "Jira URL",
+              type: "text",
+              placeholder: "https://your-company.atlassian.net",
+              required: false,
+              helperText:
+                "Your Atlassian Jira base URL. Omit if using Confluence only.",
+            },
+            {
+              key: "JIRA_USERNAME",
+              label: "Jira username (email)",
+              type: "text",
+              placeholder: "your.email@company.com",
+              required: false,
+              helperText: "Email address linked to your Atlassian account.",
+            },
+            {
+              key: "JIRA_API_TOKEN",
+              label: "Jira API token",
+              type: "password",
+              placeholder: "ATATT...",
+              required: false,
+              helperText:
+                "Atlassian API token for Jira. Required when JIRA_URL is set.",
+              helperLink:
+                "https://id.atlassian.com/manage-profile/security/api-tokens",
+            },
+            {
+              key: "CONFLUENCE_URL",
+              label: "Confluence URL",
+              type: "text",
+              placeholder: "https://your-company.atlassian.net/wiki",
+              required: false,
+              helperText:
+                "Your Atlassian Confluence base URL. Omit if using Jira only.",
+            },
+            {
+              key: "CONFLUENCE_USERNAME",
+              label: "Confluence username (email)",
+              type: "text",
+              placeholder: "your.email@company.com",
+              required: false,
+              helperText: "Email address linked to your Atlassian account.",
+            },
+            {
+              key: "CONFLUENCE_API_TOKEN",
+              label: "Confluence API token",
+              type: "password",
+              placeholder: "ATATT...",
+              required: false,
+              helperText:
+                "Atlassian API token for Confluence. Required when CONFLUENCE_URL is set.",
+              helperLink:
+                "https://id.atlassian.com/manage-profile/security/api-tokens",
+            },
+          ],
+        },
+        auth: { strategy: "api_key" },
+      },
+    ],
+  };
+}
+
 export function getMcpMarketplaceCatalog(
   catalog: MarketplaceEntry[],
 ): MarketplaceEntry[] {
-  return catalog.filter((entry) => !!getDefaultMcpConnectionOption(entry));
+  return catalog
+    .map(patchAtlassianEntry)
+    .filter((entry) => !!getDefaultMcpConnectionOption(entry));
 }
 
 const tryUrl = (raw: string): URL | null => {

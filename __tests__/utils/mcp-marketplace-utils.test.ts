@@ -244,6 +244,55 @@ describe("findCatalogEntryForServer", () => {
   });
 });
 
+describe("Atlassian catalog entry patch", () => {
+  it("includes the atlassian entry in the marketplace (mcp-atlassian stdio option)", () => {
+    const atlassian = mcpMarketplace.find((e) => e.id === "atlassian");
+    expect(atlassian).toBeDefined();
+  });
+
+  it("exposes mcp-atlassian as the installable stdio option", () => {
+    const atlassian = mcpMarketplace.find((e) => e.id === "atlassian")!;
+    const option = getInstallableMcpConnectionOption(atlassian);
+    expect(option?.id).toBe("api");
+    expect(option?.transport.kind).toBe("stdio");
+    if (option?.transport.kind !== "stdio") throw new Error("expected stdio");
+    expect(option.transport.serverName).toBe("mcp-atlassian");
+    expect(option.transport.command).toBe("uvx");
+    expect(option.transport.args).toEqual(["mcp-atlassian"]);
+  });
+
+  it("matches an installed mcp-atlassian stdio server by name", () => {
+    const atlassian = mcpMarketplace.find((e) => e.id === "atlassian")!;
+    const transport = getInstallableMcpConnectionOption(atlassian)?.transport;
+    expect(transport).toBeDefined();
+    const result = findInstalledMatch(transport!, [
+      {
+        id: "stdio-0",
+        type: "stdio",
+        name: "mcp-atlassian",
+        command: "uvx",
+        args: ["mcp-atlassian"],
+      },
+    ]);
+    expect(result).toEqual(expect.objectContaining({ id: "stdio-0" }));
+  });
+
+  it("is a no-op when the entry already has a stdio option (forward-compat)", () => {
+    const entryWithStdio = {
+      ...mcpMarketplace.find((e) => e.id === "atlassian")!,
+      id: "atlassian",
+    };
+    // Re-running getMcpMarketplaceCatalog on a catalog that already has the
+    // stdio option should not duplicate it.
+    const result = getMcpMarketplaceCatalog([entryWithStdio]);
+    const atlassianResult = result.find((e) => e.id === "atlassian")!;
+    const stdioOptions = atlassianResult.connectionOptions.filter(
+      (opt) => opt.transport?.kind === "stdio",
+    );
+    expect(stdioOptions).toHaveLength(1);
+  });
+});
+
 describe("GitHub hosted MCP entry", () => {
   function getGitHubTransport(
     catalog: ReturnType<typeof getMcpMarketplaceCatalog>,
