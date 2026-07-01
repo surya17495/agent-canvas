@@ -123,6 +123,8 @@ describe("buildStartConversationRequest", () => {
       model: "nested-model",
       api_key: "nested-key",
       base_url: "https://nested.example.com",
+      // Streaming is enabled so the OpenHands agent emits StreamingDeltaEvents.
+      stream: true,
     });
     expect(payload.agent_settings.condenser).toEqual({
       enabled: true,
@@ -200,6 +202,7 @@ describe("buildStartConversationRequest", () => {
 
     expect(payload.agent_settings.llm).toEqual({
       model: "gpt-5.2-codex",
+      stream: true,
       auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
       subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
     });
@@ -1218,7 +1221,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.30.0",
+      "@agentclientprotocol/claude-agent-acp@0.44.0",
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // LLM-only fields must not leak into the ACP settings payload.
@@ -1367,7 +1370,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.30.0",
+      "@agentclientprotocol/claude-agent-acp@0.44.0",
     ]);
   });
 
@@ -1389,7 +1392,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@zed-industries/codex-acp@0.15.0",
+      "@zed-industries/codex-acp@0.16.0",
     ]);
   });
 
@@ -1454,7 +1457,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
       agent_settings: Record<string, unknown> & { acp_model?: unknown };
     };
 
-    expect(payload.agent_settings.acp_model).toBe("claude-opus-4-8");
+    expect(payload.agent_settings.acp_model).toBe("opus[1m]");
   });
 
   it("omits acp_model for the custom preset when none is configured", () => {
@@ -1536,7 +1539,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.30.0",
+      "@agentclientprotocol/claude-agent-acp@0.44.0",
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // acp_env is no longer a forwarded ACP setting — a stale value on saved

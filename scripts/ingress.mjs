@@ -23,6 +23,13 @@
 
 import { createServer, request as httpRequest } from "node:http";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
+
+import {
+  createProxyHandlers,
+  createRouter,
+  isBenignSocketError,
+} from "./proxy-utils.mjs";
 
 const SERVER_INFO_PATH = "/server_info";
 
@@ -136,28 +143,8 @@ function buildConfig(args, env = process.env) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Router
+// Runtime services injection (/server_info)
 // ═══════════════════════════════════════════════════════════════════════════
-
-function createRouter(routes, defaultBackend) {
-  // Sort routes by path length (longest first) for most-specific matching
-  const sortedRoutes = Object.entries(routes).sort(
-    ([a], [b]) => b.length - a.length,
-  );
-
-  return function route(url) {
-    for (const [prefix, backend] of sortedRoutes) {
-      if (
-        url === prefix ||
-        url.startsWith(prefix + "/") ||
-        url.startsWith(prefix + "?")
-      ) {
-        return backend;
-      }
-    }
-    return defaultBackend;
-  };
-}
 
 function parseBackendUrl(backendUrl) {
   const url = new URL(backendUrl);
@@ -173,87 +160,10 @@ function isServerInfoRequest(req) {
   return pathname === SERVER_INFO_PATH;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Proxy
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Errors that are normal during connection teardown and should not be logged
-// at error level (clients/upstreams routinely reset long-lived connections).
-const BENIGN_SOCKET_ERRORS = new Set([
-  "ECONNRESET",
-  "EPIPE",
-  "ECONNABORTED",
-  "ERR_STREAM_PREMATURE_CLOSE",
-]);
-
-function isBenignSocketError(err) {
-  return Boolean(err && BENIGN_SOCKET_ERRORS.has(err.code));
-}
-
-function proxyRequest(req, res, backendUrl) {
-  const backend = parseBackendUrl(backendUrl);
-
-  const options = {
-    hostname: backend.hostname,
-    port: backend.port,
-    path: req.url,
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: `${backend.hostname}:${backend.port}`,
-    },
-  };
-
-  const proxyReq = httpRequest(options, (proxyRes) => {
-    proxyRes.on("error", (err) => {
-      if (!isBenignSocketError(err)) {
-        console.error(`Upstream response error for ${req.url}:`, err.message);
-      }
-      if (!res.headersSent) {
-        res.writeHead(502);
-        res.end(`Bad Gateway: ${err.message}`);
-      } else {
-        res.destroy();
-      }
-    });
-
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
-    proxyRes.pipe(res, { end: true });
-  });
-
-  proxyReq.on("error", (err) => {
-    if (!isBenignSocketError(err)) {
-      console.error(`Proxy error for ${req.url}:`, err.message);
-    }
-    if (!res.headersSent) {
-      res.writeHead(502);
-      res.end(`Bad Gateway: ${err.message}`);
-    } else {
-      res.destroy();
-    }
-  });
-
-  // If the client disconnects mid-request, abort the upstream call so we
-  // don't leak connections or emit unhandled 'error' events.
-  req.on("error", (err) => {
-    if (!isBenignSocketError(err)) {
-      console.error(`Client request error for ${req.url}:`, err.message);
-    }
-    proxyReq.destroy();
-  });
-
-  // The outbound HTTP response object can also emit 'error' (e.g. EPIPE if
-  // the client socket is gone). Without a listener Node would crash.
-  res.on("error", (err) => {
-    if (!isBenignSocketError(err)) {
-      console.error(`Client response error for ${req.url}:`, err.message);
-    }
-    proxyReq.destroy();
-  });
-
-  req.pipe(proxyReq, { end: true });
-}
-
+// Proxy the upstream /server_info response, appending the configured
+// `runtime_services` block before forwarding it to the client. This is the
+// path that lets the frontend learn runtime services through server_info
+// rather than a baked-in env/window global.
 function proxyServerInfoRequest(req, res, backendUrl, runtimeServicesInfo) {
   const backend = parseBackendUrl(backendUrl);
 
@@ -355,92 +265,17 @@ function proxyServerInfoRequest(req, res, backendUrl, runtimeServicesInfo) {
   req.pipe(proxyReq, { end: true });
 }
 
-function proxyWebSocket(req, socket, head, backendUrl) {
-  const backend = parseBackendUrl(backendUrl);
-
-  const options = {
-    hostname: backend.hostname,
-    port: backend.port,
-    path: req.url,
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: `${backend.hostname}:${backend.port}`,
-    },
-  };
-
-  const proxyReq = httpRequest(options);
-
-  // Always attach an 'error' handler to the client socket immediately. The
-  // client can drop the connection before the upstream upgrade completes
-  // (e.g. during a slow DNS / connect), and an unhandled 'error' on the raw
-  // TCP socket would crash the entire ingress process.
-  socket.on("error", (err) => {
-    if (!isBenignSocketError(err)) {
-      console.error(
-        `WebSocket client socket error for ${req.url}:`,
-        err.message,
-      );
-    }
-    proxyReq.destroy();
-  });
-
-  proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
-    // Once the upgrade is established, errors on either raw TCP socket must
-    // be handled or Node will throw. ECONNRESET / EPIPE on long-lived
-    // WebSocket connections is routine (browser tab closed, NAT timeout,
-    // mobile network handoff, …) and should never crash the proxy.
-    const teardown = (label) => (err) => {
-      if (err && !isBenignSocketError(err)) {
-        console.error(`WebSocket ${label} error for ${req.url}:`, err.message);
-      }
-      socket.destroy();
-      proxySocket.destroy();
-    };
-    proxySocket.on("error", teardown("upstream socket"));
-    // Note: socket already has an 'error' listener from above; add a second
-    // one that also destroys proxySocket so we don't leak the upstream half.
-    socket.on("error", () => proxySocket.destroy());
-    socket.on("close", () => proxySocket.destroy());
-    proxySocket.on("close", () => socket.destroy());
-
-    socket.write(
-      `HTTP/${proxyRes.httpVersion} ${proxyRes.statusCode} ${proxyRes.statusMessage}\r\n`,
-    );
-    for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
-      socket.write(
-        `${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}\r\n`,
-      );
-    }
-    socket.write("\r\n");
-
-    if (proxyHead.length > 0) {
-      socket.write(proxyHead);
-    }
-
-    proxySocket.pipe(socket, { end: true });
-    socket.pipe(proxySocket, { end: true });
-  });
-
-  proxyReq.on("error", (err) => {
-    if (!isBenignSocketError(err)) {
-      console.error(`WebSocket proxy error for ${req.url}:`, err.message);
-    }
-    socket.destroy();
-  });
-
-  proxyReq.end();
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Server
 // ═══════════════════════════════════════════════════════════════════════════
 
-function startIngress(config) {
+export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
+  const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
+  const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
-    const backend = route(req.url);
+    const backend = route(req.url ?? "/");
 
     if (!backend) {
       res.writeHead(503);
@@ -457,19 +292,19 @@ function startIngress(config) {
       return;
     }
 
-    proxyRequest(req, res, backend);
+    proxy.proxyHttp(req, res, backend);
   });
 
   // Handle WebSocket upgrades
   server.on("upgrade", (req, socket, head) => {
-    const backend = route(req.url);
+    const backend = route(req.url ?? "/");
 
     if (!backend) {
       socket.destroy();
       return;
     }
 
-    proxyWebSocket(req, socket, head, backend);
+    proxy.proxyWebSocket(req, socket, head, backend);
   });
 
   // Built-in protection against malformed client requests that can otherwise
@@ -484,6 +319,7 @@ function startIngress(config) {
       socket.destroy();
     }
   });
+  server.on("close", uninstallDiagnostics);
 
   server.listen(config.port, () => {
     console.log("");
@@ -539,37 +375,31 @@ function startIngress(config) {
 // Main
 // ═══════════════════════════════════════════════════════════════════════════
 
-const args = parseArgs();
-const config = buildConfig(args);
+const isMainModule =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-if (Object.keys(config.routes).length === 0 && !config.defaultBackend) {
-  console.error(
-    "Error: No routes configured. Use --route or --default options.",
-  );
-  console.error("Run with --help for usage information.");
-  process.exit(1);
-}
+if (isMainModule) {
+  const args = parseArgs();
+  const config = buildConfig(args);
 
-startIngress(config);
-
-// Last-resort safety net: a benign socket reset on a stream we forgot to wire
-// up should never crash the proxy. Anything else is re-thrown so real bugs
-// stay visible.
-process.on("uncaughtException", (err) => {
-  if (isBenignSocketError(err)) {
-    console.warn(`Ignoring socket reset: ${err.code} ${err.message}`);
-    return;
+  if (Object.keys(config.routes).length === 0 && !config.defaultBackend) {
+    console.error(
+      "Error: No routes configured. Use --route or --default options.",
+    );
+    console.error("Run with --help for usage information.");
+    process.exit(1);
   }
-  throw err;
-});
 
-// Handle graceful shutdown
-process.on("SIGINT", () => {
-  console.log("\nShutting down...");
-  process.exit(0);
-});
+  startIngress(config);
 
-process.on("SIGTERM", () => {
-  console.log("\nShutting down...");
-  process.exit(0);
-});
+  // Handle graceful shutdown
+  process.on("SIGINT", () => {
+    console.log("\nShutting down...");
+    process.exit(0);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("\nShutting down...");
+    process.exit(0);
+  });
+}
