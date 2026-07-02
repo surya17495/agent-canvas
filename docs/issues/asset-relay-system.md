@@ -630,6 +630,33 @@ describe('Extension Webview Loading', () => {
 
 ---
 
+## FAQ
+
+### Can extensions access parent localStorage, cookies, or IndexedDB?
+
+**No.** The webview iframe uses `sandbox="allow-scripts"` **without** `allow-same-origin`,
+which gives the frame an opaque ("null") origin. This is already implemented in
+`src/extensions/webview-security.ts` and enforced by `ExtensionWebview` component.
+
+With an opaque origin, the webview **cannot**:
+- Read/write `localStorage` or `sessionStorage`
+- Access cookies (including HttpOnly ones)
+- Access IndexedDB
+- Access the parent's DOM
+- Submit forms or navigate the top frame
+
+The `WEBVIEW_OPAQUE_ORIGIN = "null"` constant is used by the host to validate inbound
+postMessage — if someone accidentally added `allow-same-origin` to the sandbox, the
+frame's origin would change and RPC would fail loudly rather than silently widening trust.
+
+**Defense in depth:** The CSP header also includes `sandbox allow-scripts`, so even if
+the document were opened directly (outside the iframe), it would still have an opaque
+origin.
+
+See `src/extensions/webview-security.ts` for the full threat model and implementation.
+
+---
+
 ## Success Criteria
 
 - [ ] Webview HTML loads via blob URL (no CSP errors)
