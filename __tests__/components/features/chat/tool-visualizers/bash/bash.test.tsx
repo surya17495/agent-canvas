@@ -76,18 +76,14 @@ describe("bashVisualizer", () => {
 
     expect(container).not.toHaveTextContent("tail-marker");
 
-    await user.click(
-      screen.getByRole("button", { name: "OBSERVATION$SHOW_FULL_OUTPUT" }),
-    );
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
 
     expect(container).toHaveTextContent("tail-marker");
     expect(
-      screen.getByRole("button", { name: "OBSERVATION$COLLAPSE_OUTPUT" }),
+      screen.getByRole("button", { name: "BUTTON$COLLAPSE" }),
     ).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: "OBSERVATION$COLLAPSE_OUTPUT" }),
-    );
+    await user.click(screen.getByRole("button", { name: "BUTTON$COLLAPSE" }));
 
     expect(container).not.toHaveTextContent("tail-marker");
   });

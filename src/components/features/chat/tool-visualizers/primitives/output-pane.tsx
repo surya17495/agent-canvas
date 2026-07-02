@@ -31,8 +31,8 @@ export function OutputPane({ output, exitCode, copy = true }: OutputPaneProps) {
   const text = display.trim();
   const showExitBadge = exitCode != null && exitCode !== 0 && exitCode !== -1;
   const toggleLabel = isExpanded
-    ? t(I18nKey.OBSERVATION$COLLAPSE_OUTPUT)
-    : t(I18nKey.OBSERVATION$SHOW_FULL_OUTPUT);
+    ? t(I18nKey.BUTTON$COLLAPSE)
+    : t(I18nKey.BUTTON$EXPAND);
 
   const pane = (
     <pre className="overflow-auto whitespace-pre-wrap rounded border border-surface-raised bg-surface-raised p-2 text-xs text-foreground">
