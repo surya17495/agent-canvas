@@ -11,10 +11,7 @@ import {
   INTEGRATION_CATALOG as MCP_MARKETPLACE,
   type IntegrationCatalogEntry as MarketplaceEntry,
 } from "@openhands/extensions/integrations";
-import {
-  getInstallableMcpConnectionOption,
-  getMcpMarketplaceCatalog,
-} from "#/utils/mcp-marketplace-utils";
+import { getMcpMarketplaceCatalog } from "#/utils/mcp-marketplace-utils";
 
 function renderWith(ui: React.ReactNode) {
   return render(ui, {
@@ -207,15 +204,13 @@ describe("InstallServerModal", () => {
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
   });
 
-  it("installs Linear with its default transport from the catalog", async () => {
+  it("installs Linear over streamable HTTP with the api key as a bearer credential", async () => {
+    // Arrange: the marketplace serves the patched Linear entry (shttp
+    // /mcp endpoint, bearer auth) — the UI must never touch the removed
+    // /sse transport.
     const linear = getMcpMarketplaceCatalog(MCP_MARKETPLACE).find(
       (e) => e.id === "linear",
     )!;
-    const option = getInstallableMcpConnectionOption(linear)!;
-    const transport = option.transport;
-    if (transport.kind !== "shttp" && transport.kind !== "sse") {
-      throw new Error("Linear should install as a remote MCP server");
-    }
     const testSpy = vi
       .spyOn(McpService, "testServer")
       .mockResolvedValue({ ok: true, tools: [] });
@@ -228,44 +223,37 @@ describe("InstallServerModal", () => {
 
     renderWith(<InstallServerModal entry={linear} onClose={vi.fn()} />);
     await screen.findByTestId("mcp-install-modal");
+    // Wait for useSettings() so the add-mcp-server mutation doesn't bail.
     await waitFor(() => expect(getSpy).toHaveBeenCalled());
 
-    const urlInput = screen.getByTestId("mcp-install-field-url");
-    expect(urlInput.getAttribute("value") ?? urlInput.textContent).toBe(
-      transport.url,
-    );
-
-    const credentialInput = screen.queryByTestId("mcp-install-field-api_key");
-    if (credentialInput) {
-      fireEvent.change(credentialInput, {
-        target: { value: "lin_api_secret" },
-      });
-    }
+    // Act: provide the optional Linear API key and install.
+    fireEvent.change(screen.getByTestId("mcp-install-field-api_key"), {
+      target: { value: "lin_api_secret" },
+    });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
+    // Assert: both the pre-flight test and the persisted config target
+    // the new endpoint over streamable HTTP with the bearer credential.
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
     expect(testSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: transport.kind,
-        url: transport.url,
-        ...(credentialInput ? { api_key: "lin_api_secret" } : {}),
+        type: "shttp",
+        url: "https://mcp.linear.app/mcp",
+        api_key: "lin_api_secret",
       }),
     );
     const sent = (saveSpy.mock.calls[0][0] as Record<string, unknown>)
       .agent_settings_diff as {
-      mcp_config: { mcpServers: Record<string, Record<string, unknown>> };
+      mcp_config: { mcpServers: Record<string, unknown> };
     };
-    const expectedServer: Record<string, unknown> = {
-      url: transport.url,
-      // toSdkMcpConfig only tags SSE servers with a `transport` field; shttp
-      // (the default) is emitted without one.
-      ...(transport.kind === "sse" ? { transport: "sse" } : {}),
-    };
-    if (credentialInput) {
-      expectedServer.headers = { Authorization: "Bearer lin_api_secret" };
-    }
+    // Remote installs are now keyed by the catalog slug ("linear") rather
+    // than the auto-generated "shttp" fallback, so the server is
+    // referenceable by name in mcp_server_refs.
     expect(sent.mcp_config.mcpServers).toMatchObject({
-      linear: expectedServer,
+      linear: {
+        url: "https://mcp.linear.app/mcp",
+        headers: { Authorization: "Bearer lin_api_secret" },
+      },
     });
   });
 

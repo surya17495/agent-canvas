@@ -137,6 +137,7 @@ describe("recommended automations", () => {
   it("renders the proven automations before the beta ones, each in popularity order", () => {
     render(
       <RecommendedAutomationsSection
+        backendKind="local"
         installedServers={[]}
         onSelect={vi.fn()}
       />,
@@ -164,6 +165,7 @@ describe("recommended automations", () => {
   it("groups the non-proven automations under a labeled Beta section", () => {
     render(
       <RecommendedAutomationsSection
+        backendKind="local"
         installedServers={[]}
         onSelect={vi.fn()}
       />,
@@ -222,6 +224,7 @@ describe("recommended automations", () => {
   it("filters recommendations by required MCP keywords", () => {
     render(
       <RecommendedAutomationsSection
+        backendKind="local"
         installedServers={[]}
         query="standup"
         onSelect={vi.fn()}
@@ -239,6 +242,7 @@ describe("recommended automations", () => {
   it("shows a left-aligned MCP icon stack on each card", () => {
     render(
       <RecommendedAutomationsSection
+        backendKind="local"
         installedServers={[]}
         onSelect={vi.fn()}
       />,
@@ -288,6 +292,7 @@ describe("recommended automations", () => {
     try {
       render(
         <RecommendedAutomationsSection
+          backendKind="local"
           installedServers={[]}
           onSelect={vi.fn()}
         />,
@@ -319,6 +324,7 @@ describe("recommended automations", () => {
   it("shows a decorative plus badge on each card without toggle behavior", () => {
     render(
       <RecommendedAutomationsSection
+        backendKind="local"
         installedServers={[]}
         onSelect={vi.fn()}
       />,
@@ -343,6 +349,7 @@ describe("recommended automations", () => {
 
     render(
       <RecommendedAutomationsSection
+        backendKind="local"
         installedServers={[]}
         onSelect={onSelect}
       />,
@@ -360,6 +367,7 @@ describe("recommended automations", () => {
     fireEvent.click(
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
+    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
     const modal = await screen.findByTestId("mcp-install-modal");
     expect(modal).toHaveAttribute("data-marketplace-id", "github");
@@ -386,6 +394,7 @@ describe("recommended automations", () => {
     fireEvent.click(
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
+    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
     expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
@@ -397,18 +406,21 @@ describe("recommended automations", () => {
     expect(draft).toBeTruthy();
   });
 
-  it("ignores repeated card clicks while a recommendation launch is in flight", () => {
+  it("ignores repeated launches once a responder deployment choice is in flight", () => {
     mockUseSettings.mockReturnValue({
       data: settingsWithGithubMcp(),
     });
 
     renderLauncher();
 
-    const card = screen.getByTestId(
-      "recommended-automation-card-github-pr-reviewer",
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
-    fireEvent.click(card);
-    fireEvent.click(card);
+    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
+    // The launch is now in flight; re-selecting the card must not launch again.
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    );
 
     expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
   });
@@ -434,6 +446,7 @@ describe("recommended automations", () => {
     fireEvent.click(
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
+    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
     await screen.findByTestId("mcp-install-modal");
 
     fireEvent.change(screen.getByTestId("mcp-install-field-api_key"), {
@@ -445,6 +458,40 @@ describe("recommended automations", () => {
     await waitFor(() =>
       expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1),
     );
+  });
+
+  it("opens the OpenHands Cloud integrations page without launching when the cloud option is chosen", () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+
+    renderLauncher();
+
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    );
+    fireEvent.click(
+      screen.getByTestId("responder-deployment-open-openhands-cloud"),
+    );
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://app.all-hands.dev/settings/integrations",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+
+    openSpy.mockRestore();
+  });
+
+  it("does not show the deployment choice modal for non-responder automations", () => {
+    renderLauncher();
+
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-linear-triage-assistant"),
+    );
+
+    expect(
+      screen.queryByTestId("responder-deployment-modal"),
+    ).not.toBeInTheDocument();
   });
 });
 

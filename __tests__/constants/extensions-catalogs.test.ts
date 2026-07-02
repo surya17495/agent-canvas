@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
-import { INTEGRATION_LOGOS } from "#/utils/integration-logos";
 import { INTEGRATION_CATALOG } from "@openhands/extensions/integrations";
 import {
   getDefaultMcpTransport,
@@ -13,7 +12,7 @@ describe("OpenHands extensions catalogs", () => {
 
     const github = INTEGRATION_CATALOG.find((entry) => entry.id === "github");
     expect(getDefaultMcpTransport(github!)?.kind).toBe("shttp");
-    expect(INTEGRATION_LOGOS.github).toBeTruthy();
+    expect(github?.logoUrl).toBe("https://cdn.simpleicons.org/github/FFFFFF");
   });
 
   it("patches Slack to the maintained docs and npm package", () => {
@@ -34,32 +33,31 @@ describe("OpenHands extensions catalogs", () => {
     );
   });
 
-  it("includes Linear with its upstream transport (no vendor patches in generic layer)", () => {
+  it("loads Linear streamable HTTP /mcp endpoint with bearer auth", () => {
     const catalog = getMcpMarketplaceCatalog(INTEGRATION_CATALOG);
-
-    // Act
     const linear = catalog.find((entry) => entry.id === "linear")!;
 
-    // Assert: upstream provides the working streamable-HTTP transport
-    expect(getDefaultMcpTransport(linear)).toEqual({
+    // extensions >=0.8.0 lists an OAuth option ahead of the API-key one, so the
+    // default transport is the OAuth shttp /mcp endpoint (no apiKeyOptional).
+    expect(getDefaultMcpTransport(linear)).toMatchObject({
       kind: "shttp",
       url: "https://mcp.linear.app/mcp",
     });
-  });
-
-  it("does not mutate the imported catalog (no in-place vendor patches)", () => {
-    // Arrange/Act: run the catalog builder, then inspect the raw imported entry.
-    getMcpMarketplaceCatalog(INTEGRATION_CATALOG);
-    const raw = INTEGRATION_CATALOG.find((entry) => entry.id === "linear");
-
-    // Assert: the shared JSON module still carries the upstream values.
-    const rawOption = raw?.connectionOptions.find(
-      (option) => option.transport?.kind === "shttp",
+    expect(linear.docsUrl).toBe("https://linear.app/docs/mcp");
+    const bearerOption = linear.connectionOptions.find(
+      (option) =>
+        option.transport?.kind === "shttp" && option.auth.strategy === "bearer",
     );
-    expect(rawOption?.transport).toEqual({
+    expect(bearerOption?.transport).toMatchObject({
       kind: "shttp",
       url: "https://mcp.linear.app/mcp",
+      apiKeyOptional: true,
     });
+    expect(
+      linear.connectionOptions.some(
+        (option) => option.transport?.kind === "sse",
+      ),
+    ).toBe(false);
   });
 
   it("drops deprecated MCP entries that no longer have maintained replacements", () => {

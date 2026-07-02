@@ -32,6 +32,7 @@ import {
 import { StatusBadge } from "./status-badge";
 
 interface RecommendedAutomationsSectionProps {
+  backendKind: "local" | "cloud";
   installedServers: MCPServerConfig[];
   query?: string;
   onSelect: (automation: RecommendedAutomation) => void;
@@ -94,6 +95,18 @@ function automationMatchesQuery(
     .join(" ")
     .toLowerCase();
   return haystack.includes(query);
+}
+
+/**
+ * Returns true only when at least one of the automation's required integration
+ * IDs resolves to a known marketplace entry.  An empty result means none of
+ * the required integrations are in our catalog (or the array itself is empty),
+ * so there is nothing for the user to set up — hide the card.
+ * NOTE: intentionally no local/cloud backend availability filter; every entry
+ * with a catalog match is shown regardless of runtimeAvailability.
+ */
+function isAutomationAvailable(automation: RecommendedAutomation) {
+  return getRequiredEntries(automation).length > 0;
 }
 
 function buildRecommendedAutomationPills(
@@ -211,6 +224,7 @@ function AutomationCardGrid({
 }
 
 export function RecommendedAutomationsSection({
+  backendKind: _backendKind,
   installedServers,
   query = "",
   onSelect,
@@ -220,7 +234,10 @@ export function RecommendedAutomationsSection({
 
   const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) => {
     const requiredEntries = getRequiredEntries(automation);
-    return automationMatchesQuery(automation, requiredEntries, query);
+    return (
+      isAutomationAvailable(automation) &&
+      automationMatchesQuery(automation, requiredEntries, query)
+    );
   });
 
   if (visibleAutomations.length === 0) return null;
