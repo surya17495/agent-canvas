@@ -1,10 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { I18nKey } from "#/i18n/declaration";
-import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
-import { MAX_CONTENT_LENGTH } from "#/components/conversation-events/chat/event-content-helpers/shared";
-import { SyntaxHighlighter } from "../../../markdown/syntax-highlighter";
+import { CodeBlock } from "./code-block";
 
 interface OutputPaneProps {
   output: string;
@@ -24,28 +21,7 @@ interface OutputPaneProps {
  */
 export function OutputPane({ output, exitCode, copy = true }: OutputPaneProps) {
   const { t } = useTranslation("openhands");
-  const [isExpanded, setIsExpanded] = React.useState(false);
-  const isTruncated = output.length > MAX_CONTENT_LENGTH;
-  const display =
-    isTruncated && !isExpanded
-      ? `${output.slice(0, MAX_CONTENT_LENGTH)}…`
-      : output;
-  const text = display.trim();
   const showExitBadge = exitCode != null && exitCode !== 0 && exitCode !== -1;
-  const toggleLabel = isExpanded
-    ? t(I18nKey.BUTTON$COLLAPSE)
-    : t(I18nKey.BUTTON$EXPAND);
-
-  const pane = (
-    <SyntaxHighlighter
-      className="rounded-lg text-xs"
-      style={vscDarkPlus}
-      language="sh"
-      PreTag="div"
-    >
-      {text || t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT)}
-    </SyntaxHighlighter>
-  );
 
   return (
     <div className="flex flex-col gap-1">
@@ -54,21 +30,14 @@ export function OutputPane({ output, exitCode, copy = true }: OutputPaneProps) {
           {t(I18nKey.OBSERVATION$EXIT_CODE, { code: exitCode })}
         </span>
       )}
-      {copy && text ? (
-        <CopyableContentWrapper text={output}>{pane}</CopyableContentWrapper>
-      ) : (
-        pane
-      )}
-      {isTruncated && (
-        <button
-          type="button"
-          onClick={() => setIsExpanded((prev) => !prev)}
-          className="self-start text-xs text-[var(--oh-muted)] transition-colors hover:text-white hover:underline"
-          aria-label={toggleLabel}
-        >
-          {toggleLabel}
-        </button>
-      )}
+      <CodeBlock
+        code={output}
+        language="bash"
+        copy={copy}
+        placeholder={t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT)}
+        expandable
+        wrapLongLines
+      />
     </div>
   );
 }
