@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_WORKING_DIR } from "#/api/agent-server-config";
-import { getGitPath } from "#/utils/get-git-path";
+import { getGitPath, toAbsoluteRuntimePath } from "#/utils/get-git-path";
 
 describe("getGitPath", () => {
   it("should return the default working dir when no repository is selected", () => {
@@ -48,5 +48,36 @@ describe("getGitPath", () => {
         `${DEFAULT_WORKING_DIR}/software-agent-sdk`,
       );
     });
+  });
+});
+
+describe("toAbsoluteRuntimePath", () => {
+  it("prefixes a leading slash to relative paths", () => {
+    // DEFAULT_WORKING_DIR is relative; the agent-server would resolve it
+    // against its own process cwd, so it must be absolutized.
+    expect(toAbsoluteRuntimePath("workspace/project")).toBe(
+      "/workspace/project",
+    );
+    expect(toAbsoluteRuntimePath(DEFAULT_WORKING_DIR)).toBe(
+      `/${DEFAULT_WORKING_DIR}`,
+    );
+  });
+
+  it("leaves already-absolute paths untouched", () => {
+    expect(toAbsoluteRuntimePath("/workspace/project")).toBe(
+      "/workspace/project",
+    );
+    expect(toAbsoluteRuntimePath("/workspace/project/repo")).toBe(
+      "/workspace/project/repo",
+    );
+  });
+
+  it("absolutizes the default getGitPath result", () => {
+    // Regression: the files-tab list command runs in this directory. A
+    // relative value here makes the `find` fail and the list render empty
+    // while the diff view still works (issue: Files → File empty).
+    expect(toAbsoluteRuntimePath(getGitPath(null))).toBe(
+      `/${DEFAULT_WORKING_DIR}`,
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { mapAnyGitStatusToClientStatus } from "#/utils/git-status-mapper";
+import { toAbsoluteRuntimePath } from "#/utils/get-git-path";
 import type { GitChange, GitChangeDiff } from "../open-hands.types";
 import { getActiveBackend } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
@@ -23,18 +24,6 @@ interface AgentServerGitChange {
  * and makes the hop itself with the sandbox's session API key, and the
  * cloud API's CORS is permissive for bearer-token requests.
  */
-
-/**
- * The cloud runtime's `/api/git/{changes,diff}` endpoints prepend
- * `/workspace/` to relative paths (so a relative arg like
- * `workspace/project` becomes `/workspace/workspace/project` and 404s).
- * `getGitPath` returns the local agent-server's relative convention by
- * default; normalize to an absolute path before sending to the cloud
- * runtime.
- */
-function toAbsoluteRuntimePath(path: string): string {
-  return path.startsWith("/") ? path : `/${path}`;
-}
 
 class AgentServerGitService {
   static async getGitChanges(
