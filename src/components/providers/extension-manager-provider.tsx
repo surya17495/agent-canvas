@@ -273,14 +273,31 @@ export function ExtensionManagerProviderInner({
     let cancelled = false;
     const store = useInstalledExtensionsStore.getState();
 
+    /**
+     * Install from a pinned source URL. For gh: sources (which start with "gh:"),
+     * we need to use the relay bundle source and pass the extensionSource for
+     * the webview's asset relay. For HTTP URLs (npm/dev bundles), direct loading works.
+     */
     const installFrom = async (
       url: string,
       origin: InstalledExtensionOrigin,
       sourceRef?: string,
     ) => {
-      // Restore re-installs from the *pinned* base URL recorded at install time, so it
-      // is deterministic and needs no version re-resolution.
-      const result = await manager.install(createHttpBundleSource(url));
+      // Detect gh: sources that require the asset relay system
+      const isGitHubSource = url.startsWith("gh:");
+      const bundleSource = isGitHubSource
+        ? toBundleSource({
+            sourceRef: sourceRef ?? url,
+            kind: "gh",
+            version: url.split("@").pop(),
+            baseUrl: url,
+            format: "dir",
+            requiresProxy: true,
+          })
+        : createHttpBundleSource(url);
+      const options = isGitHubSource ? { extensionSource: url } : {};
+
+      const result = await manager.install(bundleSource, options);
       if (cancelled) return;
       if (!result.ok) {
         console.warn(`[extensions] failed to install ${url}:`, result.errors);

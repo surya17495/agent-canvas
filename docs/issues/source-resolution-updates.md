@@ -1,6 +1,6 @@
 # Source Resolution Updates for GitHub Extensions
 
-**Status:** Proposed  
+**Status:** ✅ Complete  
 **Component:** `src/extensions/sources/`  
 **Related:** GitHub API Resolver, Asset Relay System  
 **Priority:** Medium — Ties the other two issues together
@@ -499,12 +499,12 @@ All existing code continues working.
 
 ## Success Criteria
 
-- [ ] `gh:owner/repo@feature/branch` resolves and loads successfully
-- [ ] `npm:@scope/pkg@^1` continues working (no regression)
-- [ ] Webviews load via blob URLs without CSP errors
-- [ ] Extension worker (`main.js`) loads and activates
-- [ ] Icons and assets load correctly
-- [ ] Existing installations continue working after update
-- [ ] Clear error messages for resolution failures
-- [ ] No backend/agent-server changes required
-- [ ] Unit and integration tests pass
+- [x] `gh:owner/repo@feature/branch` resolves and loads successfully
+- [x] `npm:@scope/pkg@^1` continues working (no regression)
+- [x] Webviews load via blob URLs without CSP errors
+- [x] Extension worker (`main.js`) loads and activates
+- [x] Icons and assets load correctly
+- [x] Existing installations continue working after update
+- [x] Clear error messages for resolution failures
+- [x] No backend/agent-server changes required
+- [x] Unit and integration tests pass

@@ -81,7 +81,7 @@ The postMessage relay follows VS Code's proven extension model:
 |---|-------|--------|----------|-------------|
 | 1 | [GitHub API Resolver](./github-api-resolver.md) | ✅ Done | High | Replace jsDelivr resolution with GitHub API for `gh:` refs |
 | 2 | [Asset Relay System](./asset-relay-system.md) | ✅ Done | High | Parent-side fetching + postMessage bridge for webviews |
-| 3 | [Source Resolution Updates](./source-resolution-updates.md) | 🔜 Next | Medium | Wire resolver and relay into the install flow |
+| 3 | [Source Resolution Updates](./source-resolution-updates.md) | ✅ Done | Medium | Wire resolver and relay into the install flow |
 
 ### Implementation Order
 
@@ -96,10 +96,13 @@ The postMessage relay follows VS Code's proven extension model:
 3. ✅ Support blob URLs for initial load (`relay-bundle-source.ts`)
 4. ✅ Handle runtime asset requests (`sdk/asset-relay.ts`)
 
-**Phase 3: Integration (Issue #3)** 🔜 Next
-1. Update `resolveSourceRef` for relay flow
-2. Update webview bootstrap to use relay
-3. Test end-to-end with real extensions
+**Phase 3: Integration (Issue #3)** ✅ Complete
+1. ✅ `resolveSourceRef` uses GitHub API for `gh:` sources, returns `requiresProxy: true`
+2. ✅ `toBundleSource` routes `gh:` sources to `createRelayBundleSource`
+3. ✅ Extension manager passes `extensionSource` for asset relay
+4. ✅ Webview components create `WebviewBridge` for runtime asset requests
+5. ✅ Persisted extension restore correctly handles `gh:` sources
+6. ✅ Integration tests verify end-to-end flow with slashed branches
 
 **Phase 4: Polish**
 1. Add permission model for external URLs
@@ -111,14 +114,14 @@ The postMessage relay follows VS Code's proven extension model:
 
 After all three issues are resolved:
 
-- [ ] `gh:owner/repo@feature/my-branch` installs successfully
-- [ ] Extension webview loads without CSP errors
-- [ ] Extension worker activates and commands work
-- [ ] Extensions can request external resources (with permission)
-- [ ] Settings pages load correctly
-- [ ] Icons and assets display properly
-- [ ] `npm:` extensions continue working (no regression)
-- [ ] No backend/agent-server changes required
+- [x] `gh:owner/repo@feature/my-branch` installs successfully
+- [x] Extension webview loads without CSP errors
+- [x] Extension worker activates and commands work
+- [ ] Extensions can request external resources (with permission) — Phase 4
+- [x] Settings pages load correctly
+- [x] Icons and assets display properly
+- [x] `npm:` extensions continue working (no regression)
+- [x] No backend/agent-server changes required
 
 ---
 
