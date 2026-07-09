@@ -3,6 +3,7 @@ import {
   resolveSource,
   toBundleSource,
   getGitHubToken,
+  type ArtifactDescriptor,
 } from "#/extensions/sources/resolve";
 
 /** Mock fetch for npm jsDelivr resolution */
@@ -62,6 +63,7 @@ describe("resolveSource", () => {
         version: "1.4.2",
         baseUrl: "https://cdn.jsdelivr.net/npm/@acme/hello@1.4.2",
         format: "dir",
+        requiresProxy: false,
       });
       const calledUrl = String(
         (fetchImpl as never as { mock: { calls: string[][] } }).mock.calls[0][0],
@@ -93,7 +95,7 @@ describe("resolveSource", () => {
   });
 
   describe("gh resolution (GitHub API)", () => {
-    it("resolves a gh ref using GitHub API, returns SHA as version", async () => {
+    it("resolves a gh ref using GitHub API, returns proxy source ref", async () => {
       const sha = "abc123def456789012345678901234567890abcd";
       const fetchImpl = mockGitHubApiFetch(
         new Map([
@@ -110,8 +112,10 @@ describe("resolveSource", () => {
         sourceRef: "gh:acme/exts@main",
         kind: "gh",
         version: sha,
-        baseUrl: `https://cdn.jsdelivr.net/gh/acme/exts@${sha}`,
+        // baseUrl is now a proxy source ref, not a jsDelivr URL
+        baseUrl: `gh:acme/exts@${sha}`,
         format: "dir",
+        requiresProxy: true,
       });
     });
 
@@ -135,8 +139,10 @@ describe("resolveSource", () => {
         sourceRef: "gh:acme/exts/packages/hello@main",
         kind: "gh",
         version: sha,
-        baseUrl: `https://cdn.jsdelivr.net/gh/acme/exts@${sha}/packages/hello`,
+        // baseUrl includes the subpath for the proxy
+        baseUrl: `gh:acme/exts/packages/hello@${sha}`,
         format: "dir",
+        requiresProxy: true,
       });
     });
 
@@ -161,8 +167,9 @@ describe("resolveSource", () => {
         sourceRef: "gh:acme/exts@feature/ui/extensions",
         kind: "gh",
         version: sha,
-        baseUrl: `https://cdn.jsdelivr.net/gh/acme/exts@${sha}`,
+        baseUrl: `gh:acme/exts@${sha}`,
         format: "dir",
+        requiresProxy: true,
       });
 
       // Verify the GitHub API was called with the correct encoded branch name
@@ -191,6 +198,7 @@ describe("resolveSource", () => {
 
       expect(descriptor.kind).toBe("gh");
       expect(descriptor.version).toBe(sha);
+      expect(descriptor.requiresProxy).toBe(true);
     });
 
     it("resolves a tag ref", async () => {
@@ -211,8 +219,9 @@ describe("resolveSource", () => {
         sourceRef: "gh:acme/exts@v1.0.0",
         kind: "gh",
         version: sha,
-        baseUrl: `https://cdn.jsdelivr.net/gh/acme/exts@${sha}`,
+        baseUrl: `gh:acme/exts@${sha}`,
         format: "dir",
+        requiresProxy: true,
       });
     });
 
@@ -233,8 +242,9 @@ describe("resolveSource", () => {
         sourceRef: `gh:acme/exts@${sha}`,
         kind: "gh",
         version: sha,
-        baseUrl: `https://cdn.jsdelivr.net/gh/acme/exts@${sha}`,
+        baseUrl: `gh:acme/exts@${sha}`,
         format: "dir",
+        requiresProxy: true,
       });
     });
 
@@ -285,6 +295,7 @@ describe("resolveSource", () => {
         kind: "url",
         baseUrl: "https://cdn.example.com/ext",
         format: "dir",
+        requiresProxy: false,
       });
       expect(fetchImpl).not.toHaveBeenCalled();
     });
@@ -300,7 +311,7 @@ describe("getGitHubToken", () => {
 });
 
 describe("toBundleSource", () => {
-  it("builds an HTTP bundle source rooted at the descriptor base URL", async () => {
+  it("builds an HTTP bundle source for npm (direct loading)", async () => {
     const fetchImpl = vi.fn(async (url: string | URL) => {
       expect(String(url)).toBe(
         "https://cdn.jsdelivr.net/npm/hello@1.0.0/extension.json",
@@ -317,6 +328,7 @@ describe("toBundleSource", () => {
         version: "1.0.0",
         baseUrl: "https://cdn.jsdelivr.net/npm/hello@1.0.0",
         format: "dir",
+        requiresProxy: false,
       });
       await expect(source.readManifest()).resolves.toEqual({
         id: "acme.hello",
@@ -324,6 +336,40 @@ describe("toBundleSource", () => {
       await expect(source.assetUrl("main.js")).resolves.toBe(
         "https://cdn.jsdelivr.net/npm/hello@1.0.0/main.js",
       );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("builds a relay bundle source for gh (asset relay loading)", async () => {
+    const sha = "abc123def456789012345678901234567890abcd";
+    const fetchImpl = vi.fn(async (url: string | URL) => {
+      // The relay fetches from raw.githubusercontent.com
+      const urlStr = String(url);
+      expect(urlStr).toContain("raw.githubusercontent.com");
+      expect(urlStr).toContain("acme/repo");
+      expect(urlStr).toContain(sha);
+      return new Response(JSON.stringify({ id: "acme.repo" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const source = toBundleSource({
+        sourceRef: "gh:acme/repo@main",
+        kind: "gh",
+        version: sha,
+        baseUrl: `gh:acme/repo@${sha}`,
+        format: "dir",
+        requiresProxy: true,
+      });
+      await expect(source.readManifest()).resolves.toEqual({
+        id: "acme.repo",
+      });
+      // Asset URL should be a blob URL (created by AssetLoader)
+      const assetUrl = await source.assetUrl("main.js");
+      expect(assetUrl).toMatch(/^blob:/);
     } finally {
       vi.unstubAllGlobals();
     }

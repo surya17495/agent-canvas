@@ -77,26 +77,26 @@ The postMessage relay follows VS Code's proven extension model:
 
 ### Issue Documents
 
-| # | Issue | Priority | Description |
-|---|-------|----------|-------------|
-| 1 | [GitHub API Resolver](./github-api-resolver.md) | High | Replace jsDelivr resolution with GitHub API for `gh:` refs |
-| 2 | [Asset Relay System](./asset-relay-system.md) | High | Parent-side fetching + postMessage bridge for webviews |
-| 3 | [Source Resolution Updates](./source-resolution-updates.md) | Medium | Wire resolver and relay into the install flow |
+| # | Issue | Status | Priority | Description |
+|---|-------|--------|----------|-------------|
+| 1 | [GitHub API Resolver](./github-api-resolver.md) | ✅ Done | High | Replace jsDelivr resolution with GitHub API for `gh:` refs |
+| 2 | [Asset Relay System](./asset-relay-system.md) | ✅ Done | High | Parent-side fetching + postMessage bridge for webviews |
+| 3 | [Source Resolution Updates](./source-resolution-updates.md) | 🔜 Next | Medium | Wire resolver and relay into the install flow |
 
 ### Implementation Order
 
-**Phase 1: Resolution (Issue #1)**
-1. Implement GitHub API resolver (`github-api.ts`)
-2. Handle branches with slashes, tags, SHAs
-3. Add caching for resolved refs
+**Phase 1: Resolution (Issue #1)** ✅ Complete
+1. ✅ Implement GitHub API resolver (`github-api.ts`)
+2. ✅ Handle branches with slashes, tags, SHAs
+3. ✅ Add caching for resolved refs
 
-**Phase 2: Asset Relay (Issue #2)**
-1. Implement asset loader in parent window
-2. Create postMessage protocol for webview requests
-3. Support blob URLs for initial load
-4. Handle runtime asset requests
+**Phase 2: Asset Relay (Issue #2)** ✅ Complete
+1. ✅ Implement asset loader in parent window (`asset-loader.ts`)
+2. ✅ Create postMessage protocol for webview requests (`webview-bridge.ts`)
+3. ✅ Support blob URLs for initial load (`relay-bundle-source.ts`)
+4. ✅ Handle runtime asset requests (`sdk/asset-relay.ts`)
 
-**Phase 3: Integration (Issue #3)**
+**Phase 3: Integration (Issue #3)** 🔜 Next
 1. Update `resolveSourceRef` for relay flow
 2. Update webview bootstrap to use relay
 3. Test end-to-end with real extensions

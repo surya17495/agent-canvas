@@ -7,21 +7,22 @@
  *   source string ──parse──▶ ExtensionSourceRef ──resolve──▶ ArtifactDescriptor ──acquire──▶ BundleSource ──▶ loadExtension
  *
  * `npm:` resolves via jsDelivr; `gh:` resolves via GitHub API (for branch/tag/SHA support
- * including slashed branch names) then uses jsDelivr CDN for serving; `url:` passes through
- * unchanged. A future first-party registry (`registry:`) is just another branch here that
- * returns the same descriptor shape (likely `format: "zip"` with an `integrity` hash) —
- * the acquire/load stages do not change.
+ * including slashed branch names) then loads through the parent-window asset relay (no
+ * backend proxy needed); `url:` passes through unchanged. A future first-party registry
+ * (`registry:`) is just another branch here that returns the same descriptor shape
+ * (likely `format: "zip"` with an `integrity` hash) — the acquire/load stages do not change.
  */
 
 import { createHttpBundleSource } from "../dev-bundle-source";
 import type { BundleSource } from "../loader";
 import { resolveGitHubRef, type GitHubResolverOptions } from "./github-api";
+import { createRelayBundleSource } from "./relay-bundle-source";
 import {
   formatSourceRef,
   parseSourceRef,
   type ExtensionSourceRef,
 } from "./ref";
-import { githubBaseUrl, npmBaseUrl, resolveNpmVersion } from "./jsdelivr";
+import { npmBaseUrl, resolveNpmVersion } from "./jsdelivr";
 
 /** Read GitHub token from environment (browser-side via Vite). */
 export function getGitHubToken(): string | undefined {
@@ -38,13 +39,25 @@ export interface ArtifactDescriptor {
   kind: ExtensionSourceRef["kind"];
   /** Resolved concrete version (npm/gh); `undefined` for raw `url` sources. */
   version?: string;
-  /** Base URL of the bundle directory (no trailing slash). */
+  /**
+   * Base URL or source ref for the bundle.
+   * - For `npm:` and `url:`: direct URL to the bundle directory
+   * - For `gh:`: the resolved source ref to pass to the proxy (e.g., "gh:owner/repo/path@sha")
+   *
+   * Use `toBundleSource()` to get the appropriate loader.
+   */
   baseUrl: string;
   /**
    * Physical packaging. Only `"dir"` (loose files, the existing HTTP source) exists
    * today; `"zip"` is reserved for a first-party registry that ships single archives.
    */
   format: "dir";
+  /**
+   * Whether this source should be loaded through the backend proxy.
+   * True for `gh:` (CSP prevents direct external loading), false for `npm:` (jsDelivr works
+   * directly) and `url:` (user's responsibility).
+   */
+  requiresProxy: boolean;
 }
 
 type FetchLike = typeof fetch;
@@ -72,6 +85,7 @@ export async function resolveSourceRef(
   const sourceRef = formatSourceRef(ref);
   switch (ref.kind) {
     case "npm": {
+      // npm continues using jsDelivr directly — it has CORS and works directly
       const version = await resolveNpmVersion(ref.name, ref.range, fetchImpl);
       return {
         sourceRef,
@@ -79,6 +93,7 @@ export async function resolveSourceRef(
         version,
         baseUrl: npmBaseUrl(ref.name, version),
         format: "dir",
+        requiresProxy: false,
       };
     }
     case "gh": {
@@ -93,22 +108,29 @@ export async function resolveSourceRef(
         ref.range,
         ghOptions,
       );
-      // Use the resolved SHA as the version - jsDelivr can serve by commit SHA
+      // Build the source ref that the proxy will use to fetch from GitHub
       const version = resolved.sha;
+      const proxySourceRef = `gh:${ref.owner}/${ref.repo}${
+        ref.subpath ? `/${ref.subpath}` : ""
+      }@${version}`;
       return {
         sourceRef,
         kind: "gh",
         version,
-        baseUrl: githubBaseUrl(ref.owner, ref.repo, version, ref.subpath),
+        // baseUrl is the proxy source ref, not a direct URL
+        baseUrl: proxySourceRef,
         format: "dir",
+        requiresProxy: true,
       };
     }
     case "url":
+      // Raw URLs pass through unchanged — user's responsibility for CSP
       return {
         sourceRef,
         kind: "url",
         baseUrl: ref.baseUrl,
         format: "dir",
+        requiresProxy: false,
       };
   }
 }
@@ -121,8 +143,18 @@ export function resolveSource(
   return resolveSourceRef(parseSourceRef(input), fetchOrOptions);
 }
 
-/** Turn a resolved descriptor into a {@link BundleSource} for the loader. */
+/**
+ * Turn a resolved descriptor into a {@link BundleSource} for the loader.
+ * Routes to the appropriate source implementation based on the descriptor.
+ */
 export function toBundleSource(descriptor: ArtifactDescriptor): BundleSource {
   // Only the `dir` format exists today; a `zip` format would unpack + mint blob URLs.
+  if (descriptor.requiresProxy) {
+    // GitHub sources go through the parent-window asset relay (no backend proxy needed).
+    // The relay fetches from GitHub in the parent window (no CSP restrictions) and
+    // serves content to webviews via blob URLs.
+    return createRelayBundleSource(descriptor.baseUrl);
+  }
+  // npm and url sources load directly via HTTP
   return createHttpBundleSource(descriptor.baseUrl);
 }

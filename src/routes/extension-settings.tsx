@@ -47,6 +47,7 @@ export default function ExtensionSettingsScreen() {
         deps={context.deps}
         src={page.pageUrl}
         title={page.title}
+        extensionSource={page.extensionSource}
       />
     </div>
   );

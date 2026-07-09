@@ -1,6 +1,6 @@
 # Asset Relay System for Extension Webviews
 
-**Status:** Proposed  
+**Status:** ✅ Implemented  
 **Component:** `src/extensions/`  
 **Related:** GitHub API Resolver, Source Resolution Updates  
 **Priority:** High — Enables GitHub extensions without backend changes
@@ -659,11 +659,26 @@ See `src/extensions/webview-security.ts` for the full threat model and implement
 
 ## Success Criteria
 
-- [ ] Webview HTML loads via blob URL (no CSP errors)
-- [ ] Webview can request extension assets via postMessage
-- [ ] Webview can request external URLs (with permission)
-- [ ] Assets are cached for SHA-pinned sources
-- [ ] No backend/agent-server changes required
-- [ ] Security model matches VS Code extensions
-- [ ] Clean error messages for permission denials
-- [ ] Memory properly cleaned up on uninstall
+- [x] Webview HTML loads via blob URL (no CSP errors)
+- [x] Webview can request extension assets via postMessage
+- [x] Webview can request external URLs (with permission)
+- [x] Assets are cached for SHA-pinned sources
+- [x] No backend/agent-server changes required
+- [x] Security model matches VS Code extensions
+- [x] Clean error messages for permission denials
+- [x] Memory properly cleaned up on uninstall
+
+## Implementation Summary
+
+The asset relay system was implemented in the following files:
+
+| File | Description |
+|------|-------------|
+| `src/extensions/asset-loader.ts` | Singleton service that fetches assets from GitHub and caches them |
+| `src/extensions/webview-bridge.ts` | Handles postMessage relay between parent and webview iframes |
+| `src/extensions/sdk/asset-relay.ts` | Client-side API for webviews to request assets |
+| `src/extensions/sources/relay-bundle-source.ts` | BundleSource that uses blob URLs for webview HTML |
+| `src/extensions/sources/resolve.ts` | Updated to use relay instead of proxy for gh: sources |
+| `src/components/features/extensions/extension-webview.tsx` | Updated to install WebviewBridge on load |
+
+Tests added in `__tests__/extensions/asset-loader.test.ts` and `__tests__/extensions/webview-bridge.test.ts`.

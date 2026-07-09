@@ -72,6 +72,11 @@ export interface ViewItem {
   pageUrl?: string;
   /** Capabilities granted to the owning extension (gates the webview's host API). */
   capabilities?: Capability[];
+  /**
+   * Extension source ref (e.g., "gh:owner/repo@sha") for asset relay.
+   * Enables webviews to request additional assets via postMessage.
+   */
+  extensionSource?: string;
 }
 
 /**
@@ -123,6 +128,11 @@ export interface SettingsPageItem {
   when?: string;
   /** Capabilities granted to the owning extension (gates the webview's host API). */
   capabilities?: Capability[];
+  /**
+   * Extension source ref (e.g., "gh:owner/repo@sha") for asset relay.
+   * Enables webviews to request additional assets via postMessage.
+   */
+  extensionSource?: string;
 }
 
 /**

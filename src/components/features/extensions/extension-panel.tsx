@@ -56,6 +56,7 @@ export function ExtensionPanel() {
             deps={context.deps}
             src={view.pageUrl}
             title={view.name}
+            extensionSource={view.extensionSource}
           />
         ) : (
           <div data-testid="extension-panel-empty" className="h-full" />

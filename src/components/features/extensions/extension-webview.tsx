@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { getAssetLoader } from "#/extensions/asset-loader";
 import {
   createHostMethods,
   type HostApiDeps,
@@ -6,6 +7,7 @@ import {
 import { RpcEndpoint } from "#/extensions/host/rpc";
 import { createWebviewTransport } from "#/extensions/host/webview-transport";
 import type { Capability } from "#/extensions/manifest";
+import { WebviewBridge } from "#/extensions/webview-bridge";
 import {
   WEBVIEW_OPAQUE_ORIGIN,
   WEBVIEW_SANDBOX,
@@ -22,6 +24,16 @@ interface ExtensionWebviewProps {
   src: string;
   /** Accessible title for the iframe. */
   title: string;
+  /**
+   * Extension source ref (e.g., "gh:owner/repo@sha") for asset relay.
+   * When provided, enables the webview to request additional assets via postMessage.
+   */
+  extensionSource?: string;
+  /**
+   * Allowed external origins for fetch relay (from extension manifest permissions).
+   * Extensions must declare origins they need to access.
+   */
+  allowedOrigins?: string[];
 }
 
 /**
@@ -36,7 +48,8 @@ interface ExtensionWebviewProps {
  * - Capability checks are enforced host-side per call.
  *
  * The webview document is expected to use `acquireAgentCanvasApi()` (see
- * `sdk/webview-client.ts`) to talk to the host.
+ * `sdk/webview-client.ts`) to talk to the host, and optionally `requestAsset()` /
+ * `relayFetch()` (see `sdk/asset-relay.ts`) to load additional resources.
  */
 export function ExtensionWebview({
   extensionId,
@@ -44,25 +57,39 @@ export function ExtensionWebview({
   deps,
   src,
   title,
+  extensionSource,
+  allowedOrigins,
 }: ExtensionWebviewProps) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const endpointRef = useRef<RpcEndpoint | null>(null);
+  const bridgeRef = useRef<WebviewBridge | null>(null);
 
   // Latest host inputs, read at (re)connect time so reconnecting on load never forces
   // the iframe to reload. These are stable in practice (memoized deps, registry-owned
   // capabilities), so the iframe only reloads when `src`/`extensionId` change.
   const capabilitiesRef = useRef(capabilities);
   const depsRef = useRef(deps);
+  const extensionSourceRef = useRef(extensionSource);
+  const allowedOriginsRef = useRef(allowedOrigins);
   capabilitiesRef.current = capabilities;
   depsRef.current = deps;
+  extensionSourceRef.current = extensionSource;
+  allowedOriginsRef.current = allowedOrigins;
 
-  // Establish the RPC endpoint against the *loaded* document's window. A sandboxed
-  // iframe (no allow-same-origin) gets a fresh window once it navigates to `src`, so
-  // binding on `load` — not on mount — is required for `event.source` to match.
+  // Establish the RPC endpoint and asset relay bridge against the *loaded* document's
+  // window. A sandboxed iframe (no allow-same-origin) gets a fresh window once it
+  // navigates to `src`, so binding on `load` — not on mount — is required for
+  // `event.source` to match.
   const connect = useCallback(() => {
-    const contentWindow = frameRef.current?.contentWindow;
-    if (!contentWindow) return;
+    const iframe = frameRef.current;
+    const contentWindow = iframe?.contentWindow;
+    if (!contentWindow || !iframe) return;
+
+    // Dispose previous connections
     endpointRef.current?.dispose();
+    bridgeRef.current?.dispose();
+
+    // Set up RPC endpoint for agentCanvas API
     const transport = createWebviewTransport(contentWindow, {
       source: contentWindow,
       expectedOrigin: WEBVIEW_OPAQUE_ORIGIN,
@@ -71,12 +98,25 @@ export function ExtensionWebview({
       transport,
       createHostMethods(extensionId, capabilitiesRef.current, depsRef.current),
     );
+
+    // Set up asset relay bridge if extension source is provided
+    const source = extensionSourceRef.current;
+    if (source) {
+      bridgeRef.current = new WebviewBridge({
+        iframe,
+        extensionSource: source,
+        assetLoader: getAssetLoader(),
+        allowedOrigins: allowedOriginsRef.current,
+      });
+    }
   }, [extensionId]);
 
   useEffect(
     () => () => {
       endpointRef.current?.dispose();
       endpointRef.current = null;
+      bridgeRef.current?.dispose();
+      bridgeRef.current = null;
     },
     [],
   );

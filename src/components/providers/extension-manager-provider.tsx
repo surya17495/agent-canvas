@@ -147,7 +147,12 @@ export function ExtensionManagerProviderInner({
   const installFromUrl = React.useCallback(
     async (source: string): Promise<InstalledExtension> => {
       const descriptor = await resolveDescriptor(source);
-      const result = await manager.install(toBundleSource(descriptor));
+      // For gh: sources, pass the resolved baseUrl as extensionSource for asset relay.
+      // The relay allows webviews to request additional assets via postMessage.
+      const options = descriptor.requiresProxy
+        ? { extensionSource: descriptor.baseUrl }
+        : {};
+      const result = await manager.install(toBundleSource(descriptor), options);
       if (!result.ok) {
         throw new Error(result.errors.join("; "));
       }
@@ -227,7 +232,11 @@ export function ExtensionManagerProviderInner({
       // Swap: the contribution registry and host are keyed by id, so installing the new
       // bundle replaces the old contributions; uninstall first to terminate the old worker.
       manager.uninstall(id);
-      const result = await manager.install(toBundleSource(descriptor));
+      // For gh: sources, pass the resolved baseUrl as extensionSource for asset relay.
+      const options = descriptor.requiresProxy
+        ? { extensionSource: descriptor.baseUrl }
+        : {};
+      const result = await manager.install(toBundleSource(descriptor), options);
       if (!result.ok) throw new Error(result.errors.join("; "));
 
       const extension = toInstalledExtension(

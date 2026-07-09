@@ -48,6 +48,15 @@ export type LoadResult =
   | { ok: true; manifest: ExtensionManifest }
   | { ok: false; errors: string[] };
 
+export interface LoadExtensionOptions {
+  /**
+   * Extension source ref (e.g., "gh:owner/repo@sha") for asset relay.
+   * When provided, enables webviews to request additional assets via postMessage.
+   * Pass this when loading from a gh: source.
+   */
+  extensionSource?: string;
+}
+
 /** Build the resolved `ActivityBarItem`s, wiring selection to the host bridge. */
 async function buildActivityBarItems(
   manifest: ExtensionManifest,
@@ -140,6 +149,7 @@ function buildMenuItems(
 async function buildViews(
   manifest: ExtensionManifest,
   source: BundleSource,
+  extensionSource?: string,
 ): Promise<ViewItem[]> {
   const views = manifest.contributes?.views ?? {};
   const capabilities = manifest.capabilities ?? [];
@@ -155,6 +165,7 @@ async function buildViews(
       type: view.type,
       pageUrl: view.page ? await source.assetUrl(view.page) : undefined,
       capabilities,
+      extensionSource,
     })),
   );
 }
@@ -169,6 +180,7 @@ async function buildViews(
 async function buildSettingsPages(
   manifest: ExtensionManifest,
   source: BundleSource,
+  extensionSource?: string,
 ): Promise<SettingsPageItem[]> {
   const pages = manifest.contributes?.settingsPages ?? [];
   const capabilities = manifest.capabilities ?? [];
@@ -180,6 +192,7 @@ async function buildSettingsPages(
       pageUrl: page.page ? await source.assetUrl(page.page) : undefined,
       when: page.when,
       capabilities,
+      extensionSource,
     })),
   );
 }
@@ -195,6 +208,7 @@ async function buildSettingsPages(
 export async function loadExtension(
   source: BundleSource,
   host: ExtensionHostBridge,
+  options: LoadExtensionOptions = {},
 ): Promise<LoadResult> {
   let rawManifest: unknown;
   try {
@@ -212,12 +226,13 @@ export async function loadExtension(
   }
 
   const { manifest } = parsed;
+  const { extensionSource } = options;
   const contributions: ExtensionContributions = {
     activityBarItems: await buildActivityBarItems(manifest, source, host),
     commands: buildCommands(manifest, host),
-    views: await buildViews(manifest, source),
+    views: await buildViews(manifest, source, extensionSource),
     menus: buildMenuItems(manifest, host),
-    settingsPages: await buildSettingsPages(manifest, source),
+    settingsPages: await buildSettingsPages(manifest, source, extensionSource),
   };
 
   contributionRegistry.register(manifest.id, contributions);

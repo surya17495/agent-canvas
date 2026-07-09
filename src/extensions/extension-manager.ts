@@ -8,6 +8,7 @@ import {
   loadExtension,
   unloadExtension,
   type BundleSource,
+  type LoadExtensionOptions,
   type LoadResult,
 } from "./loader";
 
@@ -43,9 +44,15 @@ export class ExtensionManager {
   /**
    * Load a bundle: register its declarative contributions and, if it ships a worker
    * entry, register how to activate it. Returns the loader result.
+   *
+   * @param source - The bundle source to load from
+   * @param options - Optional settings including extensionSource for asset relay
    */
-  async install(source: BundleSource): Promise<LoadResult> {
-    const result = await loadExtension(source, this.host);
+  async install(
+    source: BundleSource,
+    options: LoadExtensionOptions = {},
+  ): Promise<LoadResult> {
+    const result = await loadExtension(source, this.host, options);
     if (!result.ok) {
       return result;
     }
