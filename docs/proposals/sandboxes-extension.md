@@ -6,6 +6,37 @@ Branch: `jps/ui-extensions`
 
 ---
 
+## 0. Reference Implementation
+
+The **Dad Jokes extension** is the most complete example of the UI extensions system
+and should be used as a reference for implementation patterns:
+
+- **Repository:** [jpshackelford/oh-examples](https://github.com/jpshackelford/oh-examples)
+- **PR:** [#14 - Add Agent Canvas UI extensions examples](https://github.com/jpshackelford/oh-examples/pull/14)
+- **Path:** `agent-canvas-extensions/dad-jokes/`
+
+Key patterns to follow from Dad Jokes:
+- Theme integration via `agentCanvas:theme` postMessage (CSS variable injection)
+- Auto-resize support for dynamic iframe height
+- Button styling with `btn-primary` and `btn-secondary` classes
+- Settings page with storage API persistence
+- Transparent background handling for sandboxed iframes
+
+**Destination:** This extension should be added to `OpenHands/extensions-private` in the
+`canvas-extensions/` directory, separate from the existing plugin marketplace files.
+```
+extensions-private/
+├── .plugin/marketplace.json     # Existing plugin registry (don't modify)
+├── canvas-extensions/           # Agent Canvas UI extensions
+│   └── sandboxes/
+│       ├── extension.json
+│       ├── panel.html
+│       └── icon.svg
+└── ...
+```
+
+---
+
 ## 1. Overview
 
 A UI extension for managing cloud sandboxes in Agent Canvas. Sandboxes are the
@@ -496,8 +527,18 @@ For MVP, display conversation info and let users navigate manually.
 
 ## 12. References
 
+**Reference Implementation:**
+- Dad Jokes extension: [jpshackelford/oh-examples PR #14](https://github.com/jpshackelford/oh-examples/pull/14)
+- Path: `agent-canvas-extensions/dad-jokes/`
+
+**Agent Canvas Extension System:**
 - Extension system docs: `src/extensions/README.md`
-- Example extension: `examples/extensions/hello-sidebar/`
-- Cloud API types: `src/api/cloud/sandbox-service.types.ts`
+- Extension points: `docs/EXTENSION_POINTS.md`
+- Simple example: `examples/extensions/hello-sidebar/`
+
+**Cloud API Types:**
+- Sandbox types: `src/api/cloud/sandbox-service.types.ts`
 - Conversation types: `src/api/conversation-service/agent-server-conversation-service.types.ts`
-- Backend capabilities commit: `eab81c1a`
+
+**Related Commits:**
+- Backend capabilities: `eab81c1a` - `feat(extensions): add backend:cloud:read and backend:cloud:write capabilities`
