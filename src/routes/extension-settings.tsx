@@ -101,7 +101,7 @@ export default function ExtensionSettingsScreen() {
       ref={ref}
       data-testid="extension-settings"
       style={{ height }}
-      className="overflow-hidden rounded-md border border-(--oh-border-input)"
+      className="overflow-hidden"
     >
       <ExtensionWebview
         extensionId={page.extensionId}
