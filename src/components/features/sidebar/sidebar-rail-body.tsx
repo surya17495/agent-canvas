@@ -213,7 +213,6 @@ export function SidebarRailBody({
             key={`${item.extensionId}:${item.id}`}
             item={item}
             collapsed={collapsed}
-            disabled={linkDisabled}
           />
         ))}
       </nav>

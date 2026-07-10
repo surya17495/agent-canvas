@@ -149,19 +149,7 @@ export default function MainApp() {
               </div>
 
               <ExtensionPanel />
-
-              {consentFormIsOpen && (
-                <React.Suspense fallback={null}>
-                  <AnalyticsConsentFormModal
-                    onClose={() => {
-                      setConsentFormIsOpen(false);
-                    }}
-                  />
-                </React.Suspense>
-              )}
             </div>
-
-            <ExtensionPanel />
             <React.Suspense fallback={null}>
               <EnvironmentSwitchOverlay />
               <CommandMenu />
