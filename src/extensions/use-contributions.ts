@@ -3,6 +3,7 @@ import {
   selectActivityBarItems,
   selectCommands,
   selectMenuItemsForSlot,
+  selectPages,
   selectSettingsPages,
   selectViews,
   useContributionRegistry,
@@ -11,6 +12,7 @@ import type {
   ActivityBarItem,
   CommandItem,
   MenuItem,
+  PageItem,
   SettingsPageItem,
   ViewItem,
 } from "./types";
@@ -61,6 +63,21 @@ export function useMenuItems(slot: string): MenuItem[] {
  */
 export function useSettingsPages(): SettingsPageItem[] {
   const pages = useContributionRegistry(selectSettingsPages);
+  const context = useUiContext();
+  return useMemo(
+    () => pages.filter((page) => evaluateWhen(page.when, context)),
+    [pages, context],
+  );
+}
+
+/**
+ * Contributed full-width pages (sidebar nav items), filtered by each page's optional
+ * `when` clause against the host UI-context. Filtering reads host facts only — it
+ * runs no extension code, so a hidden page is simply never rendered in the sidebar.
+ * Memoised on the (stable) registry slice + UI-context.
+ */
+export function useExtensionPages(): PageItem[] {
+  const pages = useContributionRegistry(selectPages);
   const context = useUiContext();
   return useMemo(
     () => pages.filter((page) => evaluateWhen(page.when, context)),

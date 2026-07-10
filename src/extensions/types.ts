@@ -136,6 +136,35 @@ export interface SettingsPageItem {
 }
 
 /**
+ * A resolved full-width page contributed by an extension. Shown as a sidebar nav item
+ * (like Customize/Automate) and navigates to `/x/:extensionId/:pageId`.
+ */
+export interface PageItem {
+  extensionId: string;
+  /** Page id from `contributes.pages[].id`. */
+  id: string;
+  /** Nav-item label. */
+  title: string;
+  /** Resolved icon URL (typically a `blob:` URL minted from the bundle). */
+  iconUrl?: string;
+  /** Resolved URL of the page's webview HTML document (from the bundle). */
+  pageUrl?: string;
+  /**
+   * Optional visibility clause evaluated against the host UI-context (see `when.ts`).
+   * The host filters pages by this before rendering the nav item; hiding one runs no
+   * extension code. Absent means always visible.
+   */
+  when?: string;
+  /** Capabilities granted to the owning extension (gates the webview's host API). */
+  capabilities?: Capability[];
+  /**
+   * Extension source ref (e.g., "gh:owner/repo@sha") for asset relay.
+   * Enables webviews to request additional assets via postMessage.
+   */
+  extensionSource?: string;
+}
+
+/**
  * The full set of resolved contributions for a single extension, handed to the
  * `ContributionRegistry` as one unit so registration/unregistration is atomic.
  */
@@ -145,4 +174,5 @@ export interface ExtensionContributions {
   views?: ViewItem[];
   menus?: MenuItem[];
   settingsPages?: SettingsPageItem[];
+  pages?: PageItem[];
 }

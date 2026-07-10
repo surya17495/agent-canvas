@@ -34882,5 +34882,22 @@
     "de": "Diese Einstellungsseite ist nicht verfügbar.",
     "uk": "Ця сторінка налаштувань недоступна.",
     "ca": "Aquesta pàgina de configuració no està disponible."
+  },
+  "EXTENSIONS$PAGE_UNAVAILABLE": {
+    "en": "This page is unavailable.",
+    "ja": "このページは利用できません。",
+    "zh-CN": "此页面不可用。",
+    "zh-TW": "此頁面無法使用。",
+    "ko-KR": "이 페이지를 사용할 수 없습니다.",
+    "no": "Denne siden er ikke tilgjengelig.",
+    "ar": "هذه الصفحة غير متوفرة.",
+    "de": "Diese Seite ist nicht verfügbar.",
+    "fr": "Cette page n'est pas disponible.",
+    "it": "Questa pagina non è disponibile.",
+    "pt": "Esta página não está disponível.",
+    "es": "Esta página no está disponible.",
+    "ca": "Aquesta pàgina no està disponible.",
+    "tr": "Bu sayfa kullanılamıyor.",
+    "uk": "Ця сторінка недоступна."
   }
 }

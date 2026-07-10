@@ -6,6 +6,7 @@ import type {
   CommandItem,
   ExtensionContributions,
   MenuItem,
+  PageItem,
   SettingsPageItem,
   ViewItem,
 } from "./types";
@@ -198,6 +199,33 @@ async function buildSettingsPages(
 }
 
 /**
+ * Build resolved {@link PageItem}s from `contributes.pages` (full-width sidebar pages),
+ * resolving each page's bundle-relative HTML/icon to sandboxed URLs. Each page is shown
+ * as a sidebar nav item and navigates to `/x/:extensionId/:pageId`. No extension code
+ * runs here — only the declarative nav/page surface is resolved.
+ */
+async function buildPages(
+  manifest: ExtensionManifest,
+  source: BundleSource,
+  extensionSource?: string,
+): Promise<PageItem[]> {
+  const pages = manifest.contributes?.pages ?? [];
+  const capabilities = manifest.capabilities ?? [];
+  return Promise.all(
+    pages.map(async (page) => ({
+      extensionId: manifest.id,
+      id: page.id,
+      title: page.title,
+      iconUrl: page.icon ? await source.assetUrl(page.icon) : undefined,
+      pageUrl: page.page ? await source.assetUrl(page.page) : undefined,
+      when: page.when,
+      capabilities,
+      extensionSource,
+    })),
+  );
+}
+
+/**
  * Load an extension from a {@link BundleSource}: read + validate its manifest, resolve
  * its declared contributions (icons, view wiring) and register them so they appear in
  * the host UI. Returns a discriminated result; never throws on a malformed bundle.
@@ -233,6 +261,7 @@ export async function loadExtension(
     views: await buildViews(manifest, source, extensionSource),
     menus: buildMenuItems(manifest, host),
     settingsPages: await buildSettingsPages(manifest, source, extensionSource),
+    pages: await buildPages(manifest, source, extensionSource),
   };
 
   contributionRegistry.register(manifest.id, contributions);

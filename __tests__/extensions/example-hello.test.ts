@@ -38,18 +38,15 @@ describe("examples/extensions/hello-sidebar", () => {
     const result = await loadExtension(source, host);
     expect(result.ok).toBe(true);
 
-    const items = contributionRegistry.getActivityBarItems();
-    expect(items.map((i) => i.title)).toEqual(["Hello"]);
-    expect(items[0].iconUrl).toBe("blob:icon.svg");
+    // Full-width pages are shown as sidebar nav items (like Customize/Automate).
+    const pages = contributionRegistry.getPages();
+    expect(pages.map((p) => p.title)).toEqual(["Hello"]);
+    expect(pages[0].iconUrl).toBe("blob:icon.svg");
+    expect(pages[0].pageUrl).toBe("blob:panel.html");
+    expect(pages[0].capabilities).toEqual(["conversation:read", "storage"]);
 
     const commands = contributionRegistry.getCommands();
     expect(commands.map((c) => c.command)).toEqual(["hello.say"]);
-
-    const views = contributionRegistry.getViews();
-    expect(views.map((v) => v.id)).toEqual(["hello.panel"]);
-    // The view's `page` is resolved to an asset URL for the webview panel.
-    expect(views[0].pageUrl).toBe("blob:panel.html");
-    expect(views[0].capabilities).toEqual(["conversation:read", "storage"]);
 
     // The menu item binds to the contributed command and inherits its title.
     const menuItems = contributionRegistry.getMenuItemsForSlot(

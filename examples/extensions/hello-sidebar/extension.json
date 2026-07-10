@@ -1,28 +1,21 @@
 {
   "id": "acme.hello",
-  "name": "Hello Sidebar",
-  "version": "1.0.0",
+  "name": "Hello Page",
+  "version": "1.1.0",
   "publisher": "acme",
   "engines": { "agentCanvas": "^1.0.0" },
   "main": "main.js",
-  "activationEvents": ["onView:hello.panel", "onCommand:hello.say"],
+  "activationEvents": ["onCommand:hello.say"],
   "capabilities": ["conversation:read", "storage"],
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        { "id": "hello.container", "title": "Hello", "icon": "icon.svg" }
-      ]
-    },
-    "views": {
-      "hello.container": [
-        {
-          "id": "hello.panel",
-          "name": "Hello",
-          "type": "webview",
-          "page": "panel.html"
-        }
-      ]
-    },
+    "pages": [
+      {
+        "id": "main",
+        "title": "Hello",
+        "icon": "icon.svg",
+        "page": "panel.html"
+      }
+    ],
     "commands": [{ "command": "hello.say", "title": "Hello: Say hi" }],
     "menus": {
       "conversationTabs/context": [{ "command": "hello.say" }],

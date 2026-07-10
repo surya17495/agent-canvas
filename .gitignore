@@ -32,3 +32,4 @@ ralph/
 # Local runtime artifacts produced by static-server / agent-server runs
 workspace/
 build-fresh/
+.playwright-mcp/

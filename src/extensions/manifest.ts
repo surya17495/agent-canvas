@@ -63,6 +63,27 @@ export interface SettingsPageManifest {
   when?: string;
 }
 
+/**
+ * A full-width page contributed by an extension. Renders as a navigation item in the
+ * sidebar (alongside built-in entries like Customize and Automate) and navigates to
+ * `/x/:extensionId/:pageId` when selected.
+ */
+export interface PageManifest {
+  /** Page id, namespaces the page within its extension (e.g. `"dashboard"`). */
+  id: string;
+  /** Nav-item label shown in the sidebar. */
+  title: string;
+  /** Relative path within the bundle to an icon asset (e.g. `"icon.svg"`). */
+  icon?: string;
+  /** Relative path within the bundle to the page's webview HTML document. */
+  page?: string;
+  /**
+   * Optional visibility clause evaluated against the host UI-context (see `when.ts`).
+   * Hiding the page's nav item runs no extension code — it reads host facts only.
+   */
+  when?: string;
+}
+
 export interface ContributesManifest {
   viewsContainers?: { activitybar?: ActivityBarContainerManifest[] };
   /** Map of container id → views contributed into it. */
@@ -72,6 +93,11 @@ export interface ContributesManifest {
   menus?: Record<string, MenuItemManifest[]>;
   /** Settings pages, each merged into the Settings nav and mounted as a webview. */
   settingsPages?: SettingsPageManifest[];
+  /**
+   * Full-width pages shown as sidebar nav items (like Customize/Automate). Each page
+   * navigates to `/x/:extensionId/:pageId` and renders the webview in the main area.
+   */
+  pages?: PageManifest[];
 }
 
 export interface ExtensionManifest {
@@ -247,6 +273,34 @@ function validateContributes(
         return {
           id: v.requireString(obj.id, `${path}.id`) ?? "",
           title: v.requireString(obj.title, `${path}.title`) ?? "",
+          page:
+            obj.page === undefined
+              ? undefined
+              : v.requireString(obj.page, `${path}.page`),
+          when:
+            obj.when === undefined
+              ? undefined
+              : v.requireString(obj.when, `${path}.when`),
+        };
+      });
+    }
+  }
+
+  if (raw.pages !== undefined) {
+    if (!Array.isArray(raw.pages)) {
+      v.fail("contributes.pages", "expected an array");
+    } else {
+      contributes.pages = raw.pages.map((entry, i) => {
+        const path = `contributes.pages[${i}]`;
+        const obj = isObject(entry) ? entry : {};
+        if (!isObject(entry)) v.fail(path, "expected an object");
+        return {
+          id: v.requireString(obj.id, `${path}.id`) ?? "",
+          title: v.requireString(obj.title, `${path}.title`) ?? "",
+          icon:
+            obj.icon === undefined
+              ? undefined
+              : v.requireString(obj.icon, `${path}.icon`),
           page:
             obj.page === undefined
               ? undefined

@@ -11,6 +11,7 @@ import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
+import { SidebarPageLink } from "./sidebar-page-link";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
@@ -19,7 +20,10 @@ import { BackendStatusDot } from "#/components/features/backends/backend-status-
 import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
 import { SidebarConversationList } from "./sidebar-conversation-list";
 import { SidebarContributionButton } from "./sidebar-contribution-button";
-import { useActivityBarItems } from "#/extensions/use-contributions";
+import {
+  useActivityBarItems,
+  useExtensionPages,
+} from "#/extensions/use-contributions";
 import AutomationsIcon from "#/icons/automations.svg?react";
 import {
   SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS,
@@ -79,6 +83,7 @@ export function SidebarRailBody({
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
   const activityBarItems = useActivityBarItems();
+  const extensionPages = useExtensionPages();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
 
   return (
@@ -212,6 +217,13 @@ export function SidebarRailBody({
           <SidebarContributionButton
             key={`${item.extensionId}:${item.id}`}
             item={item}
+            collapsed={collapsed}
+          />
+        ))}
+        {extensionPages.map((page) => (
+          <SidebarPageLink
+            key={`${page.extensionId}:${page.id}`}
+            page={page}
             collapsed={collapsed}
           />
         ))}

@@ -4,6 +4,7 @@ import type {
   CommandItem,
   ExtensionContributions,
   MenuItem,
+  PageItem,
   SettingsPageItem,
   ViewItem,
 } from "./types";
@@ -42,6 +43,8 @@ interface ContributionRegistryState {
   menuItemsBySlot: Record<string, MenuItem[]>;
   /** Derived flat list of all contributed settings pages. */
   settingsPages: SettingsPageItem[];
+  /** Derived flat list of all contributed full-width pages. */
+  pages: PageItem[];
 
   /** Register (or replace) all contributions for an extension. */
   register: (
@@ -79,6 +82,7 @@ function derive(byExtension: Record<string, ExtensionContributions>) {
     menuItems,
     menuItemsBySlot: groupBySlot(menuItems),
     settingsPages: flatten(byExtension, (c) => c.settingsPages),
+    pages: flatten(byExtension, (c) => c.pages),
   };
 }
 
@@ -91,6 +95,7 @@ export const useContributionRegistry = create<ContributionRegistryState>(
     menuItems: [],
     menuItemsBySlot: {},
     settingsPages: [],
+    pages: [],
 
     register: (extensionId, contributions) =>
       set((state) =>
@@ -133,6 +138,10 @@ export function selectSettingsPages(
   return state.settingsPages;
 }
 
+export function selectPages(state: ContributionRegistryState): PageItem[] {
+  return state.pages;
+}
+
 export function selectMenuItems(state: ContributionRegistryState): MenuItem[] {
   return state.menuItems;
 }
@@ -161,6 +170,7 @@ export const contributionRegistry = {
   getCommands: () => useContributionRegistry.getState().commands,
   getViews: () => useContributionRegistry.getState().views,
   getSettingsPages: () => useContributionRegistry.getState().settingsPages,
+  getPages: () => useContributionRegistry.getState().pages,
   getMenuItems: () => useContributionRegistry.getState().menuItems,
   /** All menu items targeting a given slot, in extension insertion order. */
   getMenuItemsForSlot: (slot: string): MenuItem[] =>
@@ -168,4 +178,9 @@ export const contributionRegistry = {
   /** Resolve a single contributed view by id (used by the webview host). */
   getView: (viewId: string): ViewItem | undefined =>
     useContributionRegistry.getState().views.find((v) => v.id === viewId),
+  /** Resolve a single contributed page by extensionId and pageId. */
+  getPage: (extensionId: string, pageId: string): PageItem | undefined =>
+    useContributionRegistry
+      .getState()
+      .pages.find((p) => p.extensionId === extensionId && p.id === pageId),
 };
