@@ -146,6 +146,202 @@ await agentCanvas.backend.cloudFetch({
 });
 ```
 
+## Webview Theming & Styling
+
+Extensions run in sandboxed iframes that are isolated from the host page. To help webviews
+match the Agent Canvas look and feel, the host sends theme variables and a ready signal.
+
+### Theme Variables
+
+The host sends a `agentCanvas:theme` message containing CSS custom properties immediately
+after the iframe loads. Listen for it and apply the variables to your document:
+
+```js
+window.addEventListener("message", function(event) {
+  var msg = event.data;
+  
+  // Theme message: { type: "agentCanvas:theme", variables: { "--oh-background": "#0B0E14", ... } }
+  if (msg && msg.type === "agentCanvas:theme") {
+    Object.keys(msg.variables).forEach(function(name) {
+      document.documentElement.style.setProperty(name, msg.variables[name]);
+    });
+  }
+});
+```
+
+**Important:** Variable names arrive with their full CSS names (e.g., `--oh-background`,
+`--oh-foreground`). Use them as-is — do not add another `--oh-` prefix.
+
+### Available Theme Variables
+
+| Variable | Description | Default (dark) |
+|----------|-------------|----------------|
+| `--oh-background` | Page background | `#0B0E14` |
+| `--oh-surface` | Panel/card background | `#21252F` |
+| `--oh-surface-raised` | Elevated elements | `#2C313F` |
+| `--oh-foreground` | Primary text | `#EEF2F7` |
+| `--oh-text-secondary` | Secondary text | `#C3CDDC` |
+| `--oh-muted` | Placeholder text | `#A3B0C4` |
+| `--oh-border` | Standard borders | `#4B5468` |
+| `--oh-border-subtle` | Subtle dividers | `#383F50` |
+| `--oh-color-primary` | Gold accent | `#c9b974` |
+| `--oh-color-success` | Green | `#a5e75e` |
+| `--oh-color-danger` | Red | `#e76a5e` |
+| `--oh-radius` | Border radius | `8px` |
+
+### Critical: Set Explicit Background Color
+
+Sandboxed iframes have a **white background by default** — `background: transparent` does
+not work because the iframe container itself is not transparent. You **must** explicitly
+set the background color on both `html` and `body`:
+
+```css
+html, body {
+  background: var(--oh-background);
+}
+
+body {
+  color: var(--oh-foreground);
+  /* ... other styles */
+}
+```
+
+### Ready Signal: Wait Before Making API Calls
+
+The host sets up the RPC message listener in the iframe's `onLoad` handler, which fires
+**after** your scripts have already executed. If you make API calls immediately, they
+will be lost.
+
+Wait for the `agentCanvas:ready` signal before calling any `agentCanvas.*` APIs:
+
+```js
+var hostReady = false;
+
+window.addEventListener("message", function(event) {
+  if (event.data && event.data.type === "agentCanvas:ready") {
+    hostReady = true;
+    // Now safe to call agentCanvas.backend.cloudFetch(), etc.
+    loadData();
+  }
+});
+
+// Fallback for older hosts that don't send the signal
+setTimeout(function() {
+  if (!hostReady) {
+    hostReady = true;
+    loadData();
+  }
+}, 100);
+```
+
+### Complete Webview Setup Pattern
+
+Here's the recommended pattern that handles theming, ready signal, and RPC correctly:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>
+    :root {
+      /* Fallback values in case theme message hasn't arrived */
+      --oh-background: #0B0E14;
+      --oh-foreground: #EEF2F7;
+      --oh-surface: #21252F;
+      --oh-border: #4B5468;
+      --oh-color-primary: #c9b974;
+    }
+    
+    html, body {
+      background: var(--oh-background);
+    }
+    
+    body {
+      color: var(--oh-foreground);
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">Loading...</div>
+  <script>
+    var parentWindow = window.parent;
+    var pending = {};
+    var nextId = 1;
+    var hostReady = false;
+    
+    // Message handler for theme, ready signal, and RPC responses
+    window.addEventListener("message", function(event) {
+      if (event.source !== parentWindow) return;
+      var msg = event.data;
+      
+      // Apply theme variables
+      if (msg && msg.type === "agentCanvas:theme") {
+        Object.keys(msg.variables).forEach(function(name) {
+          document.documentElement.style.setProperty(name, msg.variables[name]);
+        });
+        return;
+      }
+      
+      // Ready signal - safe to make API calls
+      if (msg && msg.type === "agentCanvas:ready") {
+        if (!hostReady) {
+          hostReady = true;
+          init(); // Your initialization function
+        }
+        return;
+      }
+      
+      // RPC response
+      if (msg && msg.kind === "response") {
+        var entry = pending[msg.id];
+        if (entry) {
+          delete pending[msg.id];
+          if (msg.error) entry.reject(new Error(msg.error));
+          else entry.resolve(msg.result);
+        }
+      }
+    });
+    
+    // RPC request helper
+    function request(method, params) {
+      var id = nextId++;
+      return new Promise(function(resolve, reject) {
+        pending[id] = { resolve: resolve, reject: reject };
+        parentWindow.postMessage(
+          { kind: "request", id: id, method: method, params: params },
+          "*"
+        );
+      });
+    }
+    
+    // API object
+    var agentCanvas = {
+      backend: {
+        cloudFetch: function(p) { return request("backend.cloudFetch", p); }
+      },
+      storage: {
+        get: function(key) { return request("storage.get", { key: key }); },
+        set: function(key, value) { return request("storage.set", { key: key, value: value }); }
+      }
+    };
+    
+    // Fallback if ready signal doesn't arrive
+    setTimeout(function() {
+      if (!hostReady) { hostReady = true; init(); }
+    }, 100);
+    
+    function init() {
+      // Your initialization code here
+    }
+  </script>
+</body>
+</html>
+```
+
+See `examples/extensions/sandboxes/panel.html` for a complete real-world example.
 
 ## Publishing a versioned release
 
