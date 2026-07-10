@@ -58,9 +58,11 @@ const THEME_MESSAGE_TYPE = "agentCanvas:theme";
 
 /**
  * Extracts current theme CSS variables from the host document.
+ * Note: CSS variables are scoped to [data-agent-server-ui] (on body), not :root,
+ * so we read from document.body instead of document.documentElement.
  */
 function getThemeVariables(): Record<string, string> {
-  const computed = getComputedStyle(document.documentElement);
+  const computed = getComputedStyle(document.body);
   const vars: Record<string, string> = {};
   for (const name of THEME_VARIABLES) {
     const value = computed.getPropertyValue(name).trim();
