@@ -18,6 +18,16 @@ export interface Disposable {
   dispose(): void;
 }
 
+/** Options for creating a new conversation. */
+export interface CreateConversationOptions {
+  /** Optional initial message to send. */
+  initialMessage?: string;
+  /** Optional sandbox ID to reuse an existing sandbox. */
+  sandboxId?: string;
+  /** Optional title for the conversation. */
+  title?: string;
+}
+
 export interface AgentCanvasApi {
   commands: {
     /** Register a handler for a command declared in the manifest. */
@@ -32,11 +42,17 @@ export interface AgentCanvasApi {
   conversation: {
     /** The currently active conversation, or null. Requires `conversation:read`. */
     getActive(): Promise<ConversationSummary | null>;
+    /** Create a new conversation and navigate to it. Returns the task/conversation ID. */
+    create(options?: CreateConversationOptions): Promise<string>;
   };
   storage: {
     /** Per-extension namespaced storage. Requires the `storage` capability. */
     get<T = unknown>(key: string): Promise<T | null>;
     set<T = unknown>(key: string, value: T): Promise<void>;
+  };
+  navigation: {
+    /** Navigate to a path within the app (e.g. "/conversations/abc123"). */
+    navigate(path: string): Promise<void>;
   };
 }
 

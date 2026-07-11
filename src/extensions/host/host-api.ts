@@ -1,5 +1,8 @@
 import type { Capability } from "../manifest";
-import type { ConversationSummary } from "../sdk/types";
+import type {
+  ConversationSummary,
+  CreateConversationOptions,
+} from "../sdk/types";
 import type { RpcMethodMap } from "./rpc";
 
 /** HTTP methods for backend fetch calls. */
@@ -45,6 +48,10 @@ export interface HostApiDeps {
     method: BackendFetchMethod,
     body?: unknown,
   ): Promise<BackendFetchResponse | null>;
+  /** Navigate to a path within the app (e.g. "/conversations/abc123"). */
+  navigate?(path: string): void;
+  /** Create a new conversation and return its ID. */
+  createConversation?(options?: CreateConversationOptions): Promise<string>;
 }
 
 export class CapabilityError extends Error {
@@ -119,6 +126,23 @@ export function createHostMethods(
       }
 
       return deps.backendCloudFetch(path, method, body);
+    },
+
+    "navigation.navigate": (params) => {
+      const { path } = params as { path: string };
+      if (deps.navigate) {
+        deps.navigate(path);
+      }
+    },
+
+    "conversation.create": async (params) => {
+      requireCapability(granted, "backend:cloud:write");
+      const options = (params as { options?: CreateConversationOptions })
+        .options;
+      if (!deps.createConversation) {
+        throw new Error("Conversation creation not available");
+      }
+      return deps.createConversation(options);
     },
   };
 }

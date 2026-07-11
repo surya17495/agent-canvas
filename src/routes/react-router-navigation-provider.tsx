@@ -9,6 +9,7 @@ import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
+import { setExtensionNavigate } from "#/extensions/host/create-app-host-deps";
 
 interface MatchWithParams {
   params?: {
@@ -34,6 +35,11 @@ export function ReactRouterNavigationProvider({
 
     return null;
   }, [matches]);
+
+  // Wire up navigation for extensions
+  React.useEffect(() => {
+    setExtensionNavigate((path: string) => navigate(path));
+  }, [navigate]);
 
   const value = React.useMemo<NavigationContextValue>(
     () => ({

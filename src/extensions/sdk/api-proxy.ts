@@ -1,5 +1,5 @@
 import type { RpcEndpoint } from "../host/rpc";
-import type { AgentCanvasApi } from "./types";
+import type { AgentCanvasApi, CreateConversationOptions } from "./types";
 
 /**
  * Build the `agentCanvas` API object that forwards calls to the host over an
@@ -29,11 +29,17 @@ export function createAgentCanvasApi(
     },
     conversation: {
       getActive: () => endpoint.request("conversation.getActive"),
+      create: (options?: CreateConversationOptions) =>
+        endpoint.request<string>("conversation.create", { options }),
     },
     storage: {
       get: (key) => endpoint.request("storage.get", { key }),
       set: (key, value) =>
         endpoint.request<void>("storage.set", { key, value }),
+    },
+    navigation: {
+      navigate: (path) =>
+        endpoint.request<void>("navigation.navigate", { path }),
     },
   };
 }

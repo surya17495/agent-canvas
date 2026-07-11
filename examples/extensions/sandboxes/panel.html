@@ -37,6 +37,7 @@
         
         /* Radius */
         --oh-radius: 8px;
+        --oh-radius-lg: 16px;
       }
 
       * {
@@ -50,174 +51,311 @@
       body {
         font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         margin: 0;
-        padding: 20px;
+        padding: 0;
         color: var(--oh-foreground);
         font-size: 14px;
         line-height: 1.5;
       }
 
-      /* Header */
-      .header {
+      /* Page container - matches automations */
+      .page-container {
+        max-width: 56rem; /* max-w-4xl */
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      /* Page header - matches automations */
+      .page-header {
         display: flex;
+        align-items: flex-start;
         justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
+        gap: 16px;
       }
 
-      .header h1 {
+      .page-header-text {
+        min-width: 0;
+      }
+
+      .page-title {
         margin: 0;
-        font-size: 24px;
+        font-size: 1.25rem;
         font-weight: 600;
+        color: var(--oh-foreground);
       }
 
-      /* Toolbar */
-      .toolbar {
-        display: flex;
-        gap: 12px;
+      .page-subtitle {
+        margin: 4px 0 0 0;
+        font-size: 0.875rem;
+        color: var(--oh-muted);
+      }
+
+      /* Brand button - matches BrandButton secondary variant */
+      .brand-btn {
+        display: inline-flex;
         align-items: center;
-        margin-bottom: 16px;
-        flex-wrap: wrap;
-      }
-
-      .filter-group {
-        display: flex;
+        justify-content: center;
         gap: 8px;
-        align-items: center;
-      }
-
-      .filter-group label {
-        color: var(--oh-text-secondary);
-        font-size: 13px;
-      }
-
-      .checkbox-group {
-        display: flex;
-        gap: 12px;
-      }
-
-      .checkbox-label {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        color: var(--oh-text-secondary);
-        font-size: 13px;
-      }
-
-      .checkbox-label input {
-        accent-color: var(--oh-color-primary);
-      }
-
-      .sort-select {
+        padding: 8px 16px;
+        min-height: 36px;
         background: var(--oh-surface);
         border: 1px solid var(--oh-border);
-        border-radius: 6px;
-        color: var(--oh-foreground);
-        padding: 6px 10px;
-        font-size: 13px;
-        cursor: pointer;
-      }
-
-      .sort-select:hover {
-        border-color: var(--oh-interactive-hover);
-      }
-
-      /* Buttons */
-      .btn {
-        border: none;
         border-radius: var(--oh-radius);
-        padding: 8px 16px;
+        color: var(--oh-foreground);
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
-        transition: opacity 150ms, background-color 150ms;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+        white-space: nowrap;
+        transition: background-color 0.15s ease;
+        flex-shrink: 0;
       }
 
-      .btn:disabled {
+      .brand-btn:hover {
+        background: var(--oh-surface-raised);
+      }
+
+      .brand-btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
 
-      .btn-primary {
-        background: var(--oh-color-primary);
-        color: var(--oh-background);
+      .brand-btn svg {
+        width: 16px;
+        height: 16px;
       }
 
-      .btn-primary:hover:not(:disabled) {
-        opacity: 0.9;
-      }
-
-      .btn-secondary {
+      /* Add conversation button - smaller, fits in expanded section */
+      .add-conversation-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
         background: transparent;
+        border: 1px dashed var(--oh-border);
+        border-radius: var(--oh-radius);
+        color: var(--oh-text-secondary);
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        margin-top: 8px;
+      }
+
+      .add-conversation-btn:hover {
+        background: var(--oh-interactive-hover-low);
+        border-color: var(--oh-color-primary);
+        color: var(--oh-color-primary);
+      }
+
+      .add-conversation-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* Toolbar - search and filters */
+      .toolbar {
+        margin-top: 24px;
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .search-container {
+        flex: 1;
+        position: relative;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 8px 12px 8px 36px;
+        background: var(--oh-surface);
+        border: 1px solid var(--oh-border);
+        border-radius: var(--oh-radius);
         color: var(--oh-foreground);
-        border: 1px solid var(--oh-border);
+        font-size: 14px;
       }
 
-      .btn-secondary:hover:not(:disabled) {
+      .search-input::placeholder {
+        color: var(--oh-text-dim);
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: var(--oh-color-primary);
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--oh-text-dim);
+        font-size: 14px;
+      }
+
+      .filter-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        background: var(--oh-surface);
+        border: 1px solid var(--oh-border);
+        border-radius: var(--oh-radius);
+        color: var(--oh-foreground);
+        font-size: 14px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .filter-btn:hover {
         background: var(--oh-interactive-hover-low);
       }
 
-      .btn-sm {
-        padding: 4px 10px;
+      .filter-btn.active {
+        border-color: var(--oh-color-primary);
+        color: var(--oh-color-primary);
+      }
+
+      /* Content sections */
+      .content-sections {
+        margin-top: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      /* Section group - matches AutomationGroup */
+      .section-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--oh-foreground);
+        margin: 0;
+      }
+
+      .section-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 8px;
+        background: var(--oh-surface-raised);
+        border-radius: 9999px;
         font-size: 12px;
+        font-weight: 500;
+        color: var(--oh-text-secondary);
       }
 
-      .btn-icon {
-        padding: 6px;
-        background: transparent;
-        border: 1px solid var(--oh-border);
+      .load-more-row {
+        cursor: pointer;
+        transition: background 0.15s ease;
       }
 
-      .btn-icon:hover:not(:disabled) {
-        background: var(--oh-interactive-hover-low);
+      .load-more-row td {
+        padding: 12px 16px;
+        text-align: left;
+        border-top: 1px solid var(--oh-border);
       }
 
-      /* Table */
+      .load-more-row:hover {
+        background: var(--oh-surface-raised);
+      }
+
+      .load-more-text {
+        color: var(--oh-text-secondary);
+        font-size: 13px;
+      }
+
+      .load-more-row:hover .load-more-text {
+        color: var(--oh-foreground);
+      }
+
+      /* Table container - matches automations list */
       .table-container {
         border: 1px solid var(--oh-border);
-        border-radius: 6px;
+        border-radius: var(--oh-radius-lg);
         background: var(--oh-surface);
         overflow: hidden;
+      }
+
+      .sandbox-table {
+        width: 100%;
+        border-collapse: collapse;
       }
 
       .sandbox-row {
         border-top: 1px solid var(--oh-border);
         transition: background-color 150ms;
+        cursor: pointer;
       }
 
       .sandbox-row:first-child {
         border-top: none;
       }
 
-      .sandbox-header {
-        display: grid;
-        grid-template-columns: 24px 1fr auto auto auto;
-        gap: 12px;
-        align-items: center;
-        padding: 12px 16px;
-        cursor: pointer;
-        min-height: 56px;
-      }
-
-      .sandbox-header:hover {
+      .sandbox-row:hover {
         background: var(--oh-interactive-hover-low);
       }
 
-      .sandbox-row.expanded .sandbox-header {
+      .sandbox-row.expanded {
         background: var(--oh-surface-raised);
       }
 
-      .expand-icon {
-        color: var(--oh-text-dim);
-        transition: transform 150ms;
-        font-size: 12px;
+      .sandbox-cell {
+        padding: 12px 16px;
+        vertical-align: middle;
       }
 
-      .sandbox-row.expanded .expand-icon {
+      .sandbox-cell:first-child {
+        padding-left: 16px;
+      }
+
+      .sandbox-cell:last-child {
+        padding-right: 20px;
+      }
+
+      .sandbox-cell-main {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .expand-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        color: var(--oh-text-dim);
+        transition: transform 0.15s ease, color 0.15s ease;
+      }
+
+      .sandbox-row:hover .expand-toggle {
+        color: var(--oh-text-secondary);
+      }
+
+      .sandbox-row.expanded .expand-toggle {
         transform: rotate(90deg);
+        color: var(--oh-foreground);
+      }
+
+      .sandbox-icon {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        color: var(--oh-muted);
       }
 
       .sandbox-info {
@@ -225,6 +363,7 @@
         flex-direction: column;
         gap: 2px;
         min-width: 0;
+        flex: 1;
       }
 
       .sandbox-name {
@@ -233,12 +372,43 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        max-width: 300px;
+      }
+
+      .sandbox-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
 
       .sandbox-id {
         font-size: 12px;
         color: var(--oh-text-dim);
-        font-family: monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      .sandbox-id.copyable {
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        transition: background 0.15s ease;
+      }
+
+      .sandbox-id.copyable:hover {
+        background: var(--oh-surface-raised);
+        color: var(--oh-text-secondary);
+      }
+
+      .meta-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        background: var(--oh-surface-raised);
+        border-radius: 9999px;
+        font-size: 11px;
+        color: var(--oh-text-secondary);
       }
 
       .sandbox-name-input {
@@ -256,81 +426,142 @@
         border-color: var(--oh-color-primary);
       }
 
-      /* Status badges */
-      .badge {
-        padding: 3px 10px;
+      /* Status badges - smaller, inline */
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
         border-radius: 4px;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.3px;
       }
 
-      .badge-running {
+      .status-running {
         background: rgba(165, 231, 94, 0.15);
         color: #a5e75e;
       }
 
-      .badge-paused {
+      .status-paused {
         background: rgba(201, 185, 116, 0.15);
         color: #c9b974;
       }
 
-      .badge-starting {
+      .status-starting {
         background: rgba(240, 180, 41, 0.15);
         color: #f0b429;
       }
 
-      .badge-error {
+      .status-error {
         background: rgba(231, 106, 94, 0.15);
         color: #e76a5e;
       }
 
-      .badge-missing, .badge-stopped {
+      .status-missing, .status-stopped {
         background: rgba(126, 138, 158, 0.15);
         color: #7E8A9E;
       }
 
-      .time-info {
-        text-align: right;
-        min-width: 100px;
+      /* Actions cell */
+      .sandbox-cell-actions {
+        white-space: nowrap;
       }
 
-      .time-label {
-        font-size: 11px;
-        color: var(--oh-text-dim);
-        text-transform: uppercase;
+      .actions-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
       }
 
-      .time-value {
+      /* Buttons - matching automations style */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 6px;
         font-size: 13px;
-        color: var(--oh-text-secondary);
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 150ms, opacity 150ms;
+        border: 1px solid var(--oh-border);
+        background: transparent;
+        color: var(--oh-foreground);
       }
 
-      /* Expanded content */
+      .btn:hover:not(:disabled) {
+        background: var(--oh-interactive-hover-low);
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: var(--oh-color-primary);
+        border-color: var(--oh-color-primary);
+        color: var(--oh-background);
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        opacity: 0.9;
+        background: var(--oh-color-primary);
+      }
+
+      .btn-sm {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+
+      .btn-icon {
+        padding: 6px;
+        border-radius: 6px;
+      }
+
+      /* Expanded content - section card style */
       .sandbox-expanded {
         display: none;
-        background: var(--oh-surface-deep);
         border-top: 1px solid var(--oh-border-subtle);
-        padding: 16px;
       }
 
-      .sandbox-row.expanded .sandbox-expanded {
+      .sandbox-row.expanded + .sandbox-expanded-row .sandbox-expanded {
         display: block;
       }
 
-      .expanded-header {
+      .expanded-content {
+        padding: 16px 20px;
+        background: var(--oh-surface-deep);
+      }
+
+      .expanded-section {
+        margin-bottom: 16px;
+      }
+
+      .expanded-section:last-child {
+        margin-bottom: 0;
+      }
+
+      .expanded-section-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        gap: 8px;
         margin-bottom: 12px;
       }
 
-      .expanded-header h4 {
-        margin: 0;
+      .expanded-section-icon {
+        width: 16px;
+        height: 16px;
+        color: var(--oh-muted);
+      }
+
+      .expanded-section-title {
         font-size: 13px;
-        color: var(--oh-text-secondary);
         font-weight: 500;
+        color: var(--oh-text-secondary);
+        margin: 0;
       }
 
       .conversation-list {
@@ -344,18 +575,39 @@
         justify-content: space-between;
         align-items: center;
         padding: 10px 12px;
-        background: var(--oh-surface);
+        background: transparent;
         border-radius: 6px;
-        border: 1px solid var(--oh-border-subtle);
+        cursor: pointer;
+        transition: all 0.15s ease;
       }
 
       .conversation-item:hover {
-        border-color: var(--oh-border);
+        background: var(--oh-interactive-hover-low);
+      }
+
+      .conversation-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
       }
 
       .conversation-title {
         color: var(--oh-foreground);
         font-weight: 500;
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .conversation-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--oh-text-dim);
       }
 
       .conversation-time {
@@ -363,20 +615,73 @@
         color: var(--oh-text-dim);
       }
 
+      .conversation-arrow {
+        color: var(--oh-text-dim);
+        flex-shrink: 0;
+        margin-left: 8px;
+        transition: color 0.15s ease;
+      }
+
+      .conversation-item:hover .conversation-arrow {
+        color: var(--oh-foreground);
+      }
+
+      .conn-status {
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        margin-left: 8px;
+      }
+
+      .conn-ready {
+        color: var(--oh-success);
+        background: rgba(34, 197, 94, 0.1);
+      }
+
+      .conn-missing {
+        color: var(--oh-warning, #f59e0b);
+        background: rgba(245, 158, 11, 0.1);
+      }
+
       .no-conversations {
         color: var(--oh-text-dim);
-        font-style: italic;
-        padding: 12px;
+        font-size: 13px;
+        padding: 16px;
         text-align: center;
       }
 
+      /* Config fields - like automations detail */
+      .config-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+      }
+
+      .config-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .config-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: var(--oh-text-dim);
+      }
+
+      .config-value {
+        font-size: 13px;
+        color: var(--oh-text-secondary);
+      }
+
       /* States */
-      .loading {
+      .loading-state {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 60px 20px;
+        padding: 80px 24px;
         color: var(--oh-text-secondary);
       }
 
@@ -396,47 +701,119 @@
 
       .empty-state {
         text-align: center;
-        padding: 60px 20px;
+        padding: 80px 24px;
         color: var(--oh-text-secondary);
+      }
+
+      .empty-state-icon {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 16px;
+        color: var(--oh-text-dim);
       }
 
       .empty-state h3 {
         margin: 0 0 8px 0;
+        font-size: 16px;
+        font-weight: 500;
         color: var(--oh-foreground);
+      }
+
+      .empty-state p {
+        margin: 0;
+        font-size: 14px;
       }
 
       .error-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         text-align: center;
-        padding: 40px 20px;
-        color: var(--oh-color-danger);
+        padding: 40px 24px;
+        margin-top: 24px;
         background: rgba(231, 106, 94, 0.1);
-        border-radius: var(--oh-radius);
-        margin-top: 20px;
+        border: 1px solid rgba(231, 106, 94, 0.2);
+        border-radius: var(--oh-radius-lg);
       }
 
-      .not-cloud {
+      .error-state p {
+        margin: 0 0 16px 0;
+        color: var(--oh-color-danger);
+      }
+
+      .not-cloud-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         text-align: center;
-        padding: 60px 20px;
+        padding: 80px 24px;
+      }
+
+      .not-cloud-state-icon {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 16px;
+        color: var(--oh-text-dim);
+      }
+
+      .not-cloud-state h3 {
+        margin: 0 0 8px 0;
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--oh-foreground);
+      }
+
+      .not-cloud-state p {
+        margin: 0;
+        font-size: 14px;
         color: var(--oh-text-secondary);
       }
 
-      .not-cloud h3 {
+      /* Refresh button in header */
+      .refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        background: transparent;
+        border: 1px solid var(--oh-border);
+        border-radius: var(--oh-radius);
         color: var(--oh-foreground);
-        margin: 0 0 12px 0;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 150ms;
       }
 
-      /* Actions column */
-      .actions {
-        display: flex;
-        gap: 8px;
+      .refresh-btn:hover {
+        background: var(--oh-interactive-hover-low);
+      }
+
+      .refresh-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* SVG icons */
+      .icon {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+
+      .icon-sm {
+        width: 14px;
+        height: 14px;
       }
     </style>
   </head>
   <body>
     <div id="app">
-      <div class="loading">
-        <div class="spinner"></div>
-        <div>Loading sandboxes...</div>
+      <div class="page-container">
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <div>Loading sandboxes...</div>
+        </div>
       </div>
     </div>
 
@@ -496,6 +873,16 @@
             showErrorMessage: function(message) {
               return request("window.showErrorMessage", { message: message });
             }
+          },
+          navigation: {
+            navigate: function(path) {
+              return request("navigation.navigate", { path: path });
+            }
+          },
+          conversation: {
+            create: function(options) {
+              return request("conversation.create", { options: options });
+            }
           }
         };
 
@@ -510,14 +897,18 @@
         }
 
         // ===== State =====
+        var SECTION_PAGE_SIZE = 5; // Initial limit per section
+        
         var state = {
           sandboxes: [],
           conversations: [],
           sandboxNames: {},
           expandedSandboxes: new Set(),
+          expandedSections: new Set(), // Sections that show all items
           editingSandboxId: null,
           filters: { running: true, paused: true, stopped: false },
           sortBy: "status",
+          searchQuery: "",
           loading: true,
           error: null,
           cloudAvailable: null
@@ -587,31 +978,34 @@
         }
 
         function filterAndSort(groups) {
-          // Filter
+          // Filter by status (STARTING is grouped with Running)
           var filtered = groups.filter(function(g) {
             var status = (g.status || "").toUpperCase();
-            if (status === "RUNNING" && !state.filters.running) return false;
+            if ((status === "RUNNING" || status === "STARTING") && !state.filters.running) return false;
             if (status === "PAUSED" && !state.filters.paused) return false;
-            if ((status === "MISSING" || status === "ERROR") && !state.filters.stopped) return false;
+            if ((status === "MISSING" || status === "ERROR" || status === "STOPPED") && !state.filters.stopped) return false;
             return true;
           });
           
-          // Sort
+          // Filter by search query
+          if (state.searchQuery) {
+            var query = state.searchQuery.toLowerCase();
+            filtered = filtered.filter(function(g) {
+              var displayName = state.sandboxNames[g.sandboxId] || g.sandboxId;
+              if (displayName.toLowerCase().indexOf(query) !== -1) return true;
+              if (g.sandboxId.toLowerCase().indexOf(query) !== -1) return true;
+              // Also search conversation titles
+              return g.conversations.some(function(conv) {
+                return (conv.title || "").toLowerCase().indexOf(query) !== -1;
+              });
+            });
+          }
+          
+          // Sort by last active (most recent first)
           filtered.sort(function(a, b) {
-            if (state.sortBy === "status") {
-              return getStatusPriority(a.status) - getStatusPriority(b.status);
-            }
-            if (state.sortBy === "lastActive") {
-              var aTime = new Date(a.lastActive || 0);
-              var bTime = new Date(b.lastActive || 0);
-              return bTime - aTime;
-            }
-            if (state.sortBy === "created") {
-              var aCreated = new Date(a.createdAt || 0);
-              var bCreated = new Date(b.createdAt || 0);
-              return bCreated - aCreated;
-            }
-            return 0;
+            var aTime = new Date(a.lastActive || 0);
+            var bTime = new Date(b.lastActive || 0);
+            return bTime - aTime;
           });
           
           return filtered;
@@ -688,7 +1082,13 @@
           }
         }
 
+        // Track sandboxes we're currently waking/pausing
+        var pendingActions = new Set();
+
         async function pauseSandbox(sandboxId) {
+          if (pendingActions.has(sandboxId)) return;
+          pendingActions.add(sandboxId);
+          
           try {
             var response = await agentCanvas.backend.cloudFetch({
               path: "/api/v1/sandboxes/" + encodeURIComponent(sandboxId) + "/pause",
@@ -696,17 +1096,23 @@
             });
             
             if (response && response.ok) {
-              await agentCanvas.window.showInformationMessage("Sandbox paused successfully");
+              // Refresh immediately to show status change
               await fetchData();
+              await agentCanvas.window.showInformationMessage("Sandbox paused");
             } else {
               throw new Error("Failed to pause sandbox");
             }
           } catch (err) {
             await agentCanvas.window.showErrorMessage("Error: " + err.message);
+          } finally {
+            pendingActions.delete(sandboxId);
           }
         }
 
         async function resumeSandbox(sandboxId) {
+          if (pendingActions.has(sandboxId)) return;
+          pendingActions.add(sandboxId);
+          
           try {
             var response = await agentCanvas.backend.cloudFetch({
               path: "/api/v1/sandboxes/" + encodeURIComponent(sandboxId) + "/resume",
@@ -714,14 +1120,57 @@
             });
             
             if (response && response.ok) {
-              await agentCanvas.window.showInformationMessage("Sandbox resumed successfully");
+              // Refresh immediately to show STARTING status
               await fetchData();
+              // Start polling for status changes
+              pollSandboxStatus(sandboxId);
             } else {
-              throw new Error("Failed to resume sandbox");
+              throw new Error("Failed to wake sandbox");
             }
           } catch (err) {
             await agentCanvas.window.showErrorMessage("Error: " + err.message);
+            pendingActions.delete(sandboxId);
           }
+        }
+
+        // Poll for sandbox status changes after wake request
+        function pollSandboxStatus(sandboxId) {
+          var pollCount = 0;
+          var maxPolls = 60; // Poll for up to 2 minutes (every 2 seconds)
+          
+          var pollInterval = setInterval(async function() {
+            pollCount++;
+            
+            try {
+              await fetchData();
+              
+              // Find the sandbox's current status
+              var groups = groupConversationsBySandbox();
+              var sandbox = groups.find(function(g) { return g.sandboxId === sandboxId; });
+              var status = sandbox ? (sandbox.status || "").toUpperCase() : null;
+              
+              if (status === "RUNNING") {
+                clearInterval(pollInterval);
+                pendingActions.delete(sandboxId);
+                await agentCanvas.window.showInformationMessage("Sandbox is now running");
+              } else if (status === "ERROR" || status === "MISSING") {
+                clearInterval(pollInterval);
+                pendingActions.delete(sandboxId);
+                await agentCanvas.window.showErrorMessage("Sandbox failed to wake");
+              } else if (pollCount >= maxPolls) {
+                clearInterval(pollInterval);
+                pendingActions.delete(sandboxId);
+                await agentCanvas.window.showInformationMessage("Sandbox is still waking up...");
+              }
+              // Otherwise keep polling (status is STARTING, PAUSED transitioning, etc.)
+            } catch (err) {
+              // Keep polling on transient errors
+              if (pollCount >= maxPolls) {
+                clearInterval(pollInterval);
+                pendingActions.delete(sandboxId);
+              }
+            }
+          }, 2000);
         }
 
         async function saveSandboxName(sandboxId, name) {
@@ -732,25 +1181,66 @@
         }
 
         // ===== Render =====
-        function render() {
+        // SVG icons as inline strings
+        var ICONS = {
+          server: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>',
+          refresh: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
+          chat: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+          clock: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
+          cloud: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>',
+          search: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
+          inbox: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>',
+          cloudOff: '<svg class="not-cloud-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>',
+          chevronDown: '<svg class="icon-sm chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>',
+          chevronRight: '<svg class="icon-sm chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>',
+          arrowRight: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>',
+          plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>'
+        };
+
+        // Track previous render state for incremental updates
+        var previousRenderState = null;
+        
+        function render(options) {
+          options = options || {};
+          var forceFullRender = options.force || false;
           var app = document.getElementById("app");
+          
+          // Save edit state before any render
+          var editState = null;
+          if (state.editingSandboxId) {
+            var editInput = document.getElementById("name-input-" + state.editingSandboxId);
+            if (editInput) {
+              editState = {
+                sandboxId: state.editingSandboxId,
+                value: editInput.value,
+                selectionStart: editInput.selectionStart,
+                selectionEnd: editInput.selectionEnd
+              };
+            }
+          }
           
           // Not connected to cloud
           if (state.cloudAvailable === false) {
             app.innerHTML = '\
-              <div class="not-cloud">\
-                <h3>Cloud Backend Required</h3>\
-                <p>Connect to a cloud backend to manage sandboxes.</p>\
+              <div class="page-container">\
+                <div class="not-cloud-state">\
+                  ' + ICONS.cloudOff + '\
+                  <h3>Cloud Backend Required</h3>\
+                  <p>Connect to a cloud backend to manage sandboxes.</p>\
+                </div>\
               </div>';
+            previousRenderState = null;
             return;
           }
           
-          // Loading
-          if (state.loading) {
+          // Loading (only show on initial load, not refreshes)
+          if (state.loading && !previousRenderState) {
             app.innerHTML = '\
-              <div class="loading">\
-                <div class="spinner"></div>\
-                <div>Loading sandboxes...</div>\
+              <div class="page-container">\
+                <div class="loading-state">\
+                  <div class="spinner"></div>\
+                  <div>Loading sandboxes...</div>\
+                </div>\
               </div>';
             return;
           }
@@ -758,68 +1248,274 @@
           // Error
           if (state.error) {
             app.innerHTML = '\
-              <div class="header">\
-                <h1>Sandboxes</h1>\
-                <button class="btn btn-secondary" onclick="window.refresh()">↻ Refresh</button>\
-              </div>\
-              <div class="error-state">\
-                <strong>Error loading sandboxes</strong><br>' + escapeHtml(state.error) + '\
+              <div class="page-container">\
+                <div class="page-header">\
+                  <div class="page-header-text">\
+                    <h1 class="page-title">Sandboxes</h1>\
+                    <p class="page-subtitle">Manage your cloud sandbox environments.</p>\
+                  </div>\
+                  <div style="display: flex; gap: 8px; align-items: center;">\
+                    <button class="brand-btn" id="new-sandbox-btn">' + ICONS.plus + ' New Sandbox</button>\
+                    <button class="refresh-btn" onclick="window.refresh()">' + ICONS.refresh + '</button>\
+                  </div>\
+                </div>\
+                <div class="error-state">\
+                  <p>' + escapeHtml(state.error) + '</p>\
+                  <button class="btn" onclick="window.refresh()">Try Again</button>\
+                </div>\
               </div>';
+            previousRenderState = null;
+            return;
+          }
+          
+          // If we're still loading but have previous data, skip full re-render
+          if (state.loading && previousRenderState) {
             return;
           }
           
           var groups = groupConversationsBySandbox();
           var filtered = filterAndSort(groups);
           
+          // Count by status
+          var runningCount = groups.filter(function(g) { return (g.status || "").toUpperCase() === "RUNNING"; }).length;
+          var pausedCount = groups.filter(function(g) { return (g.status || "").toUpperCase() === "PAUSED"; }).length;
+          var stoppedCount = groups.filter(function(g) { 
+            var s = (g.status || "").toUpperCase();
+            return s === "MISSING" || s === "ERROR" || s === "STOPPED";
+          }).length;
+          
           var html = '\
-            <div class="header">\
-              <h1>Sandboxes</h1>\
-              <button class="btn btn-secondary" onclick="window.refresh()">↻ Refresh</button>\
-            </div>\
-            <div class="toolbar">\
-              <div class="filter-group">\
-                <label>Show:</label>\
-                <div class="checkbox-group">\
-                  <label class="checkbox-label">\
-                    <input type="checkbox" id="filter-running" ' + (state.filters.running ? 'checked' : '') + '>\
-                    Running\
-                  </label>\
-                  <label class="checkbox-label">\
-                    <input type="checkbox" id="filter-paused" ' + (state.filters.paused ? 'checked' : '') + '>\
-                    Paused\
-                  </label>\
-                  <label class="checkbox-label">\
-                    <input type="checkbox" id="filter-stopped" ' + (state.filters.stopped ? 'checked' : '') + '>\
-                    Stopped/Error\
-                  </label>\
+            <div class="page-container">\
+              <div class="page-header">\
+                <div class="page-header-text">\
+                  <h1 class="page-title">Sandboxes</h1>\
+                  <p class="page-subtitle">Manage your cloud sandbox environments.</p>\
+                </div>\
+                <div style="display: flex; gap: 8px; align-items: center;">\
+                  <button class="brand-btn" id="new-sandbox-btn">' + ICONS.plus + ' New Sandbox</button>\
+                  <button class="refresh-btn" onclick="window.refresh()">' + ICONS.refresh + '</button>\
                 </div>\
               </div>\
-              <div class="filter-group">\
-                <label>Sort by:</label>\
-                <select class="sort-select" id="sort-select">\
-                  <option value="status" ' + (state.sortBy === 'status' ? 'selected' : '') + '>Status</option>\
-                  <option value="lastActive" ' + (state.sortBy === 'lastActive' ? 'selected' : '') + '>Last Active</option>\
-                  <option value="created" ' + (state.sortBy === 'created' ? 'selected' : '') + '>Created</option>\
-                </select>\
+              <div class="toolbar">\
+                <div class="search-container">\
+                  <span class="search-icon">' + ICONS.search + '</span>\
+                  <input type="text" class="search-input" id="search-input" placeholder="Search sandboxes..." value="' + escapeHtml(state.searchQuery || '') + '">\
+                </div>\
+                <button class="filter-btn' + (state.filters.running ? ' active' : '') + '" id="filter-running" title="' + runningCount + ' running">\
+                  Running <span class="section-count">' + runningCount + '</span>\
+                </button>\
+                <button class="filter-btn' + (state.filters.paused ? ' active' : '') + '" id="filter-paused" title="' + pausedCount + ' paused">\
+                  Paused <span class="section-count">' + pausedCount + '</span>\
+                </button>\
+                <button class="filter-btn' + (state.filters.stopped ? ' active' : '') + '" id="filter-stopped" title="' + stoppedCount + ' stopped">\
+                  Stopped <span class="section-count">' + stoppedCount + '</span>\
+                </button>\
               </div>\
-            </div>';
+              <div class="content-sections">';
           
           if (filtered.length === 0) {
             html += '\
-              <div class="empty-state">\
-                <h3>No sandboxes found</h3>\
-                <p>Adjust filters or create a new conversation to start a sandbox.</p>\
-              </div>';
+                <div class="empty-state">\
+                  ' + ICONS.inbox + '\
+                  <h3>No sandboxes found</h3>\
+                  <p>Adjust filters or create a new conversation to start a sandbox.</p>\
+                </div>';
           } else {
-            html += '<div class="table-container">';
-            filtered.forEach(function(group) {
-              html += renderSandboxRow(group);
+            // Group by status (STARTING goes with Running since it's transitioning to running)
+            var running = filtered.filter(function(g) { 
+              var s = (g.status || "").toUpperCase();
+              return s === "RUNNING" || s === "STARTING";
             });
-            html += '</div>';
+            var paused = filtered.filter(function(g) { return (g.status || "").toUpperCase() === "PAUSED"; });
+            var stopped = filtered.filter(function(g) { 
+              var s = (g.status || "").toUpperCase();
+              return s !== "RUNNING" && s !== "STARTING" && s !== "PAUSED";
+            });
+            
+            if (running.length > 0) {
+              html += renderSandboxGroup("Running", running);
+            }
+            if (paused.length > 0) {
+              html += renderSandboxGroup("Paused", paused);
+            }
+            if (stopped.length > 0) {
+              html += renderSandboxGroup("Stopped", stopped);
+            }
           }
           
-          app.innerHTML = html;
-          attachEventListeners();
+          html += '</div></div>';
+          
+          // Determine which sandbox sections each sandbox belongs to
+          function getSectionKey(status) {
+            var s = (status || '').toUpperCase();
+            if (s === 'RUNNING' || s === 'STARTING') return 'running';
+            if (s === 'PAUSED') return 'paused';
+            return 'stopped';
+          }
+          
+          // Try incremental update if structure hasn't changed
+          // Structure = which sandboxes exist, which sections they're in, filter/expand state
+          var newRenderState = {
+            sandboxSections: filtered.map(function(g) { return g.sandboxId + ':' + getSectionKey(g.status); }).join(','),
+            filterState: JSON.stringify(state.filters),
+            searchQuery: state.searchQuery,
+            expandedRows: Array.from(state.expandedSandboxes).sort().join(','),
+            expandedSections: Array.from(state.expandedSections).sort().join(','),
+            editingId: state.editingSandboxId || ''
+          };
+          
+          var canDoIncrementalUpdate = previousRenderState && 
+            previousRenderState.sandboxSections === newRenderState.sandboxSections &&
+            previousRenderState.filterState === newRenderState.filterState &&
+            previousRenderState.searchQuery === newRenderState.searchQuery &&
+            previousRenderState.expandedRows === newRenderState.expandedRows &&
+            previousRenderState.expandedSections === newRenderState.expandedSections &&
+            previousRenderState.editingId === newRenderState.editingId &&
+            !forceFullRender;
+          
+          if (canDoIncrementalUpdate) {
+            // Just update the parts that changed (status badges, action buttons, counts)
+            updateSandboxRows(filtered);
+            updateFilterCounts(groups);
+          } else {
+            // Full re-render
+            app.innerHTML = html;
+            attachEventListeners();
+            previousRenderState = newRenderState;
+            
+            // Restore edit state after full render
+            if (editState && state.editingSandboxId === editState.sandboxId) {
+              var input = document.getElementById("name-input-" + editState.sandboxId);
+              if (input) {
+                input.value = editState.value;
+                input.setSelectionRange(editState.selectionStart, editState.selectionEnd);
+                input.focus();
+              }
+            }
+          }
+        }
+        
+        // Incremental update: just update dynamic parts of existing rows
+        function updateSandboxRows(groups) {
+          groups.forEach(function(group) {
+            var sandboxId = group.sandboxId;
+            var status = (group.status || "MISSING").toUpperCase();
+            var statusClass = "status-" + status.toLowerCase();
+            var isPending = pendingActions.has(sandboxId);
+            
+            // Update status badge
+            var row = document.querySelector('[data-sandbox-id="' + sandboxId + '"]');
+            if (row) {
+              var badge = row.querySelector('.status-badge');
+              if (badge) {
+                badge.className = 'status-badge ' + statusClass;
+                badge.textContent = status;
+              }
+              
+              // Update action button
+              var actionsRow = row.querySelector('.actions-row');
+              if (actionsRow) {
+                var btnHtml = '';
+                if (status === "RUNNING") {
+                  btnHtml = '<button class="btn btn-sm" data-action="pause" data-sandbox="' + sandboxId + '"' + (isPending ? ' disabled' : '') + '>Pause</button>';
+                } else if (status === "PAUSED") {
+                  btnHtml = '<button class="btn btn-primary btn-sm" data-action="resume" data-sandbox="' + sandboxId + '"' + (isPending ? ' disabled' : '') + '>' + (isPending ? 'Waking...' : 'Wake') + '</button>';
+                } else if (status === "STARTING") {
+                  btnHtml = '<button class="btn btn-sm" disabled>Starting...</button>';
+                }
+                actionsRow.innerHTML = btnHtml;
+                
+                // Re-attach action listeners for this row
+                actionsRow.querySelectorAll("[data-action]").forEach(function(btn) {
+                  btn.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    var action = this.dataset.action;
+                    var sid = this.dataset.sandbox;
+                    if (action === "pause") pauseSandbox(sid);
+                    else if (action === "resume") resumeSandbox(sid);
+                  });
+                });
+              }
+            }
+          });
+        }
+        
+        // Update the filter button counts
+        function updateFilterCounts(groups) {
+          var runningCount = groups.filter(function(g) { 
+            var s = (g.status || "").toUpperCase();
+            return s === "RUNNING" || s === "STARTING";
+          }).length;
+          var pausedCount = groups.filter(function(g) { return (g.status || "").toUpperCase() === "PAUSED"; }).length;
+          var stoppedCount = groups.filter(function(g) { 
+            var s = (g.status || "").toUpperCase();
+            return s === "MISSING" || s === "ERROR" || s === "STOPPED";
+          }).length;
+          
+          var runningBtn = document.getElementById("filter-running");
+          var pausedBtn = document.getElementById("filter-paused");
+          var stoppedBtn = document.getElementById("filter-stopped");
+          
+          if (runningBtn) {
+            var span = runningBtn.querySelector('.section-count');
+            if (span) span.textContent = runningCount;
+            runningBtn.title = runningCount + ' running';
+          }
+          if (pausedBtn) {
+            var span = pausedBtn.querySelector('.section-count');
+            if (span) span.textContent = pausedCount;
+            pausedBtn.title = pausedCount + ' paused';
+          }
+          if (stoppedBtn) {
+            var span = stoppedBtn.querySelector('.section-count');
+            if (span) span.textContent = stoppedCount;
+            stoppedBtn.title = stoppedCount + ' stopped';
+          }
+        }
+
+        function renderSandboxGroup(title, sandboxes) {
+          var sectionKey = title.toLowerCase();
+          var isExpanded = state.expandedSections.has(sectionKey);
+          var totalCount = sandboxes.length;
+          var displayCount = isExpanded ? totalCount : Math.min(totalCount, SECTION_PAGE_SIZE);
+          var hasMore = totalCount > SECTION_PAGE_SIZE && !isExpanded;
+          var hiddenCount = totalCount - displayCount;
+          
+          var html = '\
+            <section class="section-group" data-section="' + sectionKey + '">\
+              <div class="section-header">\
+                <h2 class="section-title">' + escapeHtml(title) + '</h2>\
+                <span class="section-count">' + totalCount + '</span>\
+              </div>\
+              <div class="table-container">\
+                <table class="sandbox-table">\
+                  <tbody>';
+          
+          // Only render up to the limit
+          for (var i = 0; i < displayCount; i++) {
+            html += renderSandboxRow(sandboxes[i]);
+          }
+          
+          // Show "Load more" row if there are hidden items
+          if (hasMore) {
+            html += '\
+              <tr class="load-more-row" data-section="' + sectionKey + '">\
+                <td colspan="2">\
+                  <span class="load-more-text">Load more</span>\
+                </td>\
+              </tr>';
+          } else if (isExpanded && totalCount > SECTION_PAGE_SIZE) {
+            // Show "Show less" row when expanded
+            html += '\
+              <tr class="load-more-row" data-section="' + sectionKey + '" data-collapse="true">\
+                <td colspan="2">\
+                  <span class="load-more-text">Show less</span>\
+                </td>\
+              </tr>';
+          }
+          
+          html += '</tbody></table></div></section>';
+          return html;
         }
 
         function renderSandboxRow(group) {
@@ -828,56 +1524,90 @@
           var isEditing = state.editingSandboxId === sandboxId;
           var displayName = state.sandboxNames[sandboxId] || sandboxId;
           var status = (group.status || "MISSING").toUpperCase();
-          var badgeClass = "badge-" + status.toLowerCase();
+          var statusClass = "status-" + status.toLowerCase();
+          var convCount = group.conversations.length;
           
           var nameHtml;
           if (isEditing) {
             nameHtml = '<input type="text" class="sandbox-name-input" id="name-input-' + sandboxId + '" value="' + escapeHtml(displayName) + '" placeholder="Enter name...">';
           } else {
-            nameHtml = '\
-              <div class="sandbox-name" title="Click to rename">' + escapeHtml(displayName) + '</div>\
-              ' + (state.sandboxNames[sandboxId] ? '<div class="sandbox-id">' + sandboxId.substring(0, 12) + '...</div>' : '');
+            nameHtml = '<span class="sandbox-name" title="Click to rename">' + escapeHtml(displayName) + '</span>';
           }
           
+          var isPending = pendingActions.has(sandboxId);
           var actionBtns = '';
           if (status === "RUNNING") {
-            actionBtns = '<button class="btn btn-secondary btn-sm" data-action="pause" data-sandbox="' + sandboxId + '">⏸ Pause</button>';
+            actionBtns = '<button class="btn btn-sm" data-action="pause" data-sandbox="' + sandboxId + '"' + (isPending ? ' disabled' : '') + '>Pause</button>';
           } else if (status === "PAUSED") {
-            actionBtns = '<button class="btn btn-primary btn-sm" data-action="resume" data-sandbox="' + sandboxId + '">▶ Wake</button>';
+            actionBtns = '<button class="btn btn-primary btn-sm" data-action="resume" data-sandbox="' + sandboxId + '"' + (isPending ? ' disabled' : '') + '>' + (isPending ? 'Waking...' : 'Wake') + '</button>';
+          } else if (status === "STARTING") {
+            actionBtns = '<button class="btn btn-sm" disabled>Starting...</button>';
           }
           
           var html = '\
-            <div class="sandbox-row' + (isExpanded ? ' expanded' : '') + '" data-sandbox-id="' + sandboxId + '">\
-              <div class="sandbox-header" data-toggle="' + sandboxId + '">\
-                <span class="expand-icon">▶</span>\
-                <div class="sandbox-info" data-edit="' + sandboxId + '">' + nameHtml + '</div>\
-                <span class="badge ' + badgeClass + '">' + status + '</span>\
-                <div class="time-info">\
-                  <div class="time-label">Last active</div>\
-                  <div class="time-value">' + relativeTime(group.lastActive) + '</div>\
+            <tr class="sandbox-row' + (isExpanded ? ' expanded' : '') + '" data-sandbox-id="' + sandboxId + '" data-toggle="' + sandboxId + '">\
+              <td class="sandbox-cell">\
+                <div class="sandbox-cell-main">\
+                  <span class="expand-toggle">' + ICONS.chevronRight + '</span>\
+                  ' + ICONS.server + '\
+                  <div class="sandbox-info" data-edit="' + sandboxId + '">\
+                    ' + nameHtml + '\
+                    <div class="sandbox-meta">\
+                      <span class="sandbox-id copyable" data-copy="' + sandboxId + '" title="Click to copy sandbox ID">' + sandboxId.substring(0, 12) + '...</span>\
+                      <span class="meta-pill">' + ICONS.chat + ' ' + convCount + ' conversation' + (convCount !== 1 ? 's' : '') + '</span>\
+                      <span class="meta-pill">' + ICONS.clock + ' ' + relativeTime(group.lastActive) + '</span>\
+                    </div>\
+                  </div>\
+                  <span class="status-badge ' + statusClass + '">' + status + '</span>\
                 </div>\
-                <div class="actions" onclick="event.stopPropagation()">' + actionBtns + '</div>\
-              </div>\
-              <div class="sandbox-expanded">\
-                <div class="expanded-header">\
-                  <h4>Conversations (' + group.conversations.length + ')</h4>\
-                </div>';
+              </td>\
+              <td class="sandbox-cell sandbox-cell-actions">\
+                <div class="actions-row" onclick="event.stopPropagation()">' + actionBtns + '</div>\
+              </td>\
+            </tr>';
           
-          if (group.conversations.length === 0) {
-            html += '<div class="no-conversations">No conversations in this sandbox</div>';
-          } else {
-            html += '<div class="conversation-list">';
-            group.conversations.forEach(function(conv) {
-              html += '\
-                <div class="conversation-item">\
-                  <span class="conversation-title">' + escapeHtml(conv.title || "Untitled") + '</span>\
-                  <span class="conversation-time">' + relativeTime(conv.updated_at) + '</span>\
-                </div>';
-            });
-            html += '</div>';
+          // Expanded row (separate tr for conversations)
+          if (isExpanded) {
+            html += '\
+            <tr class="sandbox-expanded-row">\
+              <td colspan="2" class="sandbox-expanded" style="display: table-cell;">\
+                <div class="expanded-content">\
+                  <div class="expanded-section">\
+                    <div class="expanded-section-header">\
+                      ' + ICONS.chat + '\
+                      <h4 class="expanded-section-title">Conversations (' + convCount + ')</h4>\
+                    </div>';
+            
+            if (convCount === 0) {
+              html += '<div class="no-conversations">No conversations in this sandbox</div>';
+            } else {
+              html += '<div class="conversation-list">';
+              group.conversations.forEach(function(conv) {
+                var hasUrl = !!conv.conversation_url;
+                var hasKey = !!conv.session_api_key;
+                var connStatus = hasUrl && hasKey ? 'ready' : 'missing';
+                var connLabel = hasUrl && hasKey ? '✓ Ready' : (hasUrl ? '⚠ No key' : (hasKey ? '⚠ No URL' : '✗ No connection info'));
+                html += '\
+                  <div class="conversation-item" data-conversation-id="' + conv.id + '">\
+                    <div class="conversation-info">\
+                      <span class="conversation-title">' + escapeHtml(conv.title || "Untitled") + '</span>\
+                      <span class="conversation-meta">\
+                        ' + relativeTime(conv.updated_at) + '\
+                        <span class="conn-status conn-' + connStatus + '">' + connLabel + '</span>\
+                      </span>\
+                    </div>\
+                    <span class="conversation-arrow">' + ICONS.arrowRight + '</span>\
+                  </div>';
+              });
+              html += '</div>';
+            }
+            
+            // Add conversation button
+            html += '<button class="add-conversation-btn" data-sandbox-id="' + sandboxId + '">' + ICONS.plus + ' Add Conversation</button>';
+            
+            html += '</div></div></td></tr>';
           }
           
-          html += '</div></div>';
           return html;
         }
 
@@ -892,35 +1622,35 @@
         }
 
         function attachEventListeners() {
-          // Filters
+          // Search
+          var searchInput = document.getElementById("search-input");
+          if (searchInput) {
+            searchInput.addEventListener("input", function() {
+              state.searchQuery = this.value;
+              render();
+            });
+          }
+          
+          // Filter buttons (toggle on click)
           var filterRunning = document.getElementById("filter-running");
           var filterPaused = document.getElementById("filter-paused");
           var filterStopped = document.getElementById("filter-stopped");
           
           if (filterRunning) {
-            filterRunning.addEventListener("change", function() {
-              state.filters.running = this.checked;
+            filterRunning.addEventListener("click", function() {
+              state.filters.running = !state.filters.running;
               render();
             });
           }
           if (filterPaused) {
-            filterPaused.addEventListener("change", function() {
-              state.filters.paused = this.checked;
+            filterPaused.addEventListener("click", function() {
+              state.filters.paused = !state.filters.paused;
               render();
             });
           }
           if (filterStopped) {
-            filterStopped.addEventListener("change", function() {
-              state.filters.stopped = this.checked;
-              render();
-            });
-          }
-          
-          // Sort
-          var sortSelect = document.getElementById("sort-select");
-          if (sortSelect) {
-            sortSelect.addEventListener("change", function() {
-              state.sortBy = this.value;
+            filterStopped.addEventListener("click", function() {
+              state.filters.stopped = !state.filters.stopped;
               render();
             });
           }
@@ -928,8 +1658,8 @@
           // Row expand/collapse
           document.querySelectorAll("[data-toggle]").forEach(function(el) {
             el.addEventListener("click", function(e) {
-              // Don't toggle if clicking on actions or name edit
-              if (e.target.closest(".actions") || e.target.closest("[data-edit]")) return;
+              // Don't toggle if clicking on actions, name edit, or buttons
+              if (e.target.closest(".actions-row") || e.target.closest("[data-edit]") || e.target.tagName === "BUTTON") return;
               
               var sandboxId = this.dataset.toggle;
               if (state.expandedSandboxes.has(sandboxId)) {
@@ -992,6 +1722,83 @@
               } else if (action === "resume") {
                 resumeSandbox(sandboxId);
               }
+            });
+          });
+          
+          // Load more / Show less rows
+          document.querySelectorAll(".load-more-row").forEach(function(row) {
+            row.addEventListener("click", function(e) {
+              e.stopPropagation();
+              var sectionKey = this.dataset.section;
+              var isCollapse = this.dataset.collapse === "true";
+              
+              if (isCollapse) {
+                state.expandedSections.delete(sectionKey);
+              } else {
+                state.expandedSections.add(sectionKey);
+              }
+              render({ force: true });
+            });
+          });
+          
+          // Conversation item click - navigate to conversation
+          document.querySelectorAll(".conversation-item[data-conversation-id]").forEach(function(item) {
+            item.addEventListener("click", function(e) {
+              e.stopPropagation();
+              var conversationId = this.dataset.conversationId;
+              if (conversationId && agentCanvas.navigation) {
+                agentCanvas.navigation.navigate("/conversations/" + conversationId);
+              }
+            });
+          });
+          
+          // Copyable elements (sandbox ID, conversation ID)
+          document.querySelectorAll(".copyable[data-copy]").forEach(function(el) {
+            el.addEventListener("click", function(e) {
+              e.stopPropagation();
+              var text = this.dataset.copy;
+              if (text && navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(function() {
+                  agentCanvas.window.showInformationMessage("Copied to clipboard: " + text);
+                });
+              }
+            });
+          });
+          
+          // New Sandbox button - navigate to home to start a new conversation
+          var newSandboxBtn = document.getElementById("new-sandbox-btn");
+          if (newSandboxBtn) {
+            newSandboxBtn.addEventListener("click", function(e) {
+              e.stopPropagation();
+              if (agentCanvas.navigation) {
+                agentCanvas.navigation.navigate("/");
+              }
+            });
+          }
+          
+          // Add Conversation button inside expanded sandbox - creates conversation with sandbox ID
+          document.querySelectorAll(".add-conversation-btn[data-sandbox-id]").forEach(function(btn) {
+            btn.addEventListener("click", function(e) {
+              e.stopPropagation();
+              var sandboxId = this.dataset.sandboxId;
+              var button = this;
+              
+              // Disable button and show loading state
+              button.disabled = true;
+              var originalContent = button.innerHTML;
+              button.innerHTML = '<span style="display: inline-flex; align-items: center; gap: 6px;">Creating...</span>';
+              
+              // Create conversation with the sandbox ID
+              agentCanvas.conversation.create({
+                sandboxId: sandboxId
+              }).then(function(conversationId) {
+                // Navigation happens automatically in createConversation
+                agentCanvas.window.showInformationMessage("Created conversation in sandbox");
+              }).catch(function(err) {
+                agentCanvas.window.showInformationMessage("Failed to create conversation: " + err.message);
+                button.disabled = false;
+                button.innerHTML = originalContent;
+              });
             });
           });
         }
