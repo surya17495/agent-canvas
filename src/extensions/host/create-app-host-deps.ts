@@ -204,17 +204,22 @@ export function createAppHostDeps(): HostApiDeps {
         "createConversation",
       );
 
-      // The task ID (task.id) is what we navigate to - the conversation route
-      // handles polling for the task to complete and redirecting to the actual
-      // conversation ID (task.app_conversation_id).
-      const taskOrConversationId = task.app_conversation_id ?? task.id;
+      // Cloud backend returns a task with status WORKING and app_conversation_id
+      // is null until the task completes. Navigate to /conversations/task-{id}
+      // so useTaskPolling polls until READY, then redirects to the real
+      // conversation. If app_conversation_id is already set (task completed
+      // synchronously or local backend), navigate directly to it.
+      const navigationId = task.app_conversation_id
+        ? task.app_conversation_id
+        : `task-${task.id}`;
 
-      // Navigate to the conversation
+      // Navigate to the conversation (or task polling route)
       if (globalNavigate) {
-        globalNavigate(`/conversations/${taskOrConversationId}`);
+        globalNavigate(`/conversations/${navigationId}`);
       }
 
-      return taskOrConversationId;
+      // Return the actual conversation ID if available, otherwise the task ID
+      return task.app_conversation_id ?? task.id;
     },
 
     createSandbox: async (sandboxSpecId?: string): Promise<SandboxInfo> => {
