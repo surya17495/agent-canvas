@@ -1,10 +1,28 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, vi, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { GitRepoDropdown } from "../../../../src/components/features/home/git-repo-dropdown/git-repo-dropdown";
 import { GitRepository } from "#/types/git";
 import { I18nKey } from "#/i18n/declaration";
+
+const useTranslationMock = vi.hoisted(() =>
+  vi.fn((namespace: string) => ({
+    t: (key: string) => `${namespace}:${key}`,
+  })),
+);
+
+vi.mock("react-i18next", () => ({
+  useTranslation: useTranslationMock,
+}));
+
+const translated = (key: I18nKey) => `openhands:${key}`;
 
 // Mock the repository data hook
 const mockUseRepositoryData = vi.fn();
@@ -144,6 +162,53 @@ function setMenuScrollMetrics(
 
 describe("GitRepoDropdown", () => {
   describe("dropdown behavior", () => {
+    it("renders localized defaults and preserves presentation overrides", () => {
+      const view = renderDropdown({ className: "repository-root" });
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      expect(input).toHaveValue("");
+      expect(input).toHaveAttribute(
+        "placeholder",
+        translated(I18nKey.COMMON$SEARCH_REPOSITORIES_PLACEHOLDER),
+      );
+      expect(input.parentElement?.parentElement).toHaveClass(
+        "relative",
+        "repository-root",
+      );
+      expect(input).toHaveClass(
+        "text-inherit",
+        "shadow-none",
+        "pl-7",
+        "pr-16",
+        "text-sm",
+        "font-normal",
+        "leading-5",
+        "placeholder:text-[var(--oh-muted)]",
+        "disabled:cursor-not-allowed",
+        "disabled:opacity-60",
+      );
+      expect(
+        input.previousElementSibling?.querySelector("svg"),
+      ).toBeInTheDocument();
+      expect(
+        input.previousElementSibling?.querySelector(".animate-spin"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(translated(I18nKey.COMMON$MOST_RECENT)),
+      ).not.toBeInTheDocument();
+
+      view.rerender(
+        <GitRepoDropdown
+          provider="github"
+          placeholder="Choose a repository"
+          className="repository-root"
+          onChange={mockOnChange}
+        />,
+      );
+
+      expect(input).toHaveAttribute("placeholder", "Choose a repository");
+    });
+
     it("should open dropdown when input is clicked", async () => {
       renderDropdown();
 
@@ -234,6 +299,30 @@ describe("GitRepoDropdown", () => {
         expect(input.value).toBe(selectedRepository.full_name);
       });
     });
+
+    it("preserves an active search when repository data changes", async () => {
+      const user = userEvent.setup();
+      const view = renderDropdown(
+        { value: MOCK_REPOSITORIES[0].id },
+        { selectedRepository: MOCK_REPOSITORIES[0] },
+      );
+      const input = screen.getByTestId("git-repo-dropdown");
+      await waitFor(() => expect(input).toHaveValue("user/repo-one"));
+
+      await user.click(input);
+      await user.clear(input);
+      await user.type(input, "draft-search");
+      setupDefaultMocks({ selectedRepository: MOCK_REPOSITORIES[1] });
+      view.rerender(
+        <GitRepoDropdown
+          provider="github"
+          value={MOCK_REPOSITORIES[1].id}
+          onChange={mockOnChange}
+        />,
+      );
+
+      expect(input).toHaveValue("draft-search");
+    });
   });
 
   describe("repository selection", () => {
@@ -252,6 +341,11 @@ describe("GitRepoDropdown", () => {
       await userEvent.click(screen.getByText("user/repo-two"));
 
       expect(mockOnChange).toHaveBeenCalledWith(MOCK_REPOSITORIES[1]);
+      await waitFor(() =>
+        expect(screen.getByTestId("git-repo-dropdown-menu")).toHaveClass(
+          "hidden",
+        ),
+      );
     });
 
     it("should keep selected repo visible even if it's not in fetched results", async () => {
@@ -317,6 +411,74 @@ describe("GitRepoDropdown", () => {
 
       await waitFor(() => expect(input).toHaveValue(""));
       expect(screen.queryByTestId("dropdown-clear")).not.toBeInTheDocument();
+    });
+
+    it("marks an externally selected repository and still lists every repository", async () => {
+      const user = userEvent.setup();
+      renderDropdown(
+        { value: MOCK_REPOSITORIES[0].id },
+        { selectedRepository: MOCK_REPOSITORIES[0] },
+      );
+      const input = screen.getByTestId("git-repo-dropdown");
+      await waitFor(() => expect(input).toHaveValue("user/repo-one"));
+
+      await user.click(input);
+
+      const options = screen.getAllByRole("option");
+      expect(options).toHaveLength(MOCK_REPOSITORIES.length);
+      const selectedOption = within(
+        screen.getByTestId("git-repo-dropdown-menu"),
+      ).getByRole("option", { name: "user/repo-one" });
+      const unselectedOption = within(
+        screen.getByTestId("git-repo-dropdown-menu"),
+      ).getByRole("option", { name: "user/repo-two" });
+      expect(selectedOption).toHaveAttribute("aria-selected", "true");
+      expect(selectedOption).toHaveClass("bg-[var(--oh-interactive-selected)]");
+      expect(unselectedOption).toHaveAttribute("aria-selected", "false");
+      expect(unselectedOption).toHaveClass(
+        "hover:bg-[var(--oh-interactive-hover)]",
+      );
+    });
+
+    it("uses the latest callback when a selected repository is cleared", async () => {
+      const user = userEvent.setup();
+      const initialOnChange = vi.fn();
+      const latestOnChange = vi.fn();
+      const view = renderDropdown({ onChange: initialOnChange });
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      await user.click(input);
+      await user.click(await screen.findByText("user/repo-one"));
+      expect(initialOnChange).toHaveBeenCalledWith(MOCK_REPOSITORIES[0]);
+
+      view.rerender(
+        <GitRepoDropdown provider="github" onChange={latestOnChange} />,
+      );
+      await user.click(screen.getByTestId("dropdown-clear"));
+
+      expect(latestOnChange).toHaveBeenCalledWith(undefined);
+      expect(initialOnChange).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a local selection while an external repository is unresolved", async () => {
+      const user = userEvent.setup();
+      const view = renderDropdown();
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      await user.click(input);
+      await user.click(await screen.findByText("user/repo-two"));
+      await waitFor(() => expect(input).toHaveValue("user/repo-two"));
+
+      view.rerender(
+        <GitRepoDropdown
+          provider="github"
+          value="unresolved-repository"
+          onChange={mockOnChange}
+        />,
+      );
+
+      await waitFor(() => expect(input).toHaveValue("user/repo-two"));
+      expect(screen.getByTestId("dropdown-clear")).toBeInTheDocument();
     });
   });
 
@@ -391,7 +553,9 @@ describe("GitRepoDropdown", () => {
 
       await user.click(screen.getByTestId("git-repo-dropdown"));
 
-      expect(screen.getByText(I18nKey.COMMON$MOST_RECENT)).toBeInTheDocument();
+      expect(
+        screen.getByText(translated(I18nKey.COMMON$MOST_RECENT)),
+      ).toBeInTheDocument();
       expect(
         screen.getAllByRole("option").map((option) => option.textContent),
       ).toEqual(["user/repo-two", "user/repo-one", "org/feature-repo"]);
@@ -400,6 +564,75 @@ describe("GitRepoDropdown", () => {
       await user.type(screen.getByTestId("git-repo-dropdown"), "repo-two");
       expect(screen.getAllByRole("option")).toHaveLength(1);
       expect(screen.getByText("user/repo-two")).toBeInTheDocument();
+    });
+
+    it("updates and case-folds recent repositories as the search changes", async () => {
+      const user = userEvent.setup();
+      renderDropdown({}, {}, {}, [MOCK_REPOSITORIES[0], MOCK_REPOSITORIES[1]]);
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      await user.click(input);
+      await user.type(input, "REPO-TWO");
+
+      expect(
+        screen.getByText(translated(I18nKey.COMMON$MOST_RECENT)),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByRole("option").map((option) => option.textContent),
+      ).toEqual(["user/repo-two"]);
+
+      await user.clear(input);
+      await user.type(input, "missing-repository");
+
+      expect(
+        screen.queryByText(translated(I18nKey.COMMON$MOST_RECENT)),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("git-repo-dropdown-empty")).toHaveTextContent(
+        translated(I18nKey.HOME$NO_REPOSITORY_FOUND),
+      );
+    });
+
+    it("uses a repository URL to filter recent repositories", async () => {
+      const user = userEvent.setup();
+      renderDropdown({}, {}, {}, [MOCK_REPOSITORIES[0], MOCK_REPOSITORIES[1]]);
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      await user.click(input);
+      await user.type(input, "https://github.com/user/repo-two");
+
+      expect(
+        screen.getByText(translated(I18nKey.COMMON$MOST_RECENT)),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByRole("option").map((option) => option.textContent),
+      ).toEqual(["user/repo-two"]);
+    });
+
+    it("treats whitespace-only input as an empty search", async () => {
+      const user = userEvent.setup();
+      renderDropdown({}, {}, {}, [MOCK_REPOSITORIES[0]]);
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      await user.click(input);
+      await user.type(input, "   ");
+
+      expect(
+        screen.getAllByRole("option").map((option) => option.textContent),
+      ).toEqual(["user/repo-one", "user/repo-two", "org/feature-repo"]);
+      expect(
+        screen.getByText(translated(I18nKey.COMMON$MOST_RECENT)),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the localized empty state for an empty repository list", async () => {
+      const user = userEvent.setup();
+      renderDropdown({}, { repositories: [] });
+
+      await user.click(screen.getByTestId("git-repo-dropdown"));
+
+      expect(screen.getByTestId("git-repo-dropdown-empty")).toHaveTextContent(
+        translated(I18nKey.COMMON$NO_REPOSITORY),
+      );
     });
   });
 
@@ -424,6 +657,31 @@ describe("GitRepoDropdown", () => {
         expect(fetchNextPage).toHaveBeenCalledTimes(callCount);
       },
     );
+
+    it("uses updated pagination state after repository data changes", async () => {
+      const user = userEvent.setup();
+      const initialFetchNextPage = vi.fn();
+      const updatedFetchNextPage = vi.fn();
+      const view = renderDropdown(
+        {},
+        { fetchNextPage: initialFetchNextPage, hasNextPage: false },
+      );
+      await user.click(screen.getByTestId("git-repo-dropdown"));
+
+      setupDefaultMocks({
+        fetchNextPage: updatedFetchNextPage,
+        hasNextPage: true,
+      });
+      view.rerender(
+        <GitRepoDropdown provider="github" onChange={mockOnChange} />,
+      );
+      const menu = screen.getByTestId("git-repo-dropdown-menu");
+      setMenuScrollMetrics(menu, { scrollTop: 70 });
+      fireEvent.scroll(menu);
+
+      expect(updatedFetchNextPage).toHaveBeenCalledTimes(1);
+      expect(initialFetchNextPage).not.toHaveBeenCalled();
+    });
   });
 
   describe("loading feedback", () => {
