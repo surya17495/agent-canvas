@@ -27,6 +27,10 @@ describe("device-flow-client", () => {
       expect(isOpenHandsCloudHost("all-hands.dev")).toBe(true);
     });
 
+    it("accepts HTTP cloud URLs surrounded by whitespace", () => {
+      expect(isOpenHandsCloudHost("  http://app.all-hands.dev  ")).toBe(true);
+    });
+
     it("returns true for openhands.dev domains", () => {
       expect(isOpenHandsCloudHost("https://app.openhands.dev")).toBe(true);
       expect(isOpenHandsCloudHost("openhands.dev")).toBe(true);
@@ -50,6 +54,9 @@ describe("device-flow-client", () => {
         false,
       );
       expect(isOpenHandsCloudHost("https://evil.com/all-hands.dev")).toBe(
+        false,
+      );
+      expect(isOpenHandsCloudHost("prefixhttps://app.all-hands.dev")).toBe(
         false,
       );
     });
@@ -141,31 +148,40 @@ describe("device-flow-client", () => {
         text: () => Promise.resolve("Internal Server Error"),
       });
 
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        DeviceFlowError,
-      );
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        /Failed to start device flow.*500/,
-      );
-    });
-
-    it("throws DeviceFlowError on missing required fields", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            device_code: "dc",
-            // Missing other required fields
-          }),
+      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Failed to start device flow: Server returned 500",
       });
-
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        DeviceFlowError,
-      );
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        /missing required fields/,
-      );
     });
+
+    it.each([
+      {
+        field: "device_code",
+        response: { user_code: "uc", verification_uri: "v" },
+      },
+      {
+        field: "user_code",
+        response: { device_code: "dc", verification_uri: "v" },
+      },
+      {
+        field: "verification_uri",
+        response: { device_code: "dc", user_code: "uc" },
+      },
+    ])(
+      "throws DeviceFlowError when $field is missing",
+      async ({ response }) => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve(response),
+        });
+
+        await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toMatchObject({
+          name: "DeviceFlowError",
+          message:
+            "Invalid response from device authorization endpoint: missing required fields",
+        });
+      },
+    );
 
     it("throws DeviceFlowError on network error", async () => {
       global.fetch = vi.fn().mockRejectedValue(new Error("Network failed"));
@@ -201,7 +217,7 @@ describe("device-flow-client", () => {
         json: () => Promise.resolve(mockTokenResponse),
       });
 
-      const result = await pollForToken(TEST_HOST_URL, "device123", {
+      const result = await pollForToken(`${TEST_HOST_URL}///`, "device123", {
         interval: 5,
       });
 
@@ -250,7 +266,7 @@ describe("device-flow-client", () => {
       });
     });
 
-    it("polls until authorization is complete", async () => {
+    it("waits for the configured interval before polling again", async () => {
       const pendingResponse = {
         ok: false,
         status: 400,
@@ -276,15 +292,17 @@ describe("device-flow-client", () => {
         .mockResolvedValueOnce(successResponse);
 
       const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
-        interval: 1,
+        interval: 5,
       });
 
-      // Advance past the first poll interval
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
-      expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     it("increases interval on slow_down error", async () => {
@@ -294,7 +312,7 @@ describe("device-flow-client", () => {
         json: () =>
           Promise.resolve({
             error: "slow_down",
-            interval: 10,
+            interval: 7,
           }),
       };
       const successResponse = {
@@ -316,8 +334,11 @@ describe("device-flow-client", () => {
         interval: 5,
       });
 
-      // Advance by new interval (10 seconds)
-      await vi.advanceTimersByTimeAsync(10000);
+      await vi.advanceTimersByTimeAsync(6999);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
@@ -335,10 +356,11 @@ describe("device-flow-client", () => {
 
       await expect(
         pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(DeviceFlowError);
-      await expect(
-        pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(/expired/i);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Device code has expired. Please try again.",
+        code: "expired_token",
+      });
     });
 
     it("throws on access_denied error", async () => {
@@ -353,10 +375,11 @@ describe("device-flow-client", () => {
 
       await expect(
         pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(DeviceFlowError);
-      await expect(
-        pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(/denied/i);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization request was denied.",
+        code: "access_denied",
+      });
     });
 
     it("rejects a non-JSON token error response with its HTTP status", async () => {
@@ -412,7 +435,6 @@ describe("device-flow-client", () => {
     );
 
     it("respects abort signal", async () => {
-      vi.useRealTimers(); // Use real timers for this test
       const controller = new AbortController();
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -424,16 +446,19 @@ describe("device-flow-client", () => {
           }),
       });
 
-      // Pre-abort the controller
       controller.abort();
 
-      // Now the promise should reject immediately with cancelled
       await expect(
         pollForToken(TEST_HOST_URL, "device123", {
           interval: 1,
           signal: controller.signal,
         }),
-      ).rejects.toThrow(/cancelled/i);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization cancelled",
+        code: "cancelled",
+      });
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it("converts a fetch abort into a cancellation error", async () => {
@@ -501,7 +526,7 @@ describe("device-flow-client", () => {
     });
 
     it("propagates an unexpected polling wait failure", async () => {
-      const waitError = new Error("Timer unavailable");
+      const waitError = new DOMException("Timer unavailable", "NetworkError");
       const controller = new AbortController();
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -522,25 +547,21 @@ describe("device-flow-client", () => {
       ).rejects.toBe(waitError);
     });
 
-    it("times out after specified duration", async () => {
-      vi.useRealTimers(); // Use real timers for this test
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "authorization_pending",
-          }),
-      });
+    it("does not request a token when the timeout is already exhausted", async () => {
+      global.fetch = vi.fn();
 
-      // Use very short timeout
       await expect(
         pollForToken(TEST_HOST_URL, "device123", {
-          interval: 0.01, // 10ms interval
-          timeout: 50, // 50ms timeout
+          interval: 1,
+          timeout: 0,
         }),
-      ).rejects.toThrow(/timeout/i);
-    }, 10000);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Timeout waiting for authorization. Please try again.",
+        code: "timeout",
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
 
     it("caps slow_down interval at 30 seconds (DoS protection)", async () => {
       const slowDownResponse = {
@@ -571,50 +592,55 @@ describe("device-flow-client", () => {
         interval: 5,
       });
 
-      // Should use 30s max, not 999999s
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(29999);
+      expect(fetch).toHaveBeenCalledTimes(1);
 
-      const result = await pollPromise;
-      expect(result.access_token).toBe("api-key-123");
+      await vi.advanceTimersByTimeAsync(1);
       expect(fetch).toHaveBeenCalledTimes(2);
-    });
-
-    it("rejects non-numeric slow_down interval (type confusion protection)", async () => {
-      const slowDownResponse = {
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "slow_down",
-            interval: "pwned", // Non-numeric value
-          }),
-      };
-      const successResponse = {
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            access_token: "api-key-123",
-            token_type: "Bearer",
-          }),
-      };
-
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce(slowDownResponse)
-        .mockResolvedValueOnce(successResponse);
-
-      const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
-        interval: 5,
-      });
-
-      // With invalid interval, should use RFC 8628 default: current + 5s
-      // Starting interval is 5s, so next should be 10s (5000 + 5000 = 10000ms)
-      await vi.advanceTimersByTimeAsync(10000);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
     });
+
+    it.each([
+      { description: "a numeric string", interval: "7" },
+      { description: "zero", interval: 0 },
+      { description: "an infinite number", interval: Number.POSITIVE_INFINITY },
+    ])(
+      "uses the RFC fallback for $description slow_down interval",
+      async ({ interval }) => {
+        global.fetch = vi
+          .fn()
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 400,
+            json: () => Promise.resolve({ error: "slow_down", interval }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                access_token: "api-key-123",
+                token_type: "Bearer",
+              }),
+          });
+
+        const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
+          interval: 5,
+        });
+
+        await vi.advanceTimersByTimeAsync(9999);
+        expect(fetch).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(fetch).toHaveBeenCalledTimes(2);
+
+        await expect(pollPromise).resolves.toMatchObject({
+          access_token: "api-key-123",
+        });
+      },
+    );
 
     it("increments interval by 5 seconds per RFC 8628 when slow_down has no interval", async () => {
       const slowDownResponse = {
@@ -645,8 +671,11 @@ describe("device-flow-client", () => {
         interval: 5, // 5 seconds initial
       });
 
-      // RFC 8628: must increment by 5 seconds, so 5s -> 10s
-      await vi.advanceTimersByTimeAsync(10000);
+      await vi.advanceTimersByTimeAsync(9999);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
