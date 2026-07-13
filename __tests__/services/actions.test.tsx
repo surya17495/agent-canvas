@@ -280,6 +280,8 @@ describe("handleAssistantMessage", () => {
       action: "",
       observation: "",
       status_update: false,
+      type: "info",
+      message: "This is not a status update",
     });
 
     expect(mockHandleObservationMessage).not.toHaveBeenCalled();
