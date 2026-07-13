@@ -36,6 +36,17 @@ const mocks = vi.hoisted(() => ({
   serializeAutomation: vi.fn(),
   getAutomationExportFilename: vi.fn(),
   downloadBlob: vi.fn(),
+  useTranslation: vi.fn(),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: (namespace?: unknown) => {
+    mocks.useTranslation(namespace);
+    return {
+      t: (key: string) => key,
+      i18n: { language: "en", exists: () => false },
+    };
+  },
 }));
 
 vi.mock("react-router", async (importOriginal) => ({
@@ -411,6 +422,7 @@ describe("AutomationDetail route behavior", () => {
   it("keeps the detail query disabled while health is loading", () => {
     renderRoute({ health: { data: undefined, isLoading: true } });
 
+    expect(mocks.useTranslation).toHaveBeenCalledWith("openhands");
     expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
     expect(mocks.useAutomationDetail).toHaveBeenCalledWith({
       id: "automation-42",
@@ -456,6 +468,18 @@ describe("AutomationDetail route behavior", () => {
     expect(
       screen.queryByRole("button", { name: "retry detail" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("ignores a dormant 404 value when the detail query is successful", () => {
+    renderRoute({
+      detail: {
+        isError: false,
+        error: makeAxiosError({ status: 404 }),
+      },
+    });
+
+    expect(screen.getByTestId("detail-header")).toBeInTheDocument();
+    expect(screen.queryByTestId("not-found-state")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -513,6 +537,11 @@ describe("AutomationDetail route behavior", () => {
       "automation-42",
     );
     expect(screen.getByTestId("run-pending")).toHaveTextContent("true");
+    expect(
+      screen.queryByRole("button", {
+        name: "close edit for Nightly review",
+      }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "edit automation" }));
     const closeEdit = screen.getByRole("button", {
