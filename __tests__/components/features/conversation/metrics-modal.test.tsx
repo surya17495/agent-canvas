@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MetricsModal } from "#/components/features/conversation/metrics-modal/metrics-modal";
@@ -136,6 +136,9 @@ describe("conversation metrics modal", () => {
     expect(screen.getByTestId("metrics-modal")).toBeInTheDocument();
     expect(screen.getByText("CONVERSATION$METRICS_INFO")).toBeInTheDocument();
     expect(screen.getByText("CONVERSATION$NO_METRICS")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("metrics-modal").lastElementChild?.children,
+    ).toHaveLength(1);
     expect(mocks.useConversationMetrics).toHaveBeenCalledWith(
       "conversation-123",
       "https://agent.example/conversations/conversation-123",
@@ -165,6 +168,26 @@ describe("conversation metrics modal", () => {
       screen.getByText("CONVERSATION$NO_BUDGET_LIMIT"),
     ).toBeInTheDocument();
     expect(screen.queryByText("CONVERSATION$INPUT")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("CONVERSATION$NO_METRICS"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("replaces the empty state when stored metrics arrive", async () => {
+    renderModal();
+
+    expect(screen.getByText("CONVERSATION$NO_METRICS")).toBeInTheDocument();
+
+    act(() => {
+      useMetricsStore.setState(
+        getStoreMetrics({
+          cost: 4.5,
+          usage: null,
+        }),
+      );
+    });
+
+    expect(await screen.findByText("$4.5000")).toBeInTheDocument();
     expect(
       screen.queryByText("CONVERSATION$NO_METRICS"),
     ).not.toBeInTheDocument();
@@ -205,6 +228,12 @@ describe("conversation metrics modal", () => {
 
     expect(screen.getByText("$2.3456")).toBeInTheDocument();
     expect(screen.queryByText("$99.0000")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("CONVERSATION$BUDGET_USAGE_FORMAT"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("CONVERSATION$NO_BUDGET_LIMIT"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("1,234")).toBeInTheDocument();
     expect(screen.queryByText("99,999")).not.toBeInTheDocument();
   });
