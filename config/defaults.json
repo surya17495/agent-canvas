@@ -14,6 +14,7 @@
   },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",
+    "agentServerVariant": "python-lite",
     "agentCanvas": "ghcr.io/openhands/agent-canvas"
   },
   "ports": {

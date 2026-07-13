@@ -31,6 +31,7 @@ concurrency:
 permissions:
   contents: read
   packages: write
+  pull-requests: read
 
 env:
   IMAGE: ${{ inputs.image != '' && inputs.image || 'ghcr.io/openhands/agent-canvas' }}
@@ -89,17 +90,43 @@ jobs:
           # Single source of truth for version pins — no hardcoded values in this workflow.
           AGENT_SERVER_VERSION=$(node -p "require('./config/defaults.json').versions.agentServer")
           AGENT_SERVER_IMAGE_BASE=$(node -p "require('./config/defaults.json').images.agentServer")
+          AGENT_SERVER_VARIANT=$(node -p "require('./config/defaults.json').images.agentServerVariant")
           AUTOMATION_VERSION=$(node -p "require('./config/defaults.json').versions.automation")
           AGENT_CANVAS_VERSION=$(node -p "require('./package.json').version")
-          echo "agent_server_version=$AGENT_SERVER_VERSION" >> "$GITHUB_OUTPUT"
-          echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-python" >> "$GITHUB_OUTPUT"
-          echo "default_automation_version=$AUTOMATION_VERSION" >> "$GITHUB_OUTPUT"
-          echo "agent_canvas_version=$AGENT_CANVAS_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "agent_server_version=$AGENT_SERVER_VERSION"
+            echo "agent_server_image_base=$AGENT_SERVER_IMAGE_BASE"
+            echo "agent_server_variant=$AGENT_SERVER_VARIANT"
+            echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-${AGENT_SERVER_VARIANT}"
+            echo "default_automation_version=$AUTOMATION_VERSION"
+            echo "agent_canvas_version=$AGENT_CANVAS_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve linked SDK PR image
+        id: linked-sdk
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          AGENT_SERVER_IMAGE_BASE: ${{ steps.config.outputs.agent_server_image_base }}
+          AGENT_SERVER_VARIANT: ${{ steps.config.outputs.agent_server_variant }}
+        run: |
+          SDK_PR_URL=$(printf '%s' "$PR_BODY" | grep -Eo 'https://github.com/OpenHands/software-agent-sdk/pull/[0-9]+' | head -1 || true)
+          if [ -z "$SDK_PR_URL" ]; then
+            echo "image=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SDK_PR_NUMBER=${SDK_PR_URL##*/}
+          SDK_BRANCH=$(gh api "repos/OpenHands/software-agent-sdk/pulls/${SDK_PR_NUMBER}" --jq '.head.ref')
+          SDK_BRANCH=$(printf '%s' "$SDK_BRANCH" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9.-' '-' | sed 's/^[-.]//; s/[-.]*$//')
+          echo "image=${AGENT_SERVER_IMAGE_BASE}:${SDK_BRANCH}-${AGENT_SERVER_VARIANT}" >> "$GITHUB_OUTPUT"
 
       - name: Compute metadata and tags
         id: prep
         env:
           AGENT_SERVER_IMAGE_INPUT: ${{ inputs.agent_server_image }}
+          LINKED_AGENT_SERVER_IMAGE: ${{ steps.linked-sdk.outputs.image }}
           DEFAULT_AGENT_SERVER_IMAGE: ${{ steps.config.outputs.default_agent_server_image }}
           AUTOMATION_VERSION_INPUT: ${{ inputs.automation_version }}
           DEFAULT_AUTOMATION_VERSION: ${{ steps.config.outputs.default_automation_version }}
@@ -112,6 +139,8 @@ jobs:
           # Resolve agent-server base image (input override > config/defaults.json)
           if [ -n "$AGENT_SERVER_IMAGE_INPUT" ]; then
             echo "agent_server_image=$AGENT_SERVER_IMAGE_INPUT" >> "$GITHUB_OUTPUT"
+          elif [ -n "$LINKED_AGENT_SERVER_IMAGE" ]; then
+            echo "agent_server_image=$LINKED_AGENT_SERVER_IMAGE" >> "$GITHUB_OUTPUT"
           else
             echo "agent_server_image=$DEFAULT_AGENT_SERVER_IMAGE" >> "$GITHUB_OUTPUT"
           fi

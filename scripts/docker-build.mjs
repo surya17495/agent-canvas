@@ -16,6 +16,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+import { resolveAgentServerImage } from "./agent-server-image.mjs";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
 
@@ -23,7 +25,7 @@ const config = JSON.parse(
   readFileSync(join(projectRoot, "config", "defaults.json"), "utf-8"),
 );
 
-const agentServerImage = `${config.images.agentServer}:${config.versions.agentServer}-python`;
+const agentServerImage = resolveAgentServerImage(config);
 const automationVersion = config.versions.automation;
 
 // Parse CLI: --tag <name> and everything after -- is passed to docker build
