@@ -9,6 +9,14 @@ const hookMocks = vi.hoisted(() => ({
   useIsCreatingConversation: vi.fn(),
 }));
 
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: (namespace?: string) => ({
+    t: (key: string) =>
+      namespace === "openhands" ? key : `missing-namespace:${key}`,
+  }),
+}));
+
 vi.mock("#/context/navigation-context", () => ({
   useNavigation: hookMocks.useNavigation,
 }));
