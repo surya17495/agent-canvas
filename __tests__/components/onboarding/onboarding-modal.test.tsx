@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,12 +15,75 @@ import { OnboardingModal } from "#/components/features/onboarding/onboarding-mod
 import { ONBOARDING_DEFAULT_LLM_MODEL } from "#/components/features/onboarding/steps/setup-llm-step";
 import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { SecretsService } from "#/api/secrets-service";
+import type { SdkSectionSaveControl } from "#/components/features/settings/sdk-settings/sdk-section-page";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const captureMock = vi.hoisted(() => vi.fn());
+
+interface LlmSettingsScreenProps {
+  onSaveSuccess: () => Promise<void>;
+  onSaveControlChange: (control: SdkSectionSaveControl | null) => void;
+}
+
+function getLlmSettingsScreenProps(): LlmSettingsScreenProps {
+  const props = llmSettingsScreenMock.mock.lastCall?.[0];
+  if (!props) throw new Error("LLM settings screen did not render");
+  return props as LlmSettingsScreenProps;
+}
+
+function getLlmSaveControl(
+  overrides: Partial<SdkSectionSaveControl> = {},
+): SdkSectionSaveControl {
+  return {
+    save: vi.fn(),
+    isSaving: false,
+    isDirty: true,
+    values: {
+      "llm.model": "openai/gpt-5.5",
+      "llm.api_key": "sk-test",
+      "llm.base_url": "https://llm.example.com",
+    },
+    view: "basic",
+    getDirtyPayload: () => ({}),
+    ...overrides,
+  };
+}
+
+async function publishLlmSaveControl(control: SdkSectionSaveControl | null) {
+  await act(async () => {
+    getLlmSettingsScreenProps().onSaveControlChange(control);
+  });
+}
+
+function mockSuccessfulLocalProfilePersistence() {
+  const saveLlmProfile = vi
+    .spyOn(ProfilesService, "saveProfile")
+    .mockResolvedValue({} as never);
+  const activateLlmProfile = vi
+    .spyOn(ProfilesService, "activateProfile")
+    .mockResolvedValue({} as never);
+  const saveAgentProfile = vi
+    .spyOn(AgentProfilesService, "saveProfile")
+    .mockResolvedValue({} as never);
+  const getAgentProfile = vi
+    .spyOn(AgentProfilesService, "getProfile")
+    .mockResolvedValue({ profile: { id: "agent-profile-id" } } as never);
+  const activateAgentProfile = vi
+    .spyOn(AgentProfilesService, "activateProfile")
+    .mockResolvedValue({} as never);
+  return {
+    saveLlmProfile,
+    activateLlmProfile,
+    saveAgentProfile,
+    getAgentProfile,
+    activateAgentProfile,
+  };
+}
 
 // useTracking depends on PostHog's `usePostHog`. Mock that underlying service
 // (not useTracking itself) so the onboarding analytics events can be asserted.
@@ -200,6 +263,7 @@ function renderModal(onClose = vi.fn()) {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   window.localStorage.clear();
   window.sessionStorage.clear();
   vi.stubEnv("VITE_BACKEND_BASE_URL", "http://localhost:9000");
@@ -655,6 +719,206 @@ describe("OnboardingModal", () => {
         },
       }),
     );
+  });
+
+  describe("LLM setup save flow", () => {
+    it("waits for the dirty form and local profile finalization before advancing", async () => {
+      const services = mockSuccessfulLocalProfilePersistence();
+      let resolveLlmSave: (value: unknown) => void = () => undefined;
+      services.saveLlmProfile.mockReturnValue(
+        new Promise((resolve) => {
+          resolveLlmSave = resolve;
+        }) as never,
+      );
+      renderModal();
+      const user = userEvent.setup();
+      await waitForConfiguredBackendToBeSkipped();
+      await completeAgentStep(user);
+
+      const savingControl = getLlmSaveControl({ isSaving: true });
+      await publishLlmSaveControl(savingControl);
+      expect(screen.getByTestId("onboarding-llm-next")).toBeDisabled();
+
+      const saveControl = getLlmSaveControl();
+      await publishLlmSaveControl(saveControl);
+      expect(screen.getByTestId("onboarding-llm-next")).toBeEnabled();
+      await user.click(screen.getByTestId("onboarding-llm-next"));
+      expect(saveControl.save).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+        "data-current-step",
+        "1",
+      );
+
+      let finalization: Promise<void> = Promise.resolve();
+      act(() => {
+        finalization = getLlmSettingsScreenProps().onSaveSuccess();
+      });
+      await waitFor(() => {
+        expect(services.saveLlmProfile).toHaveBeenCalledWith("gpt-5.5", {
+          llm: {
+            model: "openai/gpt-5.5",
+            api_key: "sk-test",
+            base_url: "https://llm.example.com",
+          },
+          include_secrets: true,
+        });
+        expect(screen.getByTestId("onboarding-llm-next")).toBeDisabled();
+      });
+
+      await act(async () => {
+        resolveLlmSave({});
+        await finalization;
+      });
+
+      expect(services.activateLlmProfile).toHaveBeenCalledWith("gpt-5.5");
+      expect(services.saveAgentProfile).toHaveBeenCalledWith("default", {
+        agent_kind: "openhands",
+        llm_profile_ref: "gpt-5.5",
+      });
+      expect(services.getAgentProfile).toHaveBeenCalledWith("default");
+      expect(services.activateAgentProfile).toHaveBeenCalledWith(
+        "agent-profile-id",
+      );
+      expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+        "data-current-step",
+        "2",
+      );
+      expect(screen.getByTestId("onboarding-llm-next")).toBeEnabled();
+    });
+
+    it("persists a model without optional values that are not strings", async () => {
+      const services = mockSuccessfulLocalProfilePersistence();
+      renderModal();
+      const user = userEvent.setup();
+      await waitForConfiguredBackendToBeSkipped();
+      await completeAgentStep(user);
+      await publishLlmSaveControl(
+        getLlmSaveControl({
+          values: {
+            "llm.model": "anthropic/claude-sonnet-4",
+            "llm.api_key": false,
+            "llm.base_url": false,
+          },
+        }),
+      );
+
+      await act(async () => {
+        await getLlmSettingsScreenProps().onSaveSuccess();
+      });
+
+      expect(services.saveLlmProfile).toHaveBeenCalledWith("claude-sonnet-4", {
+        llm: { model: "anthropic/claude-sonnet-4" },
+        include_secrets: true,
+      });
+      expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+        "data-current-step",
+        "2",
+      );
+    });
+
+    it.each([
+      ["empty", ""],
+      ["non-string", false],
+    ])(
+      "advances without creating a local profile for an %s model",
+      async (_label, model) => {
+        const saveLlmProfile = vi.spyOn(ProfilesService, "saveProfile");
+        const saveAgentProfile = vi.spyOn(AgentProfilesService, "saveProfile");
+        renderModal();
+        const user = userEvent.setup();
+        await waitForConfiguredBackendToBeSkipped();
+        await completeAgentStep(user);
+        await publishLlmSaveControl(
+          getLlmSaveControl({ values: { "llm.model": model } }),
+        );
+
+        await act(async () => {
+          await getLlmSettingsScreenProps().onSaveSuccess();
+        });
+
+        expect(saveLlmProfile).not.toHaveBeenCalled();
+        expect(saveAgentProfile).not.toHaveBeenCalled();
+        expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+          "data-current-step",
+          "2",
+        );
+      },
+    );
+
+    it("advances when the settings screen reports success before exposing save state", async () => {
+      const saveLlmProfile = vi.spyOn(ProfilesService, "saveProfile");
+      renderModal();
+      const user = userEvent.setup();
+      await waitForConfiguredBackendToBeSkipped();
+      await completeAgentStep(user);
+
+      await act(async () => {
+        await getLlmSettingsScreenProps().onSaveSuccess();
+      });
+
+      expect(saveLlmProfile).not.toHaveBeenCalled();
+      expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+        "data-current-step",
+        "2",
+      );
+    });
+
+    it("leaves cloud profile wiring to the server after the form save", async () => {
+      const saveLlmProfile = vi.spyOn(ProfilesService, "saveProfile");
+      const activateLlmProfile = vi.spyOn(ProfilesService, "activateProfile");
+      const saveAgentProfile = vi.spyOn(AgentProfilesService, "saveProfile");
+      seedCloudBackend();
+      renderModal();
+      const user = userEvent.setup();
+      await waitForConfiguredBackendToBeSkipped();
+      await completeAgentStep(user);
+      await publishLlmSaveControl(getLlmSaveControl());
+
+      await act(async () => {
+        await getLlmSettingsScreenProps().onSaveSuccess();
+      });
+
+      expect(saveLlmProfile).not.toHaveBeenCalled();
+      expect(activateLlmProfile).not.toHaveBeenCalled();
+      expect(saveAgentProfile).not.toHaveBeenCalled();
+      expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+        "data-current-step",
+        "2",
+      );
+    });
+
+    it("logs a local profile persistence failure but still completes setup", async () => {
+      const error = new Error("profile endpoint unavailable");
+      const saveLlmProfile = vi
+        .spyOn(ProfilesService, "saveProfile")
+        .mockRejectedValue(error);
+      const activateLlmProfile = vi.spyOn(ProfilesService, "activateProfile");
+      const saveAgentProfile = vi.spyOn(AgentProfilesService, "saveProfile");
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      renderModal();
+      const user = userEvent.setup();
+      await waitForConfiguredBackendToBeSkipped();
+      await completeAgentStep(user);
+      await publishLlmSaveControl(getLlmSaveControl());
+
+      await act(async () => {
+        await getLlmSettingsScreenProps().onSaveSuccess();
+      });
+
+      expect(saveLlmProfile).toHaveBeenCalledTimes(1);
+      expect(activateLlmProfile).not.toHaveBeenCalled();
+      expect(saveAgentProfile).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "Failed to persist onboarding LLM as profile:",
+        error,
+      );
+      expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+        "data-current-step",
+        "2",
+      );
+    });
   });
 
   it("does not show backend configuration when the configured backend is healthy", async () => {
