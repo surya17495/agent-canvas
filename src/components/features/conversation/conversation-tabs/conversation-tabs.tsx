@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { Globe, ListTodo, SquareChevronRight, Puzzle } from "lucide-react";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
@@ -11,7 +11,10 @@ import { ConversationTabNav } from "./conversation-tab-nav";
 import { DrawerVSCodeLink } from "./drawer-vscode-link";
 import { ChatActionTooltip } from "../../chat/chat-action-tooltip";
 import { I18nKey } from "#/i18n/declaration";
-import { useConversationStore } from "#/stores/conversation-store";
+import {
+  useConversationStore,
+  makeExtensionTabId,
+} from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
@@ -22,6 +25,8 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { Typography } from "#/ui/typography";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
+import { useConversationPanelTabs } from "#/extensions/use-contributions";
+import { EXTENSIONS_ENABLED } from "#/extensions/feature-flag";
 
 export function ConversationTabs({
   variant = "default",
@@ -39,6 +44,12 @@ export function ConversationTabs({
   const { state: persistedState } =
     useConversationLocalStorageState(conversationId);
 
+  // Track if we've restored the initial tab from localStorage. We only want
+  // to restore on first render (e.g. page reload), not on subsequent
+  // conversation switches. This keeps extension tabs like Hello selected
+  // as users navigate between conversations.
+  const hasRestoredInitialTabRef = useRef(false);
+
   const { hasTaskList } = useTaskList();
   const { backend } = useActiveBackend();
 
@@ -53,16 +64,23 @@ export function ConversationTabs({
     isRightPanelShown,
   } = useSelectConversationTab();
 
-  // Restore the most-recently-used tab from localStorage so users don't
-  // lose their tab selection across reloads.
+  // Restore the most-recently-used tab from localStorage on initial render
+  // (e.g. page reload), but NOT on subsequent conversation switches.
+  // This preserves the user's tab selection (e.g. Hello tab) as they
+  // navigate between conversations in the same session.
   //
   // Note: we deliberately do NOT mirror `rightPanelShown` from
   // localStorage. The drawer's open/closed state is session-only — see
   // the comment in `useConversationStore` and the schema note in
   // `conversation-local-storage.ts` for the rationale.
   useEffect(() => {
-    setSelectedTab(persistedState.selectedTab);
-  }, [setSelectedTab, persistedState.selectedTab]);
+    if (!hasRestoredInitialTabRef.current) {
+      hasRestoredInitialTabRef.current = true;
+      setSelectedTab(persistedState.selectedTab);
+    }
+    // Only run on initial mount - deliberately not including persistedState
+    // in deps so we don't reset tab on conversation switches
+  }, [setSelectedTab]);
 
   useEffect(() => {
     const handlePanelVisibilityChange = () => {
@@ -79,60 +97,103 @@ export function ConversationTabs({
 
   const { t, i18n } = useTranslation("openhands");
 
-  // `files` is intentionally the leftmost tab — it's the primary entry
-  // point for inspecting agent output (workspace files + git diff).
-  const tabs = [
-    {
-      tabValue: "files",
-      isActive: isTabActive("files"),
-      icon: DocumentIcon,
-      onClick: () => selectTab("files"),
-      tooltipContent: t(I18nKey.COMMON$FILES),
-      tooltipAriaLabel: t(I18nKey.COMMON$FILES),
-      label: t(I18nKey.COMMON$FILES),
-    },
-    {
-      tabValue: "planner",
-      isActive: isTabActive("planner"),
-      icon: ListTodo,
-      onClick: () => selectTab("planner"),
-      tooltipContent: t(I18nKey.COMMON$PLANNER),
-      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
-      label: t(I18nKey.COMMON$PLANNER),
-    },
-    {
-      tabValue: "terminal",
-      isActive: isTabActive("terminal"),
-      icon: SquareChevronRight,
-      onClick: () => selectTab("terminal"),
-      tooltipContent: t(I18nKey.COMMON$TERMINAL),
-      tooltipAriaLabel: t(I18nKey.COMMON$TERMINAL),
-      label: t(I18nKey.COMMON$TERMINAL),
-      className: "pl-2",
-    },
-    {
-      tabValue: "browser",
-      isActive: isTabActive("browser"),
-      icon: Globe,
-      onClick: () => selectTab("browser"),
-      tooltipContent: t(I18nKey.COMMON$BROWSER),
-      tooltipAriaLabel: t(I18nKey.COMMON$BROWSER),
-      label: t(I18nKey.COMMON$BROWSER),
-    },
-  ];
+  // Load extension-contributed conversation panel tabs (only when extensions are enabled)
+  const extensionTabs = useConversationPanelTabs();
 
-  if (hasTaskList) {
-    // Insert after `files` so the leftmost slot stays Files.
-    tabs.splice(1, 0, {
-      tabValue: "tasklist",
-      isActive: isTabActive("tasklist"),
-      icon: DoubleCheckIcon,
-      onClick: () => selectTab("tasklist"),
-      tooltipContent: t(I18nKey.COMMON$TASK_LIST),
-      tooltipAriaLabel: t(I18nKey.COMMON$TASK_LIST),
-      label: t(I18nKey.COMMON$TASK_LIST),
-    });
-  }
+  // Tab item type for uniform handling of built-in and extension tabs
+  type TabItem = {
+    tabValue: string;
+    isActive: boolean;
+    icon: typeof DocumentIcon;
+    /** URL for a custom icon image (e.g., from an extension). Takes precedence over `icon`. */
+    iconUrl?: string;
+    onClick: () => void;
+    tooltipContent: string;
+    tooltipAriaLabel: string;
+    label: string;
+    className?: string;
+    isExtension?: boolean;
+  };
+
+  // Build the list of tabs, including both built-in and extension tabs
+  const tabs = useMemo(() => {
+    // `files` is intentionally the leftmost tab — it's the primary entry
+    // point for inspecting agent output (workspace files + git diff).
+    const builtinTabs: TabItem[] = [
+      {
+        tabValue: "files",
+        isActive: isTabActive("files"),
+        icon: DocumentIcon,
+        onClick: () => selectTab("files"),
+        tooltipContent: t(I18nKey.COMMON$FILES),
+        tooltipAriaLabel: t(I18nKey.COMMON$FILES),
+        label: t(I18nKey.COMMON$FILES),
+      },
+      {
+        tabValue: "planner",
+        isActive: isTabActive("planner"),
+        icon: ListTodo,
+        onClick: () => selectTab("planner"),
+        tooltipContent: t(I18nKey.COMMON$PLANNER),
+        tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
+        label: t(I18nKey.COMMON$PLANNER),
+      },
+      {
+        tabValue: "terminal",
+        isActive: isTabActive("terminal"),
+        icon: SquareChevronRight,
+        onClick: () => selectTab("terminal"),
+        tooltipContent: t(I18nKey.COMMON$TERMINAL),
+        tooltipAriaLabel: t(I18nKey.COMMON$TERMINAL),
+        label: t(I18nKey.COMMON$TERMINAL),
+        className: "pl-2",
+      },
+      {
+        tabValue: "browser",
+        isActive: isTabActive("browser"),
+        icon: Globe,
+        onClick: () => selectTab("browser"),
+        tooltipContent: t(I18nKey.COMMON$BROWSER),
+        tooltipAriaLabel: t(I18nKey.COMMON$BROWSER),
+        label: t(I18nKey.COMMON$BROWSER),
+      },
+    ];
+
+    if (hasTaskList) {
+      // Insert after `files` so the leftmost slot stays Files.
+      builtinTabs.splice(1, 0, {
+        tabValue: "tasklist",
+        isActive: isTabActive("tasklist"),
+        icon: DoubleCheckIcon,
+        onClick: () => selectTab("tasklist"),
+        tooltipContent: t(I18nKey.COMMON$TASK_LIST),
+        tooltipAriaLabel: t(I18nKey.COMMON$TASK_LIST),
+        label: t(I18nKey.COMMON$TASK_LIST),
+      });
+    }
+
+    // Add extension-contributed tabs if extensions are enabled
+    if (EXTENSIONS_ENABLED && extensionTabs.length > 0) {
+      const extTabs: TabItem[] = extensionTabs.map((extTab) => {
+        const tabValue = makeExtensionTabId(extTab.extensionId, extTab.id);
+        return {
+          tabValue,
+          isActive: isTabActive(tabValue),
+          // Use a default icon if no custom icon provided
+          icon: Puzzle,
+          iconUrl: extTab.iconUrl,
+          onClick: () => selectTab(tabValue),
+          tooltipContent: extTab.title,
+          tooltipAriaLabel: extTab.title,
+          label: extTab.title,
+          isExtension: true,
+        };
+      });
+      builtinTabs.push(...extTabs);
+    }
+
+    return builtinTabs;
+  }, [hasTaskList, extensionTabs, isTabActive, selectTab, t]);
 
   // Pinned tabs always show in the bar. Unpinned tabs stay hidden unless the
   // user has that tab selected — then it appears while active so the bar
@@ -247,6 +308,7 @@ export function ConversationTabs({
               {
                 tabValue,
                 icon,
+                iconUrl,
                 isActive,
                 tooltipContent,
                 tooltipAriaLabel,
@@ -263,6 +325,7 @@ export function ConversationTabs({
                 <ConversationTabNav
                   tabValue={tabValue}
                   icon={icon}
+                  iconUrl={iconUrl}
                   onClick={() => {}}
                   isActive={isActive}
                   label={label}
@@ -288,6 +351,7 @@ export function ConversationTabs({
                         {
                           tabValue,
                           icon,
+                          iconUrl,
                           onClick,
                           isActive,
                           tooltipContent,
@@ -305,6 +369,7 @@ export function ConversationTabs({
                           <ConversationTabNav
                             tabValue={tabValue}
                             icon={icon}
+                            iconUrl={iconUrl}
                             onClick={onClick}
                             isActive={isActive}
                             label={label}
