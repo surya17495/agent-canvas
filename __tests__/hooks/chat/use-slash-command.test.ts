@@ -1,7 +1,10 @@
 import React from "react";
 import { act, renderHook } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { useSlashCommand } from "#/hooks/chat/use-slash-command";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import {
+  type SlashCommandItem,
+  useSlashCommand,
+} from "#/hooks/chat/use-slash-command";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   __resetActiveStoreForTests,
@@ -54,29 +57,60 @@ function makeSkill(
   name: string,
   triggers: string[] = [],
   type: "agentskills" | "knowledge" = "agentskills",
+  content: string | undefined = `Description of ${name}`,
 ) {
-  return { name, type, content: `Description of ${name}`, triggers };
+  return { name, type, content, triggers };
+}
+
+function makeProfile(
+  name: string,
+  model: string | null,
+): NonNullable<typeof mockLlmProfiles.data>["profiles"][number] {
+  return {
+    name,
+    model,
+    base_url: null,
+    api_key_set: true,
+  };
 }
 
 function makeChatInputRef() {
-  return { current: document.createElement("div") };
+  const current = document.createElement("div");
+  current.tabIndex = 0;
+  return { current };
 }
 
-function setInputText(element: HTMLDivElement, text: string) {
+function setInputText(
+  element: HTMLDivElement,
+  text: string,
+  cursorOffset = text.length,
+) {
   element.textContent = text;
   element.innerText = text;
-  document.body.appendChild(element);
+  if (!element.isConnected) document.body.appendChild(element);
 
   const textNode = element.firstChild;
   if (!textNode) return;
 
   const range = document.createRange();
   const selection = window.getSelection();
-  range.setStart(textNode, text.length);
+  range.setStart(textNode, cursorOffset);
   range.collapse(true);
   selection?.removeAllRanges();
   selection?.addRange(range);
 }
+
+function makeKeyboardEvent(key: string) {
+  return {
+    key,
+    preventDefault: vi.fn(),
+  } as unknown as React.KeyboardEvent;
+}
+
+const fallbackItem: SlashCommandItem = {
+  command: "/fallback",
+  skill: makeSkill("fallback", ["/fallback"]),
+};
 
 const cloudBackend: Backend = {
   id: "prod",
@@ -87,16 +121,13 @@ const cloudBackend: Backend = {
 };
 
 describe("useSlashCommand", () => {
-  beforeEach(() => {
+  afterEach(() => {
     vi.clearAllMocks();
     mockSkills.data = undefined;
     mockSkills.isLoading = false;
     mockLlmProfiles.data = undefined;
     mockLlmProfiles.isLoading = false;
     mockConversation.data = undefined;
-  });
-
-  afterEach(() => {
     document.body.innerHTML = "";
     window.localStorage.clear?.();
     __resetActiveStoreForTests();
@@ -142,18 +173,8 @@ describe("useSlashCommand", () => {
     mockSkills.data = [];
     mockLlmProfiles.data = {
       profiles: [
-        {
-          name: "haiku",
-          model: "anthropic/claude-haiku-4-5",
-          base_url: null,
-          api_key_set: true,
-        },
-        {
-          name: "gpt",
-          model: "openai/gpt-5.1",
-          base_url: null,
-          api_key_set: true,
-        },
+        makeProfile("haiku", "anthropic/claude-haiku-4-5"),
+        makeProfile("gpt", "openai/gpt-5.1"),
       ],
       active_profile: "haiku",
     };
@@ -176,18 +197,8 @@ describe("useSlashCommand", () => {
     mockSkills.data = [];
     mockLlmProfiles.data = {
       profiles: [
-        {
-          name: "haiku",
-          model: "anthropic/claude-haiku-4-5",
-          base_url: null,
-          api_key_set: true,
-        },
-        {
-          name: "gpt",
-          model: "openai/gpt-5.1",
-          base_url: null,
-          api_key_set: true,
-        },
+        makeProfile("haiku", "anthropic/claude-haiku-4-5"),
+        makeProfile("gpt", "openai/gpt-5.1"),
       ],
       active_profile: null,
     };
@@ -202,5 +213,403 @@ describe("useSlashCommand", () => {
     expect(result.current.filteredItems.map((i) => i.command)).toEqual([
       "/model haiku",
     ]);
+  });
+
+  it("keeps built-in commands stable while skills load or have no data", () => {
+    mockSkills.isLoading = true;
+    mockSkills.data = [makeSkill("hidden-until-loaded", ["/hidden"])];
+
+    const ref = makeChatInputRef();
+    const { result, rerender } = renderHook(() => useSlashCommand(ref));
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/btw",
+      "/model",
+      "/goal",
+    ]);
+
+    mockSkills.isLoading = false;
+    mockSkills.data = undefined;
+    rerender();
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/btw",
+      "/model",
+      "/goal",
+    ]);
+  });
+
+  it("builds commands from explicit triggers and agent skill names", () => {
+    mockSkills.data = [
+      makeSkill("explicit", ["task", "/explicit", "/alias"]),
+      makeSkill("derived", ["task"]),
+      { ...makeSkill("missing-triggers"), triggers: undefined },
+      makeSkill("knowledge-hidden", [], "knowledge"),
+      makeSkill("knowledge-explicit", ["/reference"], "knowledge"),
+    ];
+
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/btw",
+      "/model",
+      "/goal",
+      "/explicit",
+      "/alias",
+      "/derived",
+      "/missing-triggers",
+      "/reference",
+    ]);
+  });
+
+  it("describes a profile without a model and filters it by name", () => {
+    mockSkills.data = [];
+    mockLlmProfiles.data = {
+      profiles: [makeProfile("Default Profile", null)],
+      active_profile: null,
+    };
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/model DEFAULT");
+
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.filteredItems).toEqual([
+      {
+        command: "/model Default Profile",
+        skill: {
+          name: "Default Profile",
+          type: "agentskills",
+          content: "Switch to this LLM profile",
+          triggers: ["/model Default Profile"],
+        },
+      },
+    ]);
+  });
+
+  it.each([
+    ["command", "/PLO", "/deploy"],
+    ["skill name", "/nostic", "/inspect"],
+    ["description", "/INCIDENT", "/respond"],
+  ])(
+    "filters skill suggestions by %s case-insensitively",
+    (_field, input, command) => {
+      mockSkills.data = [
+        makeSkill("ship", ["/deploy"], "agentskills", "Release software"),
+        makeSkill("diagnostics", ["/inspect"], "agentskills", "Check health"),
+        makeSkill(
+          "on-call",
+          ["/respond"],
+          "agentskills",
+          "Fix production incidents",
+        ),
+        makeSkill("undocumented", ["/quiet"], "agentskills", undefined),
+      ];
+      const ref = makeChatInputRef();
+      setInputText(ref.current, input);
+
+      const { result } = renderHook(() => useSlashCommand(ref));
+      act(() => result.current.updateSlashMenu());
+
+      expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+        command,
+      ]);
+    },
+  );
+
+  it("closes the menu when the input has no active slash word", () => {
+    mockSkills.data = [makeSkill("deploy", ["/deploy"])];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/dep");
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.isMenuOpen).toBe(true);
+
+    setInputText(ref.current, "/deploy ");
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.isMenuOpen).toBe(false);
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/btw",
+      "/model",
+      "/goal",
+      "/deploy",
+    ]);
+  });
+
+  it("does not open without a chat input or a cursor selection", () => {
+    const missingRef: React.RefObject<HTMLDivElement | null> = {
+      current: null,
+    };
+    const missing = renderHook(() => useSlashCommand(missingRef));
+
+    act(() => {
+      missing.result.current.updateSlashMenu();
+      missing.result.current.selectItem(fallbackItem);
+    });
+    expect(missing.result.current.isMenuOpen).toBe(false);
+
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/btw");
+    window.getSelection()?.removeAllRanges();
+    const withoutSelection = renderHook(() => useSlashCommand(ref));
+
+    act(() => withoutSelection.result.current.updateSlashMenu());
+    expect(withoutSelection.result.current.isMenuOpen).toBe(false);
+  });
+
+  it("keeps model completion open while profiles load and closes when none exist", () => {
+    mockSkills.data = [];
+    mockLlmProfiles.isLoading = true;
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/model");
+    const { result, rerender } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.isMenuOpen).toBe(true);
+    expect(result.current.filteredItems).toEqual([]);
+
+    mockLlmProfiles.isLoading = false;
+    rerender();
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.isMenuOpen).toBe(false);
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/btw",
+      "/model",
+      "/goal",
+    ]);
+  });
+
+  it("replaces the entire input when selection happens without a tracked slash range", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "draft text\n");
+    const inputListener = vi.fn();
+    ref.current.addEventListener("input", inputListener);
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.selectItem(fallbackItem));
+
+    expect(ref.current.textContent).toBe("/fallback ");
+    expect(inputListener).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(ref.current);
+    expect(result.current.isMenuOpen).toBe(false);
+    expect(result.current.selectedIndex).toBe(0);
+  });
+
+  it("supports selecting a command from an empty editor", () => {
+    const ref = makeChatInputRef();
+    ref.current.innerText = "";
+    ref.current.textContent = "";
+    document.body.appendChild(ref.current);
+    const range = document.createRange();
+    range.setStart(ref.current, 0);
+    range.collapse(true);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.isMenuOpen).toBe(false);
+
+    act(() => result.current.selectItem(fallbackItem));
+    expect(ref.current.textContent).toBe("/fallback ");
+  });
+
+  it("replaces only the slash word when the cursor is in its middle", () => {
+    mockSkills.data = [makeSkill("hello", ["/hello"])];
+    const ref = makeChatInputRef();
+    const input = "prefix /helXYZ suffix";
+    setInputText(ref.current, input, input.indexOf("/hel") + 4);
+    const inputListener = vi.fn();
+    ref.current.addEventListener("input", inputListener);
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/hello",
+    ]);
+
+    act(() => result.current.selectItem(result.current.filteredItems[0]));
+
+    expect(ref.current.textContent).toBe("prefix /hello  suffix");
+    expect(inputListener).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(ref.current);
+    expect(result.current.isMenuOpen).toBe(false);
+  });
+
+  it("replaces a model profile token through its trailing characters", () => {
+    mockSkills.data = [];
+    mockLlmProfiles.data = {
+      profiles: [makeProfile("haiku", "anthropic/claude-haiku")],
+      active_profile: null,
+    };
+    const ref = makeChatInputRef();
+    const input = "ask /model haiXYZ later";
+    setInputText(ref.current, input, input.indexOf("hai") + 3);
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/model haiku",
+    ]);
+
+    act(() => result.current.selectItem(result.current.filteredItems[0]));
+    expect(ref.current.textContent).toBe("ask /model haiku  later");
+  });
+
+  it("resets keyboard selection when the slash filter changes", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+
+    const down = makeKeyboardEvent("ArrowDown");
+    act(() => result.current.handleSlashKeyDown(down));
+    expect(result.current.selectedIndex).toBe(1);
+
+    setInputText(ref.current, "/go");
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.selectedIndex).toBe(0);
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/goal",
+    ]);
+  });
+
+  it("wraps keyboard selection in both directions", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+
+    for (const expected of [1, 2, 0]) {
+      const event = makeKeyboardEvent("ArrowDown");
+      act(() => expect(result.current.handleSlashKeyDown(event)).toBe(true));
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      expect(result.current.selectedIndex).toBe(expected);
+    }
+
+    for (const expected of [2, 1]) {
+      const event = makeKeyboardEvent("ArrowUp");
+      act(() => expect(result.current.handleSlashKeyDown(event)).toBe(true));
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      expect(result.current.selectedIndex).toBe(expected);
+    }
+  });
+
+  it.each([
+    ["Enter", "/btw "],
+    ["Tab", "/btw "],
+  ])("selects the highlighted command with %s", (key, replacement) => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+    const event = makeKeyboardEvent(key);
+
+    act(() => expect(result.current.handleSlashKeyDown(event)).toBe(true));
+
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(ref.current.textContent).toBe(replacement);
+    expect(result.current.isMenuOpen).toBe(false);
+  });
+
+  it("does not consume selection when a changing profile list invalidates the index", () => {
+    mockLlmProfiles.data = {
+      profiles: [
+        makeProfile("one", "model-1"),
+        makeProfile("two", "model-2"),
+        makeProfile("three", "model-3"),
+      ],
+      active_profile: null,
+    };
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/model");
+    const { result, rerender } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+    act(() => result.current.handleSlashKeyDown(makeKeyboardEvent("ArrowUp")));
+    expect(result.current.selectedIndex).toBe(2);
+
+    mockLlmProfiles.data = {
+      profiles: [makeProfile("one", "model-1")],
+      active_profile: null,
+    };
+    rerender();
+    const enter = makeKeyboardEvent("Enter");
+
+    act(() => expect(result.current.handleSlashKeyDown(enter)).toBe(false));
+    expect(enter.preventDefault).not.toHaveBeenCalled();
+    expect(ref.current.textContent).toBe("/model");
+  });
+
+  it("ignores keyboard input while closed or while filtering has no results", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    const closed = makeKeyboardEvent("ArrowDown");
+    expect(result.current.handleSlashKeyDown(closed)).toBe(false);
+    expect(closed.preventDefault).not.toHaveBeenCalled();
+
+    setInputText(ref.current, "/nothing-matches");
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.isMenuOpen).toBe(true);
+    expect(result.current.filteredItems).toEqual([]);
+    const empty = makeKeyboardEvent("ArrowDown");
+    expect(result.current.handleSlashKeyDown(empty)).toBe(false);
+    expect(empty.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("closes and consumes Escape", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+    const escape = makeKeyboardEvent("Escape");
+
+    act(() => expect(result.current.handleSlashKeyDown(escape)).toBe(true));
+
+    expect(escape.preventDefault).toHaveBeenCalledOnce();
+    expect(result.current.isMenuOpen).toBe(false);
+  });
+
+  it.each(["ArrowLeft", "ArrowRight", "Home", "End"])(
+    "closes without consuming %s",
+    (key) => {
+      const ref = makeChatInputRef();
+      setInputText(ref.current, "/");
+      const { result } = renderHook(() => useSlashCommand(ref));
+      act(() => result.current.updateSlashMenu());
+      const event = makeKeyboardEvent(key);
+
+      act(() => expect(result.current.handleSlashKeyDown(event)).toBe(false));
+
+      expect(event.preventDefault).not.toHaveBeenCalled();
+      expect(result.current.isMenuOpen).toBe(false);
+    },
+  );
+
+  it("leaves the menu open for an unrelated key", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+    const event = makeKeyboardEvent("Shift");
+
+    expect(result.current.handleSlashKeyDown(event)).toBe(false);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(result.current.isMenuOpen).toBe(true);
+  });
+
+  it("allows callers to close the menu", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+
+    act(() => result.current.closeMenu());
+
+    expect(result.current.isMenuOpen).toBe(false);
   });
 });
