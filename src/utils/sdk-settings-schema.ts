@@ -160,12 +160,8 @@ export function normalizeFieldValue(
 
 function normalizeComparableValue(
   field: SettingsFieldSchema,
-  rawValue: unknown,
+  rawValue: SettingsValue,
 ): boolean | number | string | null {
-  if (rawValue === undefined) {
-    return null;
-  }
-
   if (field.value_type === "boolean") {
     if (typeof rawValue === "string") {
       if (rawValue === "true") {
