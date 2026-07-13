@@ -5,8 +5,9 @@ import type { TaskItem as TaskItemData } from "#/types/agent-server/core/base/co
 import { I18nKey } from "#/i18n/declaration";
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
+  useTranslation: (namespace?: string) => ({
+    t: (key: string) =>
+      namespace === "openhands" ? key : `missing-namespace:${key}`,
   }),
 }));
 
@@ -53,12 +54,14 @@ describe("conversation task status display", () => {
       const icon = screen.getByTestId(iconTestId);
       expect(icon).toBeInTheDocument();
       const title = screen.getByText(`${status} task`);
+      expect(title).toHaveClass("text-[12px]");
 
       if (isMuted) {
         expect(icon).toHaveClass("text-[var(--oh-muted)]");
         expect(title).toHaveClass("text-[var(--oh-muted)]");
       } else {
         expect(icon).toHaveClass("text-[#ffffff]");
+        expect(title).toHaveClass("text-white");
         expect(title).not.toHaveClass("text-[var(--oh-muted)]");
       }
     },
@@ -103,5 +106,17 @@ describe("conversation task status display", () => {
     expect(screen.getByText("Review the implementation")).not.toHaveClass(
       "text-[var(--oh-muted)]",
     );
+  });
+
+  it("updates the status icon when task progress changes", () => {
+    const { rerender } = render(
+      <TaskItem task={createTask({ status: "todo" })} />,
+    );
+    expect(screen.getByTestId("todo-icon")).toBeInTheDocument();
+
+    rerender(<TaskItem task={createTask({ status: "in_progress" })} />);
+
+    expect(screen.queryByTestId("todo-icon")).not.toBeInTheDocument();
+    expect(screen.getByTestId("in-progress-icon")).toBeInTheDocument();
   });
 });
