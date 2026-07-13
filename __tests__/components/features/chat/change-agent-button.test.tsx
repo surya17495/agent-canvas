@@ -85,10 +85,20 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 }));
 
 vi.mock("#/hooks/query/use-sub-conversation-task-polling", () => ({
-  useSubConversationTaskPolling: () => ({
-    taskStatus: mocks.taskStatus,
-    subConversationId: mocks.subConversationId,
-  }),
+  useSubConversationTaskPolling: (
+    _taskId: string | null,
+    parentConversationId: string | null,
+  ) => {
+    const hasExpectedParent =
+      parentConversationId === (mocks.conversation?.id ?? null);
+
+    return {
+      taskStatus: hasExpectedParent ? mocks.taskStatus : undefined,
+      subConversationId: hasExpectedParent
+        ? mocks.subConversationId
+        : undefined,
+    };
+  },
 }));
 
 vi.mock("#/hooks/use-handle-plan-click", () => ({
@@ -228,7 +238,17 @@ describe("ChangeAgentButton mode selection", () => {
     const button = getModeButton();
     expect(button).toBeEnabled();
     expect(button).toHaveTextContent("COMMON$CODE");
-    expect(button).toHaveClass("cursor-pointer");
+    expect(button).toHaveClass(
+      "flex",
+      "items-center",
+      "rounded-[100px]",
+      "border",
+      "border-transparent",
+      "text-[var(--oh-muted)]",
+      "cursor-pointer",
+      "hover:text-white",
+      "hover:bg-white/10",
+    );
     expect(screen.getByTestId("code-agent-icon")).toBeInTheDocument();
     expect(screen.queryByTestId("plan-agent-icon")).not.toBeInTheDocument();
     expect(
@@ -252,7 +272,15 @@ describe("ChangeAgentButton mode selection", () => {
     await user.click(screen.getByTestId("plan-option"));
 
     expect(getModeButton()).toHaveTextContent("COMMON$PLAN");
-    expect(getModeButton()).toHaveClass("text-white");
+    expect(getModeButton()).toHaveClass(
+      "border",
+      "border-[#597FF4]",
+      "bg-[#4A67BD]",
+      "cursor-pointer",
+      "text-white",
+      "hover:bg-[#597FF4]",
+    );
+    expect(getModeButton()).not.toHaveClass("border-transparent");
     expect(screen.getByTestId("plan-agent-icon")).toBeInTheDocument();
     expect(screen.queryByTestId("code-agent-icon")).not.toBeInTheDocument();
     expect(
@@ -343,6 +371,15 @@ describe("ChangeAgentButton availability", () => {
     const button = getModeButton();
     expect(button).toBeDisabled();
     expect(button).toHaveClass("opacity-50", "cursor-not-allowed");
+    [
+      "cursor-pointer",
+      "hover:text-white",
+      "hover:bg-white/10",
+      "text-white",
+      "hover:bg-[#597FF4]",
+    ].forEach((interactiveClass) => {
+      expect(button).not.toHaveClass(interactiveClass);
+    });
 
     await user.click(button);
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
@@ -351,6 +388,22 @@ describe("ChangeAgentButton availability", () => {
       screen.queryByTestId("change-agent-context-menu"),
     ).not.toBeInTheDocument();
     expect(mocks.handlePlanClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps disabled Plan styling non-interactive", () => {
+    renderButton({
+      conversationMode: "plan",
+      isCreatingConversation: true,
+    });
+
+    expect(getModeButton()).toHaveClass(
+      "border",
+      "border-[#597FF4]",
+      "bg-[#4A67BD]",
+      "opacity-50",
+      "cursor-not-allowed",
+    );
+    expect(getModeButton()).not.toHaveClass("border-transparent");
   });
 
   it.each([
