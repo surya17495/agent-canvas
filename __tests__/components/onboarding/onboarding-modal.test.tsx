@@ -12,7 +12,6 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { OnboardingModal } from "#/components/features/onboarding/onboarding-modal";
-import { ONBOARDING_DEFAULT_LLM_MODEL } from "#/components/features/onboarding/steps/setup-llm-step";
 import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
@@ -24,6 +23,21 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const captureMock = vi.hoisted(() => vi.fn());
+const useTranslationMock = vi.hoisted(() => vi.fn());
+
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: (namespace?: unknown) => {
+    useTranslationMock(namespace);
+    return {
+      t: (key: string) => key,
+      i18n: {
+        language: "en",
+        exists: () => false,
+      },
+    };
+  },
+}));
 
 interface LlmSettingsScreenProps {
   onSaveSuccess: () => Promise<void>;
@@ -708,17 +722,23 @@ describe("OnboardingModal", () => {
     );
   });
 
-  it("pre-fills the LLM step with OpenAI GPT-5.5", () => {
+  it("pre-fills the LLM step with OpenAI GPT-5.5", async () => {
+    vi.resetModules();
+    const { ONBOARDING_DEFAULT_LLM_MODEL: reloadedDefaultModel } =
+      await import("#/components/features/onboarding/steps/setup-llm-step");
+
+    expect(reloadedDefaultModel).toBe("openai/gpt-5.5");
     renderModal();
 
     expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
     expect(llmSettingsScreenMock).toHaveBeenCalledWith(
       expect.objectContaining({
         initialValueOverrides: {
-          "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
+          "llm.model": "openai/gpt-5.5",
         },
       }),
     );
+    expect(useTranslationMock).not.toHaveBeenCalledWith("");
   });
 
   describe("LLM setup save flow", () => {
@@ -796,8 +816,8 @@ describe("OnboardingModal", () => {
         getLlmSaveControl({
           values: {
             "llm.model": "anthropic/claude-sonnet-4",
-            "llm.api_key": false,
-            "llm.base_url": false,
+            "llm.api_key": true,
+            "llm.base_url": true,
           },
         }),
       );
@@ -818,7 +838,7 @@ describe("OnboardingModal", () => {
 
     it.each([
       ["empty", ""],
-      ["non-string", false],
+      ["non-string", true],
     ])(
       "advances without creating a local profile for an %s model",
       async (_label, model) => {
