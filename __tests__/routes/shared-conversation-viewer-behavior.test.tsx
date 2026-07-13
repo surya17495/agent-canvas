@@ -19,6 +19,17 @@ const mocks = vi.hoisted(() => ({
   useSharedConversation: vi.fn(),
   useSharedConversationEvents: vi.fn(),
   useInfiniteScroll: vi.fn(),
+  useTranslation: vi.fn(),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: (namespace?: unknown) => {
+    mocks.useTranslation(namespace);
+    return {
+      t: (key: string) => key,
+      i18n: { language: "en", exists: () => false },
+    };
+  },
 }));
 
 vi.mock("#/hooks/query/use-shared-conversation", () => ({
@@ -218,7 +229,7 @@ const renderViewer = ({
   mocks.useSharedConversationEvents.mockReturnValue(eventsState);
   mocks.useInfiniteScroll.mockReturnValue(scrollContainerRef);
 
-  const rendered = render(
+  const viewer = () => (
     <MemoryRouter
       initialEntries={[`/shared/conversations/${SHARED_CONVERSATION_ID}`]}
     >
@@ -228,14 +239,16 @@ const renderViewer = ({
           element={<SharedConversation />}
         />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const rendered = render(viewer());
 
   return {
     ...rendered,
     conversationState,
     eventsState,
     scrollContainerRef,
+    rerenderViewer: () => rendered.rerender(viewer()),
   };
 };
 
@@ -325,6 +338,7 @@ describe("shared conversation viewer", () => {
     expect(
       screen.getByRole("heading", { name: "A shared debugging session" }),
     ).toBeInTheDocument();
+    expect(mocks.useTranslation).toHaveBeenCalledWith("openhands");
     expect(
       screen.getByText(`${I18nKey.CONVERSATION$BRANCH}: feature/shared-viewer`),
     ).toBeInTheDocument();
@@ -367,6 +381,44 @@ describe("shared conversation viewer", () => {
       fetchNextPage,
     });
     expect(scrollContainerRef.current).toHaveClass("overflow-y-auto");
+  });
+
+  it("replaces the visible event stream when fetched pages change", () => {
+    const initialMessage = createMessageEvent("initial-message", "First page");
+    const replacementMessage = createMessageEvent(
+      "replacement-message",
+      "Replacement page",
+    );
+    const { rerenderViewer } = renderViewer({
+      eventsState: {
+        data: {
+          pages: [{ items: [initialMessage], next_page_id: "page-2" }],
+        },
+      },
+    });
+
+    expect(screen.getByTestId("shared-messages")).toHaveAttribute(
+      "data-renderable-event-ids",
+      "initial-message",
+    );
+
+    mocks.useSharedConversationEvents.mockReturnValue(
+      createEventsHookState({
+        data: {
+          pages: [{ items: [replacementMessage], next_page_id: null }],
+        },
+      }),
+    );
+    rerenderViewer();
+
+    expect(screen.getByTestId("shared-messages")).toHaveAttribute(
+      "data-renderable-event-ids",
+      "replacement-message",
+    );
+    expect(screen.getByTestId("shared-messages")).toHaveAttribute(
+      "data-all-event-ids",
+      "replacement-message",
+    );
   });
 
   it("uses fallback copy and hides optional details when history is unavailable", () => {
