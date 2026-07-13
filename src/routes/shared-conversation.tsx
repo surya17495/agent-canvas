@@ -88,21 +88,21 @@ export default function SharedConversation() {
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-medium mb-2">
-              {conversation?.title ||
+              {conversation.title ||
                 t(I18nKey.CONVERSATION$SHARED_CONVERSATION)}
             </h1>
-            {conversation?.selected_branch && (
+            {conversation.selected_branch && (
               <div className="text-sm text-[var(--oh-muted)]">
                 {t(I18nKey.CONVERSATION$BRANCH)}: {conversation.selected_branch}
               </div>
             )}
-            {conversation?.selected_repository && (
+            {conversation.selected_repository && (
               <div className="text-sm text-[var(--oh-muted)]">
                 {t(I18nKey.CONVERSATION$REPOSITORY)}:{" "}
                 {conversation.selected_repository}
               </div>
             )}
-            {conversation?.llm_model && (
+            {conversation.llm_model && (
               <div className="text-sm text-[var(--oh-muted)]">
                 {t(I18nKey.LLM$MODEL)}: {conversation.llm_model}
               </div>
