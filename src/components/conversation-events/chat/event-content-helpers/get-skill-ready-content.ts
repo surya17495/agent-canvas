@@ -46,7 +46,7 @@ const formatSkillWithContent = (
 ): string => {
   let formatted = `\n\n- **${skill}**`;
 
-  if (contentBlock && contentBlock.trim().length > 0) {
+  if (contentBlock) {
     formatted += `\n\n${contentBlock}`;
   }
 
@@ -63,9 +63,7 @@ const formatSkillKnowledge = (
   let content = `\n\n**Triggered Skill Knowledge:**`;
 
   activatedSkills.forEach((skill, index) => {
-    const contentBlock =
-      index < extraInfoBlocks.length ? extraInfoBlocks[index] : undefined;
-    content += formatSkillWithContent(skill, contentBlock);
+    content += formatSkillWithContent(skill, extraInfoBlocks[index]);
   });
 
   return content;
@@ -78,9 +76,7 @@ const formatExtendedContentOnly = (extraInfoBlocks: string[]): string => {
   let content = `\n\n**Extended Content:**`;
 
   extraInfoBlocks.forEach((block) => {
-    if (block.trim().length > 0) {
-      content += `\n\n${block}`;
-    }
+    content += `\n\n${block}`;
   });
 
   return content;
@@ -90,7 +86,7 @@ const formatExtendedContentOnly = (extraInfoBlocks: string[]): string => {
  * Extracts EXTRA_INFO blocks from extended content.
  */
 const getExtraInfoBlocks = (extendedContent: TextContent[]): string[] => {
-  if (!extendedContent || extendedContent.length === 0) return [];
+  if (!extendedContent) return [];
   return extractExtraInfoBlocks(extractAllText(extendedContent));
 };
 
@@ -128,19 +124,12 @@ export const getSkillReadyItems = (
   if (activatedSkills && activatedSkills.length > 0) {
     return activatedSkills.map((skill, index) => ({
       name: skill,
-      content:
-        index < extraInfoBlocks.length ? extraInfoBlocks[index].trim() : "",
+      content: extraInfoBlocks[index] ?? "",
     }));
   }
 
-  if (extraInfoBlocks.length > 0) {
-    return extraInfoBlocks
-      .filter((block) => block.trim().length > 0)
-      .map((block, index) => ({
-        name: `Extended Content ${index + 1}`,
-        content: block.trim(),
-      }));
-  }
-
-  return [];
+  return extraInfoBlocks.map((block, index) => ({
+    name: `Extended Content ${index + 1}`,
+    content: block,
+  }));
 };
