@@ -1,105 +1,113 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleStatusMessage } from "#/services/actions";
-import { StatusMessage } from "#/types/message";
-import { queryClient } from "#/query-client-config";
-import { useStatusStore } from "#/stores/status-store";
-import { trackError } from "#/utils/error-handler";
+import type { StatusMessage } from "#/types/message";
 
-// Mock dependencies
+const mocks = vi.hoisted(() => ({
+  invalidateQueries: vi.fn(),
+  setCurStatusMessage: vi.fn(),
+  trackError: vi.fn(),
+}));
+
 vi.mock("#/query-client-config", () => ({
   queryClient: {
-    invalidateQueries: vi.fn(),
+    invalidateQueries: mocks.invalidateQueries,
   },
 }));
 
 vi.mock("#/stores/status-store", () => ({
   useStatusStore: {
-    getState: vi.fn(() => ({
-      setCurStatusMessage: vi.fn(),
-    })),
+    getState: () => ({
+      setCurStatusMessage: mocks.setCurStatusMessage,
+    }),
   },
 }));
 
 vi.mock("#/utils/error-handler", () => ({
-  trackError: vi.fn(),
+  trackError: mocks.trackError,
 }));
 
+function buildStatusMessage(
+  overrides: Partial<StatusMessage> = {},
+): StatusMessage {
+  return {
+    status_update: true,
+    type: "info",
+    id: "status-1",
+    message: "Conversation status changed",
+    ...overrides,
+  };
+}
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("handleStatusMessage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  it("invalidates only the updated conversation when an info message carries a title", () => {
+    handleStatusMessage(
+      buildStatusMessage({
+        message: "conversation-123",
+        conversation_title: "Renamed conversation",
+      }),
+    );
 
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it("should invalidate queries when receiving a conversation title update", () => {
-    // Create a status message with a conversation title
-    const statusMessage: StatusMessage = {
-      status_update: true,
-      type: "info",
-      message: "conversation-123",
-      conversation_title: "New Conversation Title",
-    };
-
-    // Call the function
-    handleStatusMessage(statusMessage);
-
-    // Verify that queryClient.invalidateQueries was called with the correct parameters
-    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+    expect(mocks.invalidateQueries).toHaveBeenCalledOnce();
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["user", "conversation", "conversation-123"],
     });
+    expect(mocks.setCurStatusMessage).not.toHaveBeenCalled();
+    expect(mocks.trackError).not.toHaveBeenCalled();
   });
 
-  it("should call setCurStatusMessage for info messages without conversation_title", () => {
-    // Create a status message without a conversation title
-    const statusMessage: StatusMessage = {
-      status_update: true,
-      type: "info",
-      message: "Some info message",
-    };
+  it.each([undefined, ""])(
+    "stores an ordinary info message when its title is %j",
+    (conversationTitle) => {
+      const message = buildStatusMessage({
+        message: "Agent is ready",
+        conversation_title: conversationTitle,
+      });
 
-    const mockSetCurStatusMessage = vi.fn();
-    vi.mocked(useStatusStore.getState).mockReturnValue({
-      setCurStatusMessage: mockSetCurStatusMessage,
-      curStatusMessage: {
-        status_update: true,
-        type: "info",
-        id: "",
-        message: "",
-      },
-    });
+      handleStatusMessage(message);
 
-    // Call the function
-    handleStatusMessage(statusMessage);
+      expect(mocks.setCurStatusMessage).toHaveBeenCalledOnce();
+      const forwardedMessage = mocks.setCurStatusMessage.mock.calls[0]?.[0];
+      expect(forwardedMessage).toEqual(message);
+      expect(forwardedMessage).not.toBe(message);
+      expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+      expect(mocks.trackError).not.toHaveBeenCalled();
+    },
+  );
 
-    // Verify that setCurStatusMessage was called with the correct message
-    expect(mockSetCurStatusMessage).toHaveBeenCalledWith(statusMessage);
+  it("tracks chat errors with their status-message identity", () => {
+    handleStatusMessage(
+      buildStatusMessage({
+        type: "error",
+        id: "error-42",
+        message: "The runtime disconnected",
+      }),
+    );
 
-    // Verify that queryClient.invalidateQueries was not called
-    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
-  });
-
-  it("should call trackError for error messages", () => {
-    // Create an error status message
-    const statusMessage: StatusMessage = {
-      status_update: true,
-      type: "error",
-      id: "ERROR_ID",
-      message: "Some error message",
-    };
-
-    // Call the function
-    handleStatusMessage(statusMessage);
-
-    // Verify that trackError was called with the correct parameters
-    expect(trackError).toHaveBeenCalledWith({
-      message: "Some error message",
+    expect(mocks.trackError).toHaveBeenCalledOnce();
+    expect(mocks.trackError).toHaveBeenCalledWith({
+      message: "The runtime disconnected",
       source: "chat",
-      metadata: { msgId: "ERROR_ID" },
+      metadata: { msgId: "error-42" },
+      posthog: undefined,
     });
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    expect(mocks.setCurStatusMessage).not.toHaveBeenCalled();
+  });
 
-    // Verify that queryClient.invalidateQueries was not called
-    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+  it("ignores unrecognized status-message types even when they carry a title", () => {
+    handleStatusMessage(
+      buildStatusMessage({
+        type: "warning",
+        conversation_title: "Not a title update",
+      }),
+    );
+
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    expect(mocks.setCurStatusMessage).not.toHaveBeenCalled();
+    expect(mocks.trackError).not.toHaveBeenCalled();
   });
 });
