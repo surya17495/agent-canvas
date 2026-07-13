@@ -31,7 +31,7 @@ function createAxiosError({
     undefined,
     !directStatus && status !== undefined ? ({ status } as never) : undefined,
   );
-  if (directStatus) error.status = status;
+  error.status = directStatus ? status : undefined;
   return error;
 }
 
@@ -111,11 +111,15 @@ afterEach(() => {
 describe("query client behavior", () => {
   it("records successful queries for string backend identifiers only", async () => {
     const client = createAgentServerQueryClient();
-    const malformedMeta = { backendId: 42 } as unknown as {
+    const malformedBackendId = 42;
+    const malformedMeta = { backendId: malformedBackendId } as unknown as {
       backendId: string;
     };
     recordBackendFailure("backend-one", new Error("offline"));
-    recordBackendFailure("backend-two", new Error("offline"));
+    recordBackendFailure(
+      malformedBackendId as unknown as string,
+      new Error("offline"),
+    );
 
     await client.fetchQuery({
       queryKey: ["health", "backend-one"],
@@ -133,12 +137,18 @@ describe("query client behavior", () => {
     });
 
     expect(getBackendHealthEntry("backend-one")).toBeNull();
-    expect(getBackendHealthEntry("backend-two")).not.toBeNull();
+    expect(
+      getBackendHealthEntry(malformedBackendId as unknown as string),
+    ).not.toBeNull();
   });
 
   it.each([
     { queryKey: ["settings"], description: "an unrelated query" },
     { queryKey: ["user", "profile"], description: "another user query" },
+    {
+      queryKey: ["settings", "authenticated"],
+      description: "a non-user query ending in authenticated",
+    },
   ])(
     "invalidates authentication after a 401 from $description",
     async ({ queryKey }) => {
@@ -194,15 +204,52 @@ describe("query client behavior", () => {
     });
   });
 
+  it("does not invalidate authentication for non-401 failures", async () => {
+    const client = createAgentServerQueryClient();
+    const invalidateQueries = vi
+      .spyOn(client, "invalidateQueries")
+      .mockResolvedValue();
+    const error = createAxiosError({ status: 500 });
+
+    await expect(
+      executeFailingQuery(client, error, { meta: { disableToast: true } }),
+    ).rejects.toBe(error);
+
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it("preserves null mutation failures without invalidating authentication", async () => {
+    const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
+    const client = createAgentServerQueryClient();
+    const invalidateQueries = vi
+      .spyOn(client, "invalidateQueries")
+      .mockResolvedValue();
+
+    await expect(executeFailingMutation(client, null)).rejects.toBeNull();
+
+    expect(invalidateQueries).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith(expect.any(String));
+  });
+
   it.each([
-    { url: undefined, description: "has no request URL" },
     {
+      directStatus: false,
+      url: undefined,
+      description: "has no request URL",
+    },
+    {
+      directStatus: false,
       url: "https://cloud.example/api/conversations",
       description: "targets the active cloud host",
     },
+    {
+      directStatus: true,
+      url: "https://cloud.example/api/settings",
+      description: "reports 401 directly for the active cloud host",
+    },
   ])(
     "suppresses a cloud authentication toast when the request $description",
-    async ({ url }) => {
+    async ({ directStatus, url }) => {
       activateBackend(
         createBackend({
           id: "cloud-backend",
@@ -214,6 +261,7 @@ describe("query client behavior", () => {
       const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
       const client = createAgentServerQueryClient();
       const error = createAxiosError({
+        directStatus,
         message: "Cloud authentication failed",
         status: 401,
         url,
@@ -228,6 +276,31 @@ describe("query client behavior", () => {
       expect(toast).not.toHaveBeenCalled();
     },
   );
+
+  it("shows a non-authentication error from the active cloud host", async () => {
+    activateBackend(
+      createBackend({
+        id: "cloud-backend",
+        host: "https://cloud.example",
+        kind: "cloud",
+      }),
+    );
+    const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
+    const client = createAgentServerQueryClient();
+    const error = createAxiosError({
+      message: "Cloud service unavailable",
+      status: 503,
+      url: "https://cloud.example/api/settings",
+    });
+
+    await expect(
+      executeFailingQuery(client, error, {
+        queryKey: ["cloud", "service-unavailable"],
+      }),
+    ).rejects.toBe(error);
+
+    expect(toast).toHaveBeenCalledWith("Cloud service unavailable");
+  });
 
   it("shows a 401 toast when a cloud request targets another host", async () => {
     activateBackend(
@@ -306,16 +379,32 @@ describe("query client behavior", () => {
     vi.useFakeTimers();
     const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
     const client = createAgentServerQueryClient();
-    const error = {};
+    const first = {};
+    const duplicate = {};
 
     await expect(
-      executeFailingQuery(client, error, {
-        queryKey: ["generic", "query"],
+      executeFailingQuery(client, first, {
+        queryKey: ["generic", "first"],
       }),
-    ).rejects.toBe(error);
+    ).rejects.toBe(first);
+    await expect(
+      executeFailingQuery(client, duplicate, {
+        queryKey: ["generic", "duplicate"],
+      }),
+    ).rejects.toBe(duplicate);
 
     expect(toast).toHaveBeenCalledWith(expect.any(String));
+    expect(toast).toHaveBeenCalledTimes(1);
+
     await vi.advanceTimersByTimeAsync(3000);
+    const afterCooldown = {};
+    await expect(
+      executeFailingQuery(client, afterCooldown, {
+        queryKey: ["generic", "after-cooldown"],
+      }),
+    ).rejects.toBe(afterCooldown);
+
+    expect(toast).toHaveBeenCalledTimes(2);
   });
 
   it("honors mutation toast metadata", async () => {
@@ -373,6 +462,7 @@ describe("query client selection and proxy behavior", () => {
     const first = config.getDefaultQueryClient();
     const second = config.getDefaultQueryClient();
 
+    expect(first).toBeInstanceOf(QueryClient);
     expect(second).toBe(first);
     expect(config.getQueryClient()).toBe(first);
     expect(
