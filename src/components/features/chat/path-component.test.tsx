@@ -14,6 +14,7 @@ describe("isLikelyDirectory", () => {
     ["src\\", true],
     ["src/components", true],
     ["src/components/file.tsx", false],
+    ["\\file.txt", false],
     [".gitignore", false],
   ])("classifies %j as %s", (path, expected) => {
     expect(isLikelyDirectory(path)).toBe(expected);
@@ -74,6 +75,20 @@ describe("PathComponent", () => {
     expect(screen.getByText("through").closest("strong")).toHaveClass(
       "font-mono",
     );
+  });
+
+  it("renders multiple string paths without React key collisions", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <PathComponent>
+        {["/workspace/src/one.ts", "/workspace/src/two.ts"]}
+      </PathComponent>,
+    );
+
+    expect(screen.getByText("one.ts")).toBeInTheDocument();
+    expect(screen.getByText("two.ts")).toBeInTheDocument();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it("passes through a single non-string child", () => {
