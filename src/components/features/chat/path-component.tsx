@@ -19,10 +19,8 @@ const decodeHtmlEntities = (text: string): string => {
  */
 const isLikelyDirectory = (path: string): boolean => {
   if (!path) return false;
-  // Check if path already ends with a slash
-  if (path.endsWith("/") || path.endsWith("\\")) return true;
   // Check if path has no extension (simple heuristic)
-  const lastPart = path.split(/[/\\]/).pop() || "";
+  const lastPart = path.split(/[/\\]/).at(-1)!;
   // If the last part has no dots, it's likely a directory
   return !lastPart.includes(".");
 };
@@ -33,13 +31,11 @@ const isLikelyDirectory = (path: string): boolean => {
  * @returns The filename (last part of the path)
  */
 const extractFilename = (path: string): string => {
-  if (!path) return "";
   // Handle both Unix and Windows paths
-  const parts = path.split(/[/\\]/);
-  const filename = parts[parts.length - 1];
+  const filename = path.split(/[/\\]/).at(-1)!;
 
   // Add trailing slash for directories
-  if (isLikelyDirectory(path) && !filename.endsWith("/")) {
+  if (isLikelyDirectory(path)) {
     return `${filename}/`;
   }
 
