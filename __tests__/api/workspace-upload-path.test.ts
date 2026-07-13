@@ -160,6 +160,15 @@ describe("workspace-upload-path", () => {
     },
   );
 
+  it("uses the configured working directory when the active conversation has no workspace", async () => {
+    const dir = await resolveConversationUploadWorkingDir(
+      "named-conversation",
+      { id: "named-conversation" } as never,
+    );
+
+    expect(dir).toBe(DEFAULT_WORKING_DIR);
+  });
+
   it("uses the stored workspace when the active conversation does not match", async () => {
     const conversationId = "stored-conversation";
     setStoredConversationMetadata(conversationId, {
