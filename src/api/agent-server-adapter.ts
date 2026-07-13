@@ -5,7 +5,6 @@ import { ExecutionStatus } from "#/types/agent-server/core";
 import { Settings, SettingsValue } from "#/types/settings";
 import {
   getAcpPreferredDefaultModel,
-  getAcpProvider,
   resolveEffectiveAcpModel,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
@@ -677,22 +676,6 @@ function getAcpServerTag(settings: Settings): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
-  const cmd = agentSettings.acp_command;
-  const isEmpty = Array.isArray(cmd) && cmd.length === 0;
-  const noCommand = cmd === undefined;
-  if (!isEmpty && !noCommand) {
-    return cmd;
-  }
-
-  const serverKey =
-    typeof agentSettings.acp_server === "string"
-      ? agentSettings.acp_server
-      : undefined;
-  const provider = getAcpProvider(serverKey);
-  return provider ? [...provider.default_command] : cmd;
-}
-
 function buildConfiguredAcpAgentSettings(
   settings: Settings,
 ): AgentSettingsPayload {
@@ -715,10 +698,7 @@ function buildConfiguredAcpAgentSettings(
     if (key === "acp_model") continue;
     // ``acp_env`` is deprecated — provider creds now route via ``request.secrets``.
     if (key === "acp_env") continue;
-    const value =
-      key === "acp_command"
-        ? resolveAcpCommand(agentSettings)
-        : agentSettings[key];
+    const value = agentSettings[key];
     if (value !== undefined && value !== null) {
       payload[key] = value;
     }
