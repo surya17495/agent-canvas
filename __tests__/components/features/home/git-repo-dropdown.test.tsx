@@ -264,6 +264,36 @@ describe("GitRepoDropdown", () => {
       // Text should be preserved
       expect(input.value).toBe("repo");
     });
+
+    it("clears an unselected search when the menu closes", async () => {
+      const user = userEvent.setup();
+      renderDropdown();
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      await user.click(input);
+      await user.type(input, "repo");
+      await user.keyboard("{Escape}");
+
+      expect(input).toHaveValue("");
+      expect(screen.getByTestId("git-repo-dropdown-menu")).toHaveClass(
+        "hidden",
+      );
+    });
+
+    it("preserves keyboard input when typing opens the menu", async () => {
+      const user = userEvent.setup();
+      renderDropdown();
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      await user.tab();
+      expect(input).toHaveFocus();
+      await user.keyboard("repo");
+
+      expect(input).toHaveValue("repo");
+      expect(screen.getByTestId("git-repo-dropdown-menu")).not.toHaveClass(
+        "hidden",
+      );
+    });
   });
 
   describe("cursor position preservation", () => {
