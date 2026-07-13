@@ -176,6 +176,23 @@ describe("cloud settings", () => {
     });
   });
 
+  it("derives flat values when the cloud returns empty nested blocks", async () => {
+    const flat = {
+      agent_settings: {},
+      conversation_settings: {},
+      llm_model: "fallback-model",
+      confirmation_mode: false,
+    };
+    vi.mocked(axios.request).mockResolvedValue({ data: flat });
+
+    const result = await fetchCloudSettings();
+
+    expect(result.agent_settings).toEqual({
+      llm: { model: "fallback-model" },
+    });
+    expect(result.conversation_settings).toEqual({ confirmation_mode: false });
+  });
+
   it("rejects before proxying when the active backend is local", async () => {
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
@@ -296,6 +313,9 @@ describe("cloud settings", () => {
       },
       timeout: 30_000,
     });
+    expect(
+      (config as { data: Record<string, unknown> }).data,
+    ).not.toHaveProperty("language");
   });
 
   it("sends an empty payload when no settings changed", async () => {
@@ -376,6 +396,23 @@ describe("saveCloudSettings drops agent_context: null (agent-canvas#981)", () =>
     const [config] = vi.mocked(axios.request).mock.calls[0]!;
     const requestBody = (config as { data: Record<string, unknown> }).data;
     expect(requestBody).toEqual({ agent_settings_diff: { mcp_config: null } });
+  });
+
+  it("preserves a non-null agent_context", async () => {
+    vi.mocked(axios.request).mockResolvedValue({ data: {} });
+    const agentContext = {
+      system_message_suffix: "Keep this context",
+    };
+
+    await saveCloudSettings({
+      agent_settings_diff: { agent_context: agentContext },
+    });
+
+    const [config] = vi.mocked(axios.request).mock.calls[0]!;
+    const requestBody = (config as { data: Record<string, unknown> }).data;
+    expect(requestBody).toEqual({
+      agent_settings_diff: { agent_context: agentContext },
+    });
   });
 
   it("omits agent_settings_diff when agent_context: null is its only key", async () => {
