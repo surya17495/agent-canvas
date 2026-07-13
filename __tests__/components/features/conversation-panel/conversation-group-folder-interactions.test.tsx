@@ -1,17 +1,50 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ComponentProps } from "react";
+import type { ComponentProps, HTMLAttributes } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ConversationGroupFolderRow } from "#/components/features/conversation-panel/conversation-group-folder-row";
 import { I18nKey } from "#/i18n/declaration";
 
+interface MockMotionSectionProps extends HTMLAttributes<HTMLElement> {
+  layout?: boolean | string;
+  transition?: {
+    type?: string;
+    stiffness?: number;
+    damping?: number;
+  };
+}
+
+vi.mock("framer-motion", async () => {
+  const { forwardRef } = await import("react");
+  const MotionSection = forwardRef<HTMLElement, MockMotionSectionProps>(
+    ({ layout, transition, ...props }, ref) => (
+      <section
+        ref={ref}
+        data-layout={String(layout)}
+        data-transition-type={transition?.type}
+        data-transition-stiffness={transition?.stiffness}
+        data-transition-damping={transition?.damping}
+        {...props}
+      />
+    ),
+  );
+  MotionSection.displayName = "MotionSection";
+
+  return { motion: { section: MotionSection } };
+});
+
+const useTranslationMock = vi.hoisted(() => vi.fn());
+
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: { label?: string }) =>
-      options?.label ? `${key}:${options.label}` : key,
-  }),
+  useTranslation: (namespace?: unknown) => {
+    useTranslationMock(namespace);
+    return {
+      t: (key: string, options?: { label?: string }) =>
+        options?.label ? `${key}:${options.label}` : key,
+    };
+  },
 }));
 
 const createConversation = (
@@ -120,16 +153,27 @@ afterEach(() => {
 
 describe("conversation group folder interactions", () => {
   it("renders a sanitized, accessible collapsed folder and toggles it", async () => {
+    useTranslationMock.mockClear();
     const { callbacks, user } = renderRow();
     const section = screen.getByTestId("thread-folder-ws--workspace-alpha");
     const heading = screen.getByRole("button", {
       name: `${I18nKey.CONVERSATION_PANEL$EXPAND_FOLDER}:Workspace Alpha`,
     });
+    const row = heading.parentElement;
+    const [folder, folderOpen] = heading.querySelectorAll("svg");
+    const add = screen.getByRole("button", {
+      name: `${I18nKey.CONVERSATION_PANEL$ADD_CONVERSATION_TO_GROUP}:Workspace Alpha`,
+    });
 
+    expect(useTranslationMock).toHaveBeenCalledWith("openhands");
     expect(section).toHaveAttribute(
       "aria-labelledby",
       "thread-folder-ws--workspace-alpha",
     );
+    expect(section).toHaveAttribute("data-layout", "false");
+    expect(section).toHaveAttribute("data-transition-type", "spring");
+    expect(section).toHaveAttribute("data-transition-stiffness", "600");
+    expect(section).toHaveAttribute("data-transition-damping", "45");
     expect(heading).toHaveAttribute("id", "thread-folder-ws--workspace-alpha");
     expect(heading).toHaveAttribute("aria-expanded", "false");
     expect(heading).toHaveAttribute(
@@ -137,6 +181,17 @@ describe("conversation group folder interactions", () => {
       "thread-folder-content-ws--workspace-alpha",
     );
     expect(section).toHaveTextContent("Workspace Alpha");
+    expect(row).toHaveClass("flex", "text-[var(--oh-muted)]");
+    expect(heading).toHaveClass("cursor-grab", "focus-visible:ring-1");
+    expect(folder).toHaveClass("h-4", "block", "group-hover/folder:hidden");
+    expect(folderOpen).toHaveClass("h-4", "hidden", "group-hover/folder:block");
+    expect(add).toHaveClass(
+      "h-6",
+      "text-inherit",
+      "hover:bg-white/10",
+      "focus-visible:outline-none",
+      "disabled:cursor-not-allowed",
+    );
     expect(screen.queryByTestId("conversation-card")).toBeNull();
     expect(
       screen.queryByTestId("thread-folder-drop-indicator-ws--workspace-alpha"),
@@ -154,8 +209,13 @@ describe("conversation group folder interactions", () => {
     const heading = screen.getByRole("button", {
       name: `${I18nKey.CONVERSATION_PANEL$COLLAPSE_FOLDER}:Workspace Alpha`,
     });
+    const section = screen.getByTestId("thread-folder-ws--workspace-alpha");
+    const [folder, folderOpen] = heading.querySelectorAll("svg");
 
+    expect(section).toHaveAttribute("data-layout", "position");
     expect(heading).toHaveAttribute("aria-expanded", "true");
+    expect(folder).toHaveClass("hidden", "group-hover/folder:block");
+    expect(folderOpen).toHaveClass("block", "group-hover/folder:hidden");
     expect(screen.getAllByTestId("conversation-card")).toHaveLength(3);
     expect(
       screen.queryByTestId("thread-folder-view-more-ws--workspace-alpha"),
@@ -229,7 +289,7 @@ describe("conversation group folder interactions", () => {
 
     expect(
       screen.getByTestId("thread-folder-drop-indicator-ws--workspace-alpha"),
-    ).toHaveClass(expectedClass);
+    ).toHaveClass("pointer-events-none", expectedClass);
   });
 
   it("forwards folder-level drag-over, drag-leave, and drop interactions", () => {
@@ -318,8 +378,10 @@ describe("conversation group folder interactions", () => {
     expect(offsetY).toBe(60);
     expect(document.body).toContainElement(dragImage);
     expect(dragImage.style.position).toBe("fixed");
+    expect(dragImage.style.top).toBe("0px");
     expect(dragImage.style.left).toBe("-9999px");
     expect(dragImage.style.width).toBe("320px");
+    expect(dragImage.style.margin).toBe("0px");
     expect(dragImage.style.pointerEvents).toBe("none");
     expect(dragImage.style.borderRadius).toBe("0.5rem");
     expect(dragImage.style.padding).toBe("0.25rem");
