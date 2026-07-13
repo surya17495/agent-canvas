@@ -264,6 +264,16 @@ describe("sdk settings schema helpers", () => {
     expect(verificationSection?.fields).toHaveLength(2);
   });
 
+  it("declares the exact fields owned by purpose-built settings controls", () => {
+    expect([...SPECIALLY_RENDERED_KEYS]).toEqual([
+      "llm.model",
+      "llm.api_key",
+      "llm.base_url",
+      "llm.auth_type",
+      "llm.subscription_vendor",
+    ]);
+  });
+
   it("passes through all fields when excludeKeys is empty", () => {
     const values = buildInitialSettingsFormValues(BASE_SETTINGS);
     const sections = getVisibleSettingsSections(
@@ -447,13 +457,18 @@ describe("sdk settings schema helpers", () => {
     it("returns null for absent roots and paths blocked by scalar values", () => {
       const settings: Settings = {
         ...BASE_SETTINGS,
-        agent_settings: { llm: "not-an-object", nullable: null },
+        agent_settings: {
+          llm: "not-an-object",
+          nullable: null,
+          text: "canvas",
+        },
         conversation_settings: null,
       };
 
       expect(getAgentSettingValue(settings, "missing")).toBeNull();
       expect(getAgentSettingValue(settings, "llm.model")).toBeNull();
       expect(getAgentSettingValue(settings, "nullable.child")).toBeNull();
+      expect(getAgentSettingValue(settings, "text.length")).toBeNull();
       expect(getConversationSettingValue(settings, "llm.model")).toBeNull();
     });
   });
@@ -467,6 +482,15 @@ describe("sdk settings schema helpers", () => {
 
       expect(normalizeFieldValue(choiceField, 0)).toBe("0");
       expect(normalizeFieldValue(choiceField, undefined)).toBe("");
+      expect(
+        normalizeFieldValue(
+          getMockField({
+            value_type: "boolean",
+            choices: [{ label: "Enabled", value: true }],
+          }),
+          true,
+        ),
+      ).toBe("true");
       expect(
         normalizeFieldValue(
           getMockField({ choices: [{ label: "A", value: "a" }] }),
@@ -717,6 +741,70 @@ describe("sdk settings schema helpers", () => {
       ).toBe("advanced");
     });
 
+    it("preserves boolean, numeric, and scalar comparison boundaries", () => {
+      const cases: Array<{
+        field: SettingsFieldSchema;
+        value: unknown;
+        expected: "basic" | "advanced";
+      }> = [
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "boolean",
+            default: true,
+            prominence: "major",
+          }),
+          value: "enabled",
+          expected: "basic",
+        },
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "integer",
+            default: 2,
+            prominence: "major",
+          }),
+          value: "02",
+          expected: "basic",
+        },
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "number",
+            default: 2,
+            prominence: "major",
+          }),
+          value: "02",
+          expected: "basic",
+        },
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "number",
+            default: 0,
+            prominence: "major",
+          }),
+          value: "",
+          expected: "advanced",
+        },
+        {
+          field: getMockField({
+            key: "value",
+            default: "value",
+            prominence: "major",
+          }),
+          value: " value ",
+          expected: "advanced",
+        },
+      ];
+
+      for (const { field, value, expected } of cases) {
+        expect(inferInitialView(getSettingsForFields([field], { value }))).toBe(
+          expected,
+        );
+      }
+    });
+
     it("compares structured settings by their parsed content", () => {
       const cases: Array<{
         field: SettingsFieldSchema;
@@ -800,6 +888,84 @@ describe("sdk settings schema helpers", () => {
           expected,
         );
       }
+    });
+
+    it("does not collapse non-object structured values into an empty object", () => {
+      const cases: Array<{
+        field: SettingsFieldSchema;
+        value: unknown;
+      }> = [
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "array",
+            default: null,
+            prominence: "major",
+          }),
+          value: {},
+        },
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "object",
+            default: null,
+            prominence: "major",
+          }),
+          value: 1,
+        },
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "array",
+            default: null,
+            prominence: "major",
+          }),
+          value: "{}",
+        },
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "object",
+            default: null,
+            prominence: "major",
+          }),
+          value: "1",
+        },
+      ];
+
+      for (const { field, value } of cases) {
+        expect(inferInitialView(getSettingsForFields([field], { value }))).toBe(
+          "advanced",
+        );
+      }
+    });
+
+    it("keeps stringified null distinct from an absent object setting", () => {
+      const field = getMockField({
+        key: "value",
+        value_type: "object",
+        default: null,
+        prominence: "major",
+      });
+
+      expect(
+        inferInitialView(getSettingsForFields([field], { value: "null" })),
+      ).toBe("advanced");
+    });
+
+    it("compares invalid structured text after trimming whitespace", () => {
+      const field = getMockField({
+        key: "value",
+        value_type: "object",
+        default: "{invalid",
+        prominence: "major",
+      });
+
+      expect(
+        inferInitialView(
+          getSettingsForFields([field], { value: "  {invalid  " }),
+        ),
+      ).toBe("basic");
     });
 
     it("compares nullable and non-string scalar settings", () => {
@@ -1064,6 +1230,23 @@ describe("sdk settings schema helpers", () => {
       expect(hasMinorSettings(getMockSchema([]))).toBe(false);
       expect(hasAdvancedSettings(schema)).toBe(true);
       expect(hasMinorSettings(schema)).toBe(true);
+    });
+
+    it("distinguishes each optional prominence tier from critical fields", () => {
+      const criticalOnly = getMockSchema([
+        getMockField({ key: "critical", prominence: "critical" }),
+      ]);
+      const majorOnly = getMockSchema([
+        getMockField({ key: "major", prominence: "major" }),
+      ]);
+      const minorOnly = getMockSchema([
+        getMockField({ key: "minor", prominence: "minor" }),
+      ]);
+
+      expect(hasAdvancedSettings(criticalOnly)).toBe(false);
+      expect(hasAdvancedSettings(majorOnly)).toBe(true);
+      expect(hasMinorSettings(criticalOnly)).toBe(false);
+      expect(hasMinorSettings(minorOnly)).toBe(true);
     });
   });
 });
