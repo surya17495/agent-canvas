@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
+import {
+  getSdkMcpServerMap,
+  hasRedactedMcpSecretLeaf,
+  parseMcpConfig,
+  REDACTED_MCP_SECRET_VALUE,
+  stringRecord,
+  toMcpShttpServer,
+  toMcpSseServer,
+  toMcpStdioServer,
+  toSdkMcpConfig,
+} from "#/utils/mcp-config";
 import type { MCPConfig } from "#/types/settings";
 
 describe("toSdkMcpConfig", () => {
@@ -128,10 +138,7 @@ describe("toSdkMcpConfig", () => {
 
     const out = toSdkMcpConfig(config);
 
-    expect(Object.keys(out!)).toEqual([
-      "integrations-hub",
-      "docs-server",
-    ]);
+    expect(Object.keys(out!)).toEqual(["integrations-hub", "docs-server"]);
   });
 
   it("falls back to the base name for unnamed sse/shttp entries", () => {
@@ -391,6 +398,448 @@ describe("parseMcpConfig / toSdkMcpConfig — auth: oauth round-trip", () => {
           },
         },
       },
+    });
+  });
+});
+
+describe("MCP config normalization", () => {
+  it("recognizes wrapped, flat, invalid, and server-named-mcpServers shapes", () => {
+    const wrapped = { mcpServers: { docs: { url: "https://docs.example" } } };
+    expect(getSdkMcpServerMap(wrapped)).toEqual(wrapped.mcpServers);
+    expect(getSdkMcpServerMap({ mcpServers: { command: "npx" } })).toEqual({
+      mcpServers: { command: "npx" },
+    });
+    expect(getSdkMcpServerMap({ mcpServers: "invalid" })).toEqual({
+      mcpServers: "invalid",
+    });
+    expect(getSdkMcpServerMap(null)).toBeNull();
+    expect(getSdkMcpServerMap([])).toBeNull();
+  });
+
+  it("keeps only string headers and detects redacted secrets recursively", () => {
+    expect(stringRecord(null)).toBeUndefined();
+    expect(stringRecord({ count: 1 })).toBeUndefined();
+    expect(stringRecord({ valid: "yes", count: 1 })).toEqual({ valid: "yes" });
+
+    expect(hasRedactedMcpSecretLeaf("plain")).toBe(false);
+    expect(hasRedactedMcpSecretLeaf(REDACTED_MCP_SECRET_VALUE)).toBe(true);
+    expect(
+      hasRedactedMcpSecretLeaf([
+        "plain",
+        { nested: REDACTED_MCP_SECRET_VALUE },
+      ]),
+    ).toBe(true);
+    expect(hasRedactedMcpSecretLeaf({ nested: ["plain"] })).toBe(false);
+  });
+
+  it("converts individual frontend server types", () => {
+    expect(
+      toMcpSseServer({
+        id: "events",
+        type: "sse",
+        name: "events",
+        url: "https://events.example",
+        headers: { "X-Test": "yes" },
+        auth: { strategy: "bearer", value: "secret" },
+      }),
+    ).toEqual({
+      name: "events",
+      url: "https://events.example",
+      headers: { "X-Test": "yes" },
+      auth: { strategy: "bearer", value: "secret" },
+    });
+    expect(
+      toMcpSseServer({
+        id: "events-minimal",
+        type: "sse",
+        url: "https://events.example",
+      }),
+    ).toEqual({
+      url: "https://events.example",
+    });
+    expect(
+      toMcpShttpServer({
+        id: "http",
+        type: "shttp",
+        url: "https://http.example",
+        timeout: 15,
+      }),
+    ).toEqual({ url: "https://http.example", timeout: 15 });
+    expect(
+      toMcpShttpServer({
+        id: "http-minimal",
+        type: "shttp",
+        url: "https://http.example",
+      }),
+    ).toEqual({
+      url: "https://http.example",
+    });
+    expect(
+      toMcpStdioServer({
+        id: "local",
+        type: "stdio",
+        name: "local",
+        command: "npx",
+        args: ["server"],
+        env: { TOKEN: "value" },
+      }),
+    ).toEqual({
+      name: "local",
+      command: "npx",
+      args: ["server"],
+      env: { TOKEN: "value" },
+    });
+    expect(
+      toMcpStdioServer({
+        id: "local-minimal",
+        type: "stdio",
+        name: "local",
+        command: "npx",
+      }),
+    ).toEqual({ name: "local", command: "npx" });
+  });
+
+  it("parses all tagged authentication strategies and rejects malformed ones", () => {
+    const parsed = parseMcpConfig({
+      none: {
+        url: "https://none.example",
+        auth: { strategy: "none" },
+      },
+      api: {
+        url: "https://api.example",
+        auth: { strategy: "api_key", value: "key", header_name: "X-Key" },
+      },
+      api_without_header: {
+        url: "https://api-no-header.example",
+        auth: { strategy: "api_key", value: "key", header_name: 4 },
+      },
+      bearer: {
+        url: "https://bearer.example",
+        auth: { strategy: "bearer", value: "token" },
+      },
+      basic: {
+        url: "https://basic.example",
+        auth: { strategy: "basic", username: "user", password: "pass" },
+      },
+      header: {
+        url: "https://header.example",
+        auth: {
+          strategy: "header",
+          headers: { "X-One": "one", ignored: 2 },
+        },
+      },
+      invalid_api: {
+        url: "https://invalid-api.example",
+        auth: { strategy: "api_key", value: 1 },
+      },
+      invalid_bearer: {
+        url: "https://invalid-bearer.example",
+        auth: { strategy: "bearer", value: null },
+      },
+      invalid_basic_user: {
+        url: "https://invalid-basic-user.example",
+        auth: { strategy: "basic", username: 1, password: "pass" },
+      },
+      invalid_basic_password: {
+        url: "https://invalid-basic-pass.example",
+        auth: { strategy: "basic", username: "user", password: 1 },
+      },
+      invalid_header: {
+        url: "https://invalid-header.example",
+        auth: { strategy: "header", headers: { invalid: 1 } },
+      },
+      invalid_strategy: {
+        url: "https://invalid-strategy.example",
+        auth: { strategy: "custom" },
+      },
+      invalid_auth: { url: "https://invalid-auth.example", auth: "secret" },
+    });
+
+    expect(parsed.shttp_servers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "none", auth: { strategy: "none" } }),
+        expect.objectContaining({
+          name: "api",
+          auth: { strategy: "api_key", value: "key", header_name: "X-Key" },
+        }),
+        expect.objectContaining({
+          name: "api_without_header",
+          auth: { strategy: "api_key", value: "key" },
+        }),
+        expect.objectContaining({
+          name: "bearer",
+          auth: { strategy: "bearer", value: "token" },
+        }),
+        expect.objectContaining({
+          name: "basic",
+          auth: { strategy: "basic", username: "user", password: "pass" },
+        }),
+        expect.objectContaining({
+          name: "header",
+          auth: { strategy: "header", headers: { "X-One": "one" } },
+        }),
+      ]),
+    );
+    for (const name of [
+      "invalid_api",
+      "invalid_bearer",
+      "invalid_basic_user",
+      "invalid_basic_password",
+      "invalid_header",
+      "invalid_strategy",
+      "invalid_auth",
+    ]) {
+      expect(
+        parsed.shttp_servers.find((server) =>
+          typeof server === "string" ? false : server.name === name,
+        ),
+      ).not.toHaveProperty("auth");
+    }
+  });
+
+  it("normalizes complete, partial, and malformed OAuth metadata", () => {
+    const parsed = parseMcpConfig({
+      complete: {
+        url: "https://oauth.example",
+        auth: {
+          strategy: "oauth2",
+          authentication: {
+            type: "oauth",
+            client_auth_method: "client_secret_post",
+            scopes: "read write",
+            client_name: "Canvas",
+            client_metadata_url: "https://canvas.example/metadata",
+            client_id: "client-id",
+            client_secret: "client-secret",
+            additional_client_metadata: { audience: "tools" },
+          },
+          state: {
+            tokens: { access_token: "token" },
+            client_info: { client_id: "dynamic" },
+            token_expires_at: null,
+          },
+        },
+      },
+      array_scopes: {
+        url: "https://array.example",
+        auth: {
+          strategy: "oauth2",
+          authentication: {
+            type: "oauth",
+            client_auth_method: "client_secret_basic",
+            scopes: ["read", "write"],
+          },
+          state: { token_expires_at: 123 },
+        },
+      },
+      empty: {
+        url: "https://empty.example",
+        auth: {
+          strategy: "oauth2",
+          authentication: { type: "not-oauth" },
+          state: { tokens: "invalid", client_info: [], token_expires_at: "x" },
+        },
+      },
+      invalid_metadata: {
+        url: "https://invalid-metadata.example",
+        auth: {
+          strategy: "oauth2",
+          authentication: {
+            type: "oauth",
+            client_auth_method: "unknown",
+            scopes: ["read", 2],
+            client_name: 1,
+            client_metadata_url: {},
+            client_id: false,
+            client_secret: [],
+            additional_client_metadata: "invalid",
+          },
+          state: null,
+        },
+      },
+      non_object_authentication: {
+        url: "https://non-object-auth.example",
+        auth: {
+          strategy: "oauth2",
+          authentication: null,
+        },
+      },
+    });
+
+    expect(parsed.shttp_servers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "complete",
+          auth: expect.objectContaining({
+            strategy: "oauth2",
+            authentication: {
+              type: "oauth",
+              client_auth_method: "client_secret_post",
+              scopes: "read write",
+              client_name: "Canvas",
+              client_metadata_url: "https://canvas.example/metadata",
+              client_id: "client-id",
+              client_secret: "client-secret",
+              additional_client_metadata: { audience: "tools" },
+            },
+            state: {
+              tokens: { access_token: "token" },
+              client_info: { client_id: "dynamic" },
+              token_expires_at: null,
+            },
+          }),
+        }),
+        expect.objectContaining({
+          name: "array_scopes",
+          auth: expect.objectContaining({
+            authentication: expect.objectContaining({
+              client_auth_method: "client_secret_basic",
+              scopes: ["read", "write"],
+            }),
+            state: { token_expires_at: 123 },
+          }),
+        }),
+        expect.objectContaining({
+          name: "empty",
+          auth: { strategy: "oauth2" },
+        }),
+        expect.objectContaining({
+          name: "invalid_metadata",
+          auth: { strategy: "oauth2", authentication: { type: "oauth" } },
+        }),
+        expect.objectContaining({
+          name: "non_object_authentication",
+          auth: { strategy: "oauth2" },
+        }),
+      ]),
+    );
+  });
+
+  it("skips malformed servers and preserves optional remote and stdio fields", () => {
+    const parsed = parseMcpConfig({
+      ignored_scalar: "not-a-server",
+      ignored_null: null,
+      ignored_missing_command: { args: ["x"] },
+      sse_named: {
+        url: "https://sse.example",
+        transport: "sse",
+        headers: { "X-Test": "yes", ignored: 1 },
+        auth: { strategy: "none" },
+      },
+      http_timed: {
+        url: "https://http.example",
+        timeout: 0,
+        headers: { "X-Test": "yes" },
+      },
+      http_null_timeout: {
+        url: "https://http-null.example",
+        timeout: null,
+      },
+      stdio_full: {
+        command: "npx",
+        args: ["server"],
+        env: { TOKEN: "value" },
+      },
+      stdio_minimal: { command: "uvx", args: null, env: null },
+    });
+
+    expect(parsed).toEqual({
+      sse_servers: [
+        {
+          name: "sse_named",
+          url: "https://sse.example",
+          headers: { "X-Test": "yes" },
+          auth: { strategy: "none" },
+        },
+      ],
+      shttp_servers: [
+        {
+          name: "http_timed",
+          url: "https://http.example",
+          timeout: 0,
+          headers: { "X-Test": "yes" },
+        },
+        { name: "http_null_timeout", url: "https://http-null.example" },
+      ],
+      stdio_servers: [
+        {
+          name: "stdio_full",
+          command: "npx",
+          args: ["server"],
+          env: { TOKEN: "value" },
+        },
+        { name: "stdio_minimal", command: "uvx" },
+      ],
+    });
+    expect(parseMcpConfig("invalid")).toEqual({
+      sse_servers: [],
+      shttp_servers: [],
+      stdio_servers: [],
+    });
+  });
+
+  it("serializes string entries, timeouts, stdio options, and safe secrets", () => {
+    const config: MCPConfig = {
+      sse_servers: [
+        "https://string-sse.example",
+        {
+          name: "safe",
+          url: "https://safe.example",
+          auth: { strategy: "bearer", value: "secret" },
+          headers: { "X-Test": "yes" },
+        },
+        {
+          name: "redacted",
+          url: "https://redacted.example",
+          auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+          headers: {},
+        },
+      ],
+      shttp_servers: [
+        "https://string-http.example",
+        { name: "timed", url: "https://timed.example", timeout: 0 },
+      ],
+      stdio_servers: [
+        {
+          name: "full",
+          command: "npx",
+          args: ["server"],
+          env: { TOKEN: "value" },
+        },
+        { name: "minimal", command: "uvx" },
+      ],
+    };
+
+    expect(toSdkMcpConfig(config)).toEqual({
+      sse: {
+        url: "https://string-sse.example",
+        transport: "sse",
+      },
+      safe: {
+        url: "https://safe.example",
+        transport: "sse",
+        auth: { strategy: "bearer", value: "secret" },
+        headers: { "X-Test": "yes" },
+      },
+      redacted: {
+        url: "https://redacted.example",
+        transport: "sse",
+      },
+      shttp: {
+        url: "https://string-http.example",
+        transport: "http",
+      },
+      timed: {
+        url: "https://timed.example",
+        transport: "http",
+        timeout: 0,
+      },
+      full: {
+        command: "npx",
+        args: ["server"],
+        env: { TOKEN: "value" },
+      },
+      minimal: { command: "uvx" },
     });
   });
 });
