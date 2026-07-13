@@ -14,8 +14,6 @@ export interface SlashCommandItem {
   command: string;
 }
 
-type SlashCompletionKind = "command" | "model-profile";
-
 /** Get the cursor's character offset within a contentEditable element. */
 function getCursorOffset(element: HTMLElement): number {
   const selection = window.getSelection();
@@ -42,8 +40,8 @@ export const useSlashCommand = (
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
-  const [completionKind, setCompletionKind] =
-    useState<SlashCompletionKind>("command");
+  const [isModelProfileCompletion, setIsModelProfileCompletion] =
+    useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Build slash command items from built-in commands + skills:
@@ -63,10 +61,11 @@ export const useSlashCommand = (
 
     if (!skills) return items;
     skills.forEach((skill) => {
-      const triggers = skill.triggers || [];
-      const slashTriggers = triggers.filter((t) => t.startsWith("/"));
+      const slashTriggers = skill.triggers?.filter((trigger) =>
+        trigger.startsWith("/"),
+      );
 
-      if (slashTriggers.length > 0) {
+      if (slashTriggers?.length) {
         // Skill has explicit slash triggers
         slashTriggers.forEach((trigger) => {
           items.push({ skill, command: trigger });
@@ -98,9 +97,9 @@ export const useSlashCommand = (
 
   // Filter items based on user input after "/"
   const filteredItems = useMemo(() => {
-    const sourceItems =
-      completionKind === "model-profile" ? modelProfileItems : slashItems;
-    if (!filterText) return sourceItems;
+    const sourceItems = isModelProfileCompletion
+      ? modelProfileItems
+      : slashItems;
     const lower = filterText.toLowerCase();
     return sourceItems.filter(
       (item) =>
@@ -108,7 +107,7 @@ export const useSlashCommand = (
         item.skill.name.toLowerCase().includes(lower) ||
         item.skill.content?.toLowerCase().includes(lower),
     );
-  }, [completionKind, modelProfileItems, slashItems, filterText]);
+  }, [isModelProfileCompletion, modelProfileItems, slashItems, filterText]);
 
   // Keep refs in sync so handleSlashKeyDown always reads the latest values,
   // avoiding stale closures from React's batched state updates.
@@ -132,7 +131,7 @@ export const useSlashCommand = (
   // Returns the filter text (characters after "/") and the range of the
   // slash word within the full input text, or null if no slash word found.
   const getSlashText = useCallback((): {
-    kind: SlashCompletionKind;
+    isModelProfile: boolean;
     text: string;
     start: number;
     end: number;
@@ -142,9 +141,9 @@ export const useSlashCommand = (
 
     // Strip trailing newlines that contentEditable can produce, but preserve
     // spaces so "/command " (after selection) won't re-trigger the menu.
-    const text = (element.innerText || "").replace(/[\n\r]+$/, "");
+    const text = element.innerText.replace(/[\n\r]+$/, "");
     const cursor = getCursorOffset(element);
-    if (cursor < 0) return null;
+    if (cursor === -1) return null;
 
     const textBeforeCursor = text.slice(0, cursor);
 
@@ -153,12 +152,11 @@ export const useSlashCommand = (
       const modelCommand = modelMatch[2];
       const start = textBeforeCursor.length - modelCommand.length;
       const afterCursor = text.slice(cursor);
-      const trailing = afterCursor.match(/^\S*/);
-      const end = cursor + (trailing ? trailing[0].length : 0);
+      const end = cursor + afterCursor.split(/\s/, 1)[0].length;
 
       return {
-        kind: "model-profile",
-        text: modelCommand.replace(/^\/model(?:\s+)?/, ""),
+        isModelProfile: true,
+        text: modelCommand.slice(MODEL_COMMAND.length).trimStart(),
         start,
         end,
       };
@@ -175,37 +173,35 @@ export const useSlashCommand = (
     // contiguous non-whitespace characters (covers the case where the
     // cursor sits in the middle of a word).
     const afterCursor = text.slice(cursor);
-    const trailing = afterCursor.match(/^\S*/);
-    const end = cursor + (trailing ? trailing[0].length : 0);
+    const end = cursor + afterCursor.split(/\s/, 1)[0].length;
 
-    return { kind: "command", text: slashWord.slice(1), start, end }; // strip leading "/"
+    return {
+      isModelProfile: false,
+      text: slashWord.slice(1),
+      start,
+      end,
+    };
   }, [chatInputRef]);
 
   // Update the menu state based on current input
   const updateSlashMenu = useCallback(() => {
     const result = getSlashText();
-    const hasItems =
-      result?.kind === "model-profile"
-        ? modelProfileItems.length > 0 || isProfilesLoading
-        : slashItems.length > 0;
+    const hasItems = result?.isModelProfile
+      ? modelProfileItems.length > 0 || isProfilesLoading
+      : true;
 
     if (result !== null && hasItems) {
-      setCompletionKind(result.kind);
+      setIsModelProfileCompletion(result.isModelProfile);
       setFilterText(result.text);
       slashRangeRef.current = { start: result.start, end: result.end };
       setIsMenuOpen(true);
     } else {
       setIsMenuOpen(false);
       setFilterText("");
-      setCompletionKind("command");
+      setIsModelProfileCompletion(false);
       slashRangeRef.current = null;
     }
-  }, [
-    getSlashText,
-    isProfilesLoading,
-    modelProfileItems.length,
-    slashItems.length,
-  ]);
+  }, [getSlashText, isProfilesLoading, modelProfileItems.length]);
 
   // Select an item and replace only the slash word with the command
   const selectItem = useCallback(
@@ -214,7 +210,7 @@ export const useSlashCommand = (
       if (!element) return;
 
       const slashRange = slashRangeRef.current;
-      const currentText = (element.innerText || "").replace(/[\n\r]+$/, "");
+      const currentText = element.innerText.replace(/[\n\r]+$/, "");
       const replacement = `${item.command} `;
 
       if (slashRange) {
@@ -226,16 +222,13 @@ export const useSlashCommand = (
 
         // Position cursor right after the inserted command + space
         const cursorPos = slashRange.start + replacement.length;
-        const textNode = element.firstChild;
-        if (textNode) {
-          const range = document.createRange();
-          const sel = window.getSelection();
-          const offset = Math.min(cursorPos, textNode.textContent!.length);
-          range.setStart(textNode, offset);
-          range.collapse(true);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
+        const textNode = element.firstChild!;
+        const range = document.createRange();
+        const sel = window.getSelection();
+        const offset = Math.min(cursorPos, textNode.textContent!.length);
+        range.setStart(textNode, offset);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
       } else {
         // Fallback: replace everything (e.g. if range tracking failed)
         element.textContent = replacement;
@@ -249,7 +242,7 @@ export const useSlashCommand = (
 
       setIsMenuOpen(false);
       setFilterText("");
-      setCompletionKind("command");
+      setIsModelProfileCompletion(false);
       setSelectedIndex(0);
       slashRangeRef.current = null;
 
@@ -305,7 +298,7 @@ export const useSlashCommand = (
     [selectItem],
   );
 
-  const closeMenu = useCallback(() => setIsMenuOpen(false), []);
+  const closeMenu = () => setIsMenuOpen(false);
 
   return {
     isMenuOpen,
