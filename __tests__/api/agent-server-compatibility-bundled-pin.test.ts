@@ -10,11 +10,17 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import {
+  AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE,
+  AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE,
   AgentServerUnavailableError,
   AgentServerUnknownVersionError,
   AgentServerUnsupportedVersionError,
   clearCachedAgentServerInfo,
+  isAgentServerAuthError,
   isAgentServerToolAvailable,
+  isAgentServerUnavailableError,
+  isAgentServerUnknownVersionError,
+  isAgentServerUnsupportedVersionError,
   loadAgentServerInfo,
   MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
 } from "#/api/agent-server-compatibility";
@@ -85,6 +91,33 @@ afterEach(() => {
 });
 
 describe("loadAgentServerInfo", () => {
+  it("exposes stable compatibility error contracts through the public alias", () => {
+    expect(AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE).toBe(
+      "AGENT_SERVER_UNSUPPORTED_VERSION",
+    );
+    expect(AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE).toBe(
+      "AGENT_SERVER_UNKNOWN_VERSION",
+    );
+    expect(isAgentServerUnavailableError(new AgentServerUnavailableError())).toBe(
+      true,
+    );
+    expect(
+      isAgentServerUnsupportedVersionError(
+        new AgentServerUnsupportedVersionError("1.27.0"),
+      ),
+    ).toBe(true);
+    expect(
+      isAgentServerUnknownVersionError(
+        new AgentServerUnknownVersionError("dev-build"),
+      ),
+    ).toBe(true);
+
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_AUTH_REQUIRED__ = true;
+    expect(isAgentServerAuthError(httpError(401))).toBe(true);
+  });
+
   it("returns server info when the local backend reports the minimum compatible version", async () => {
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
@@ -154,9 +187,13 @@ describe("loadAgentServerInfo", () => {
     // Empty registry — no backends at all (frontend-only with no config).
     setRegisteredBackends([]);
 
-    await expect(loadAgentServerInfo()).rejects.toThrow(
-      AgentServerUnavailableError,
-    );
+    await expect(loadAgentServerInfo()).rejects.toMatchObject({
+      name: AgentServerUnavailableError.name,
+      message:
+        "No agent server backend is configured yet. Add a backend to get started.",
+      details: "No backend configured",
+      noBackendConfigured: true,
+    });
     expect(ServerClient).not.toHaveBeenCalled();
   });
 

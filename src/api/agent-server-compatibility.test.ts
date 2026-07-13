@@ -62,20 +62,25 @@ describe("agent-server version compatibility", () => {
     });
   });
 
-  it.each(["dev-build", "1.28", "1.28.0.1", "1.two.0", "V1.28.0"])(
-    "classifies malformed version %s as unknown",
-    (version) => {
-      const error = getThrownError(() =>
-        assertAgentServerVersionIsSupported(serverInfo(version)),
-      );
+  it.each([
+    "dev-build",
+    "1.28",
+    "1.28.0.1",
+    "1.two.0",
+    "1.28.v0",
+    "Infinity.28.0",
+    "V1.28.0",
+  ])("classifies malformed version %s as unknown", (version) => {
+    const error = getThrownError(() =>
+      assertAgentServerVersionIsSupported(serverInfo(version)),
+    );
 
-      expect(error).toBeInstanceOf(AgentServerUnknownVersionError);
-      expect(error).toMatchObject({
-        actualVersion: version,
-        code: AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE,
-      });
-    },
-  );
+    expect(error).toBeInstanceOf(AgentServerUnknownVersionError);
+    expect(error).toMatchObject({
+      actualVersion: version,
+      code: AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE,
+    });
+  });
 
   it.each(["0.99.99", "1.27.999", "1.28.0-rc.1"])(
     "rejects older version %s",
@@ -118,6 +123,15 @@ describe("agent-server version compatibility", () => {
 });
 
 describe("agent-server compatibility errors", () => {
+  it("publishes stable error codes for callers", () => {
+    expect(AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE).toBe(
+      "AGENT_SERVER_UNSUPPORTED_VERSION",
+    );
+    expect(AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE).toBe(
+      "AGENT_SERVER_UNKNOWN_VERSION",
+    );
+  });
+
   it("constructs unavailable errors for connection and missing-backend failures", () => {
     expect(new AgentServerUnavailableError()).toMatchObject({
       name: "AgentServerUnavailableError",
@@ -139,12 +153,15 @@ describe("agent-server compatibility errors", () => {
     });
   });
 
-  it("includes reported versions only when an unknown error has one", () => {
-    expect(new AgentServerUnknownVersionError(null).message).not.toContain(
-      "It reported",
+  it("describes unsupported and unknown versions exactly", () => {
+    expect(new AgentServerUnsupportedVersionError("1.27.0").message).toBe(
+      `Agent Canvas requires agent-server ${MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION} or newer; this backend is running 1.27.0. Please upgrade the agent-server backend.`,
     );
-    expect(new AgentServerUnknownVersionError("dev-build").message).toContain(
-      'It reported "dev-build".',
+    expect(new AgentServerUnknownVersionError(null).message).toBe(
+      `Could not determine this backend's agent-server version. Agent Canvas requires agent-server ${MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION} or newer, but this backend did not return a valid version from /server_info. Restart or rebuild the agent-server backend, then try again.`,
+    );
+    expect(new AgentServerUnknownVersionError("dev-build").message).toBe(
+      `Could not determine this backend's agent-server version. It reported "dev-build". Agent Canvas requires agent-server ${MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION} or newer, but this backend did not return a valid version from /server_info. Restart or rebuild the agent-server backend, then try again.`,
     );
   });
 
@@ -200,6 +217,14 @@ describe("SDK HTTP error classification", () => {
     expect(isSdkHttpError(httpError(401))).toBe(true);
     expect(isSdkHttpError({ name: "HttpError", status: 401 })).toBe(false);
     expect(isSdkHttpError(new Error("HTTP 401"))).toBe(false);
+    expect(
+      isSdkHttpError(
+        Object.assign(new Error("HTTP 401"), {
+          name: "AnotherError",
+          status: 401,
+        }),
+      ),
+    ).toBe(false);
     expect(
       isSdkHttpError(Object.assign(new Error(), { name: "HttpError" })),
     ).toBe(false);
