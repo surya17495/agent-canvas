@@ -79,16 +79,38 @@ describe("device-flow-client", () => {
       const result = await startDeviceFlow(TEST_HOST_URL);
 
       expect(result).toEqual(mockResponse);
-      // Should call the cloud endpoint directly.
       expect(fetch).toHaveBeenCalledWith(
         `${TEST_HOST_URL}/oauth/device/authorize`,
-        expect.objectContaining({
+        {
           method: "POST",
-          headers: expect.objectContaining({
+          headers: {
             "Content-Type": "application/json",
-          }),
-        }),
+          },
+          body: "{}",
+          signal: undefined,
+        },
       );
+    });
+
+    it("builds optional authorization values from the required response fields", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            device_code: "device123",
+            user_code: "USER 12/+",
+            verification_uri: `${TEST_HOST_URL}/device`,
+          }),
+      });
+
+      await expect(startDeviceFlow(TEST_HOST_URL)).resolves.toEqual({
+        device_code: "device123",
+        user_code: "USER 12/+",
+        verification_uri: `${TEST_HOST_URL}/device`,
+        verification_uri_complete: `${TEST_HOST_URL}/device?user_code=USER%2012%2F%2B`,
+        expires_in: 600,
+        interval: 5,
+      });
     });
 
     it("normalizes host URL by removing trailing slashes", async () => {
@@ -155,6 +177,15 @@ describe("device-flow-client", () => {
         /Network failed/,
       );
     });
+
+    it("describes non-Error failures from the authorization request", async () => {
+      global.fetch = vi.fn().mockRejectedValue("connection unavailable");
+
+      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Failed to start device flow: connection unavailable",
+      });
+    });
   });
 
   describe("pollForToken", () => {
@@ -175,16 +206,48 @@ describe("device-flow-client", () => {
       });
 
       expect(result).toEqual(mockTokenResponse);
-      // Should call the cloud endpoint directly.
       expect(fetch).toHaveBeenCalledWith(
         `${TEST_HOST_URL}/oauth/device/token`,
-        expect.objectContaining({
+        {
           method: "POST",
-          headers: expect.objectContaining({
+          headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-          }),
-        }),
+          },
+          body: "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&device_code=device123",
+          signal: undefined,
+        },
       );
+    });
+
+    it("defaults the token type when the successful response omits it", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ access_token: "api-key-123" }),
+      });
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", { interval: 5 }),
+      ).resolves.toEqual({
+        access_token: "api-key-123",
+        token_type: "Bearer",
+        expires_in: undefined,
+      });
+    });
+
+    it("rejects a successful token response without an access token", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ token_type: "Bearer" }),
+      });
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", { interval: 5 }),
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Invalid token response: missing access_token",
+      });
     });
 
     it("polls until authorization is complete", async () => {
@@ -296,6 +359,58 @@ describe("device-flow-client", () => {
       ).rejects.toThrow(/denied/i);
     });
 
+    it("rejects a non-JSON token error response with its HTTP status", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: () => Promise.reject(new SyntaxError("Unexpected token")),
+      });
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Unexpected response from server: 502",
+      });
+    });
+
+    it.each([
+      {
+        description: "with its server description",
+        error: "invalid_scope",
+        errorDescription: "Requested scope is unavailable",
+        expectedMessage:
+          "Authorization error: invalid_scope - Requested scope is unavailable",
+      },
+      {
+        description: "without a server description",
+        error: "server_error",
+        errorDescription: undefined,
+        expectedMessage: "Authorization error: server_error",
+      },
+    ])(
+      "preserves an unknown token error $description",
+      async ({ error, errorDescription, expectedMessage }) => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: false,
+          status: 400,
+          json: () =>
+            Promise.resolve({
+              error,
+              error_description: errorDescription,
+            }),
+        });
+
+        await expect(
+          pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
+        ).rejects.toMatchObject({
+          name: "DeviceFlowError",
+          message: expectedMessage,
+          code: error,
+        });
+      },
+    );
+
     it("respects abort signal", async () => {
       vi.useRealTimers(); // Use real timers for this test
       const controller = new AbortController();
@@ -319,6 +434,92 @@ describe("device-flow-client", () => {
           signal: controller.signal,
         }),
       ).rejects.toThrow(/cancelled/i);
+    });
+
+    it("converts a fetch abort into a cancellation error", async () => {
+      const controller = new AbortController();
+      global.fetch = vi
+        .fn()
+        .mockRejectedValue(new DOMException("Aborted", "AbortError"));
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", {
+          interval: 1,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization cancelled",
+        code: "cancelled",
+      });
+    });
+
+    it("cancels while waiting for the next poll", async () => {
+      const controller = new AbortController();
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ error: "authorization_pending" }),
+      });
+
+      const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
+        interval: 5,
+        signal: controller.signal,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+
+      await expect(pollPromise).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization cancelled",
+        code: "cancelled",
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels when the signal aborts while a pending response is handled", async () => {
+      const controller = new AbortController();
+      global.fetch = vi.fn().mockImplementation(async () => {
+        controller.abort();
+        return {
+          ok: false,
+          status: 400,
+          json: () => Promise.resolve({ error: "authorization_pending" }),
+        };
+      });
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", {
+          interval: 5,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization cancelled",
+        code: "cancelled",
+      });
+    });
+
+    it("propagates an unexpected polling wait failure", async () => {
+      const waitError = new Error("Timer unavailable");
+      const controller = new AbortController();
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ error: "authorization_pending" }),
+      });
+      vi.spyOn(controller.signal, "addEventListener").mockImplementationOnce(
+        () => {
+          throw waitError;
+        },
+      );
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", {
+          interval: 1,
+          signal: controller.signal,
+        }),
+      ).rejects.toBe(waitError);
     });
 
     it("times out after specified duration", async () => {
@@ -485,6 +686,40 @@ describe("device-flow-client", () => {
         networkError,
       );
 
+      consoleSpy.mockRestore();
+    });
+
+    it("retries a non-abort DOMException as a network error", async () => {
+      const networkError = new DOMException(
+        "Connection interrupted",
+        "NetworkError",
+      );
+      global.fetch = vi
+        .fn()
+        .mockRejectedValueOnce(networkError)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              access_token: "api-key-123",
+              token_type: "Bearer",
+            }),
+        });
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
+        interval: 1,
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(pollPromise).resolves.toMatchObject({
+        access_token: "api-key-123",
+      });
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "Network error during polling, retrying:",
+        networkError,
+      );
       consoleSpy.mockRestore();
     });
   });
