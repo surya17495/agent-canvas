@@ -2,7 +2,7 @@
  * Extension **source refs**: a compact, distribution-agnostic way to name *which*
  * extension to install and at *what* version, independent of where the bytes live.
  *
- * Supported forms (see `docs/proposals/ui-extensions.md` § distribution):
+ * Supported forms (see `docs/extensions/ARCHITECTURE.md` § Source Resolution Pipeline):
  * - `npm:<pkg>[@<range>]`         e.g. `npm:@acme/hello@^1` — an npm package (per-package
  *                                 versioning; the natural fit for monorepos)
  * - `gh:<owner>/<repo>[/<subpath>][@<range>]`  e.g. `gh:acme/exts/packages/hello@^1`

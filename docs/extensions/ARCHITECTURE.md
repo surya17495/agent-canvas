@@ -12,6 +12,32 @@ This document describes the **technical implementation** of the Agent Canvas UI 
 
 ---
 
+## Design Rationale
+
+The extension system adopts the **VS Code extension model** because its security properties match what "run customer-supplied code in a browser SPA" demands:
+
+- **Extensions cannot touch the host DOM.** They run in isolated Web Workers and interact only through the `agentCanvas` API. UI is either *declarative* (contribution points) or *webview* (sandboxed iframe with postMessage bridge and strict CSP).
+- **Contribution points are static JSON.** The vast majority of UI (menus, views, commands, sidebar items) is declared, not coded. The host renders trusted native components from untrusted *data* — safe by construction.
+- **Activation events keep things lazy.** Extension code only runs when a relevant trigger fires.
+
+### VS Code → Agent Canvas Mapping
+
+| VS Code concept | Agent Canvas equivalent | Notes |
+|---|---|---|
+| `package.json` + `contributes` | `extension.json` manifest | Declarative, validated with Zod |
+| Activity Bar | Sidebar rail (`sidebar-rail-body.tsx`) | `contributes.viewsContainers.activitybar` |
+| View / View Container | Panel in main area or side panel | `contributes.views` |
+| Webview (`createWebviewPanel`) | Sandboxed `<iframe>` + postMessage bridge | For arbitrary custom UI |
+| Command (`contributes.commands`) | Entry in Command-K menu | Declarative registration |
+| Menus (`contributes.menus`) | Contributed items in context/overflow menus | Bind to commands, placed into named slots |
+| Activation events | Lazy activation (`onView:*`, `onCommand:*`, `onStartup`) | Worker spins up only when needed |
+| Extension Host process | Web Worker per extension | Isolation boundary for extension logic |
+| `vscode` module / API | `agentCanvas` API injected into worker | Versioned, capability-gated |
+| Marketplace / OpenVSX | Marketplace catalog + URL/local install | `npm:`, `gh:`, direct URL sources |
+| `engines.vscode` | `engines.agentCanvas` semver range | Host/extension API compatibility gate |
+
+---
+
 ## Overview
 
 The extension system follows the **VS Code extension model**, adapted for a browser SPA:
@@ -876,10 +902,18 @@ See `docs/SELF_HOSTING.md` § 6 for the nginx recipe.
 
 See **[Extension Points Roadmap](../EXTENSION_POINTS.md)** for planned contribution points and the recipe for adding new ones.
 
+### Out of Scope (Current Implementation)
+
+The following are explicitly **not** in the current implementation but may be considered for future versions:
+
+- **Extension-to-extension APIs / dependency graph** — Extensions cannot import or call each other
+- **Native rich tree views** — Beyond simple declarative items; complex custom tree rendering requires a webview
+- **Hosted public marketplace with ratings/signing** — Current model is catalog + URL/local install
+- **Theming/keybinding contribution points** — Natural follow-on once commands are fully integrated
+
 ---
 
 ## Further Reading
 
 - **[Extension Points Roadmap](../EXTENSION_POINTS.md)** — How to add new contribution points
-- **[Design Proposal](../proposals/ui-extensions.md)** — Original design document
-- **[Issue Tracking](../issues/README.md)** — Implementation issues and decisions
+- **[Example Extensions](https://github.com/jpshackelford/agent-canvas-experimental-extensions)** — Reference implementations
