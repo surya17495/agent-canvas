@@ -27,10 +27,6 @@ export interface LLMSubscriptionDeviceChallenge {
   intervalSeconds: number | null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 const readString = (
   value: Record<string, unknown>,
   keys: string[],
@@ -50,8 +46,8 @@ const readNumber = (
 ): number | null => {
   for (const key of keys) {
     const candidate = value[key];
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      return candidate;
+    if (Number.isFinite(candidate as number)) {
+      return candidate as number;
     }
   }
   return null;
@@ -92,15 +88,15 @@ async function requestSubscriptionEndpoint(
 }
 
 function normalizeModels(raw: unknown): string[] {
-  if (Array.isArray(raw)) {
-    return raw.filter((item): item is string => typeof item === "string");
-  }
-  if (isRecord(raw) && Array.isArray(raw.models)) {
-    return raw.models.filter(
-      (item): item is string => typeof item === "string",
-    );
-  }
-  return [];
+  const models = Array.isArray(raw)
+    ? raw
+    : raw === null
+      ? null
+      : (raw as Record<string, unknown>).models;
+
+  return Array.isArray(models)
+    ? models.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function normalizeStatus(raw: RawSubscriptionStatus): LLMSubscriptionStatus {
