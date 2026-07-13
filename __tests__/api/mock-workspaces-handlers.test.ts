@@ -1,7 +1,26 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { http, HttpResponse } from "msw";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import { resetMockWorkspaces } from "#/mocks/handlers";
+import { server } from "#/mocks/node";
+
+const unhandledWorkspacesRequest = () =>
+  HttpResponse.json({ error: "Unhandled workspaces request" }, { status: 599 });
+
+const UNHANDLED_WORKSPACES_REQUESTS = [
+  http.all("*/api/workspaces", unhandledWorkspacesRequest),
+  http.all("*/api/workspaces/parents", unhandledWorkspacesRequest),
+  http.all("*/api/auth/workspace-session", unhandledWorkspacesRequest),
+];
+
+const installWorkspacesHandlers = async () => {
+  vi.resetModules();
+  const { WORKSPACES_HANDLERS } = await import("#/mocks/workspaces-handlers");
+  server.resetHandlers(
+    ...WORKSPACES_HANDLERS,
+    ...UNHANDLED_WORKSPACES_REQUESTS,
+  );
+};
 
 const postJson = (path: string, body: unknown) =>
   fetch(`http://localhost:3000${path}`, {
@@ -10,38 +29,64 @@ const postJson = (path: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+const listWorkspaces = () => fetch("http://localhost:3000/api/workspaces");
+
+const deleteByPath = (path: string, workspacePath: string) =>
+  fetch(
+    `http://localhost:3000${path}?path=${encodeURIComponent(workspacePath)}`,
+    { method: "DELETE" },
+  );
+
 describe("mock workspaces handlers", () => {
+  beforeEach(installWorkspacesHandlers);
+
   afterEach(() => {
     resetMockWorkspaces();
   });
 
   it("starts with an empty workspaces list", async () => {
-    const response = await WorkspacesService.listWorkspaces();
-    expect(response.workspaces).toEqual([]);
-    expect(response.workspaceParents).toEqual([]);
+    const response = await listWorkspaces();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      workspaces: [],
+      workspaceParents: [],
+    });
   });
 
   it("persists added workspaces across list calls", async () => {
-    await WorkspacesService.addWorkspaces([
-      { id: "w1", name: "Project", path: "/workspace/project" },
-    ]);
+    await postJson("/api/workspaces", {
+      workspaces: [{ id: "w1", name: "Project", path: "/workspace/project" }],
+    });
 
-    const response = await WorkspacesService.listWorkspaces();
-    expect(response.workspaces).toEqual([
-      { id: "w1", name: "Project", path: "/workspace/project" },
-    ]);
+    const response = await listWorkspaces();
+    await expect(response.json()).resolves.toEqual({
+      workspaces: [{ id: "w1", name: "Project", path: "/workspace/project" }],
+      workspaceParents: [],
+    });
   });
 
   it("upserts a workspace when path already exists", async () => {
-    await WorkspacesService.addWorkspaces([
-      { id: "w1", name: "Old", path: "/workspace/project" },
-    ]);
-    await WorkspacesService.addWorkspaces([
-      { id: "w2", name: "New", path: "/workspace/project" },
-    ]);
-    const response = await WorkspacesService.listWorkspaces();
-    expect(response.workspaces).toHaveLength(1);
-    expect(response.workspaces[0].name).toBe("New");
+    await postJson("/api/workspaces", {
+      workspaces: [
+        { id: "w1", name: "Other", path: "/workspace/other" },
+        { id: "w2", name: "Old", path: "/workspace/project" },
+      ],
+    });
+    const response = await postJson("/api/workspaces", {
+      workspaces: [
+        { id: "w3", name: "New", path: "/workspace/project" },
+        { id: "w4", name: "Other updated", path: "/workspace/other" },
+      ],
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      workspaces: [
+        { id: "w4", name: "Other updated", path: "/workspace/other" },
+        { id: "w3", name: "New", path: "/workspace/project" },
+      ],
+      workspaceParents: [],
+    });
   });
 
   it("treats omitted workspace and parent collections as no-op updates", async () => {
@@ -63,48 +108,92 @@ describe("mock workspaces handlers", () => {
   });
 
   it("removes a workspace by path", async () => {
-    await WorkspacesService.addWorkspaces([
-      { id: "w1", name: "Project", path: "/workspace/project" },
-      { id: "w2", name: "Other", path: "/workspace/other" },
-    ]);
+    await postJson("/api/workspaces", {
+      workspaces: [
+        { id: "w1", name: "Project", path: "/workspace/project" },
+        { id: "w2", name: "Other", path: "/workspace/other" },
+      ],
+    });
 
-    await WorkspacesService.removeWorkspace("/workspace/project");
+    const deleted = await deleteByPath("/api/workspaces", "/workspace/project");
 
-    const response = await WorkspacesService.listWorkspaces();
-    expect(response.workspaces.map((w) => w.path)).toEqual([
-      "/workspace/other",
-    ]);
+    expect(deleted.status).toBe(200);
+    await expect(deleted.json()).resolves.toEqual({ deleted: true });
+
+    const missing = await deleteByPath("/api/workspaces", "/workspace/missing");
+
+    expect(missing.status).toBe(200);
+    await expect(missing.json()).resolves.toEqual({ deleted: false });
+
+    const response = await listWorkspaces();
+    await expect(response.json()).resolves.toEqual({
+      workspaces: [{ id: "w2", name: "Other", path: "/workspace/other" }],
+      workspaceParents: [],
+    });
   });
 
   it("persists workspace parents and removes them by path", async () => {
-    await WorkspacesService.addWorkspaceParents([
-      { id: "p1", name: "Repos", path: "/workspace/repos" },
-    ]);
+    await postJson("/api/workspaces/parents", {
+      parents: [
+        { id: "p1", name: "Repos", path: "/workspace/repos" },
+        { id: "p2", name: "Other", path: "/workspace/other" },
+      ],
+    });
 
-    const afterAdd = await WorkspacesService.listWorkspaces();
-    expect(afterAdd.workspaceParents).toEqual([
-      { id: "p1", name: "Repos", path: "/workspace/repos" },
-    ]);
+    const afterAdd = await listWorkspaces();
+    await expect(afterAdd.json()).resolves.toEqual({
+      workspaces: [],
+      workspaceParents: [
+        { id: "p1", name: "Repos", path: "/workspace/repos" },
+        { id: "p2", name: "Other", path: "/workspace/other" },
+      ],
+    });
 
-    await WorkspacesService.removeWorkspaceParent("/workspace/repos");
+    const deleted = await deleteByPath(
+      "/api/workspaces/parents",
+      "/workspace/repos",
+    );
 
-    const afterRemove = await WorkspacesService.listWorkspaces();
-    expect(afterRemove.workspaceParents).toEqual([]);
+    expect(deleted.status).toBe(200);
+    await expect(deleted.json()).resolves.toEqual({ deleted: true });
+
+    const missing = await deleteByPath(
+      "/api/workspaces/parents",
+      "/workspace/missing",
+    );
+
+    expect(missing.status).toBe(200);
+    await expect(missing.json()).resolves.toEqual({ deleted: false });
+
+    const afterRemove = await listWorkspaces();
+    await expect(afterRemove.json()).resolves.toEqual({
+      workspaces: [],
+      workspaceParents: [{ id: "p2", name: "Other", path: "/workspace/other" }],
+    });
   });
 
   it("replaces a workspace parent when its path is already registered", async () => {
     await postJson("/api/workspaces/parents", {
-      parents: [{ id: "p1", name: "Old", path: "/workspace/repos" }],
+      parents: [
+        { id: "p1", name: "Other", path: "/workspace/other" },
+        { id: "p2", name: "Old", path: "/workspace/repos" },
+      ],
     });
 
     const response = await postJson("/api/workspaces/parents", {
-      parents: [{ id: "p2", name: "New", path: "/workspace/repos" }],
+      parents: [
+        { id: "p3", name: "New", path: "/workspace/repos" },
+        { id: "p4", name: "Other updated", path: "/workspace/other" },
+      ],
     });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       workspaces: [],
-      workspaceParents: [{ id: "p2", name: "New", path: "/workspace/repos" }],
+      workspaceParents: [
+        { id: "p4", name: "Other updated", path: "/workspace/other" },
+        { id: "p3", name: "New", path: "/workspace/repos" },
+      ],
     });
   });
 
