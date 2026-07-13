@@ -6,10 +6,22 @@ const i18nMocks = vi.hoisted(() => ({
   exists: vi.fn(),
 }));
 
+const useTranslationMock = vi.hoisted(() =>
+  vi.fn((namespace: string) => ({
+    t: (key: string) =>
+      namespace === "openhands" ? `translated:${key}` : `missing:${key}`,
+  })),
+);
+
 vi.mock("#/i18n", () => ({
   default: {
     exists: i18nMocks.exists,
   },
+}));
+
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: useTranslationMock,
 }));
 
 interface ErrorMessageScenario {
@@ -40,7 +52,7 @@ describe("chat error details", () => {
 
     expect(i18nMocks.exists).not.toHaveBeenCalled();
     expect(
-      screen.getByText("CHAT_INTERFACE$AGENT_ERROR_MESSAGE"),
+      screen.getByText("translated:CHAT_INTERFACE$AGENT_ERROR_MESSAGE"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("markdown-renderer")).not.toBeInTheDocument();
 
@@ -64,7 +76,7 @@ describe("chat error details", () => {
     expect(i18nMocks.exists).toHaveBeenCalledOnce();
     expect(i18nMocks.exists).toHaveBeenCalledWith("ERROR$NEW_BACKEND_FAILURE");
     expect(
-      screen.getByText("CHAT_INTERFACE$AGENT_ERROR_MESSAGE"),
+      screen.getByText("translated:CHAT_INTERFACE$AGENT_ERROR_MESSAGE"),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("ERROR$NEW_BACKEND_FAILURE"),
@@ -79,9 +91,11 @@ describe("chat error details", () => {
 
     expect(i18nMocks.exists).toHaveBeenCalledOnce();
     expect(i18nMocks.exists).toHaveBeenCalledWith("ERROR$RATE_LIMITED");
-    expect(screen.getByText("ERROR$RATE_LIMITED")).toBeInTheDocument();
     expect(
-      screen.queryByText("CHAT_INTERFACE$AGENT_ERROR_MESSAGE"),
+      screen.getByText("translated:ERROR$RATE_LIMITED"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("translated:CHAT_INTERFACE$AGENT_ERROR_MESSAGE"),
     ).not.toBeInTheDocument();
   });
 });
