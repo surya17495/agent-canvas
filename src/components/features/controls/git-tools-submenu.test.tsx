@@ -5,6 +5,7 @@ import { GitToolsSubmenu } from "./git-tools-submenu";
 const mocks = vi.hoisted(() => ({
   setMessageToSend: vi.fn(),
   useActiveConversation: vi.fn(),
+  useTranslation: vi.fn(() => ({ t: (key: string) => key })),
   getGitPullPrompt: vi.fn(() => "pull prompt"),
   getGitPushPrompt: vi.fn(() => "push prompt"),
   getCreatePRPrompt: vi.fn(() => "pr prompt"),
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: mocks.useTranslation,
 }));
 
 vi.mock("#/stores/conversation-store", () => ({
@@ -81,9 +82,13 @@ beforeEach(() => {
 });
 
 describe("GitToolsSubmenu", () => {
-  it("renders every git action in the submenu", () => {
-    render(<GitToolsSubmenu onClose={vi.fn()} />);
+  it("renders every git action in the submenu", async () => {
+    vi.resetModules();
+    const { GitToolsSubmenu: ReloadedGitToolsSubmenu } =
+      await import("./git-tools-submenu");
+    render(<ReloadedGitToolsSubmenu onClose={vi.fn()} />);
 
+    expect(mocks.useTranslation).toHaveBeenCalledWith("openhands");
     expect(screen.getByTestId("git-tools-submenu")).toHaveClass("w-max");
     expect(screen.getByTestId("git-pull-button")).toHaveTextContent(
       "COMMON$GIT_PULL",
