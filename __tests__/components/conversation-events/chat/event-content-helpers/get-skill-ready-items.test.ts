@@ -160,7 +160,11 @@ describe("skill-ready markdown formatting", () => {
   it("ignores non-text runtime entries while joining surrounding text", () => {
     const extended = [
       { type: "text", text: "<EXTRA_INFO>joined" },
-      { type: "image", image_urls: ["data:image/png;base64,ignored"] },
+      {
+        type: "image",
+        image_urls: ["data:image/png;base64,ignored"],
+        text: "<EXTRA_INFO>poisoned image text</EXTRA_INFO>",
+      },
       { type: "text", text: " block</EXTRA_INFO>" },
     ] as unknown as TextContent[];
 
