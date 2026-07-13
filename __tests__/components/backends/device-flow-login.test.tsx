@@ -6,24 +6,28 @@ import { DeviceFlowAuth } from "#/components/features/backends/device-flow-auth"
 import type { UseDeviceFlowReturn } from "#/hooks/use-device-flow";
 
 const useDeviceFlowMock = vi.hoisted(() => vi.fn());
+const useTranslationMock = vi.hoisted(() => vi.fn());
 
 vi.mock("#/hooks/use-device-flow", () => ({
   useDeviceFlow: useDeviceFlowMock,
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string) =>
-      ({
-        BACKEND$LOGIN_WITH_OPENHANDS: "Login with OpenHands Cloud",
-        BACKEND$AUTH_STARTING: "Starting authorization",
-        BACKEND$AUTH_AWAITING: "Waiting for authorization",
-        BACKEND$AUTH_BROWSER_OPENED: "Complete login in your browser",
-        BACKEND$AUTH_OPEN_MANUALLY: "Open the authorization page",
-        BACKEND$AUTH_CANCEL: "Cancel",
-        BACKEND$AUTH_RETRY: "Retry",
-      })[key] ?? key,
-  }),
+  useTranslation: (namespace?: unknown) => {
+    useTranslationMock(namespace);
+    return {
+      t: (key: string) =>
+        ({
+          BACKEND$LOGIN_WITH_OPENHANDS: "Login with OpenHands Cloud",
+          BACKEND$AUTH_STARTING: "Starting authorization",
+          BACKEND$AUTH_AWAITING: "Waiting for authorization",
+          BACKEND$AUTH_BROWSER_OPENED: "Complete login in your browser",
+          BACKEND$AUTH_OPEN_MANUALLY: "Open the authorization page",
+          BACKEND$AUTH_CANCEL: "Cancel",
+          BACKEND$AUTH_RETRY: "Retry",
+        })[key] ?? key,
+    };
+  },
 }));
 
 type DeviceFlowAuthProps = React.ComponentProps<typeof DeviceFlowAuth>;
@@ -99,6 +103,7 @@ function createPopup({
 
 afterEach(() => {
   useDeviceFlowMock.mockReset();
+  useTranslationMock.mockReset();
   vi.restoreAllMocks();
 });
 
@@ -111,12 +116,21 @@ describe("device-flow login", () => {
 
     render(<DeviceFlowAuth {...createProps({ isDisabled: true })} />);
 
+    expect(useTranslationMock).toHaveBeenNthCalledWith(1, "openhands");
+    expect(useTranslationMock).toHaveBeenNthCalledWith(2, "openhands");
+    expect(useTranslationMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("cloud-login-device-flow")).toHaveClass(
+      "flex",
+      "flex-col",
+      "gap-3",
+    );
     const button = screen.getByTestId("cloud-login-login-button");
     expect(button).toHaveAccessibleName("Login with OpenHands Cloud");
     expect(button).toHaveTextContent("Login with OpenHands Cloud");
     expect(button).not.toHaveAttribute("aria-label");
     expect(button).toHaveClass("bg-primary", "w-full");
     expect(button).toBeDisabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     await user.click(button);
     expect(flow.start).not.toHaveBeenCalled();
@@ -150,6 +164,7 @@ describe("device-flow login", () => {
     arrangeFlow(flow);
     const { popup, close } = createPopup();
     const open = vi.spyOn(window, "open").mockReturnValue(popup);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const { unmount } = render(
       <DeviceFlowAuth
@@ -174,6 +189,7 @@ describe("device-flow login", () => {
     await user.click(button);
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(flow.start).toHaveBeenCalledWith("https://cloud.example.com");
+    expect(warn).not.toHaveBeenCalled();
 
     unmount();
     expect(close).toHaveBeenCalledTimes(1);
@@ -215,12 +231,31 @@ describe("device-flow login", () => {
     expect(flow.start).not.toHaveBeenCalled();
   });
 
+  it("only recognizes an explicit scheme at the start of the host", async () => {
+    const user = userEvent.setup();
+    const flow = createFlow();
+    arrangeFlow(flow);
+    vi.spyOn(window, "open").mockReturnValue(createPopup().popup);
+
+    render(
+      <DeviceFlowAuth
+        {...createProps({ host: "prefixhttps://cloud.example.com" })}
+      />,
+    );
+    await user.click(screen.getByTestId("cloud-login-login-button"));
+
+    expect(flow.start).toHaveBeenCalledWith(
+      "https://prefixhttps://cloud.example.com",
+    );
+  });
+
   it("shows an accessible inline starting state", () => {
     arrangeFlow(createFlow({ status: "starting" }));
 
-    render(<DeviceFlowAuth {...createProps()} />);
+    render(<DeviceFlowAuth {...createProps({ buttonVariant: "unstyled" })} />);
 
-    const status = screen.getByRole("status");
+    const status = screen.getByTestId("cloud-login-auth-starting");
+    expect(status).toHaveAttribute("role", "status");
     expect(status).toHaveTextContent("Starting authorization");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
@@ -309,6 +344,27 @@ describe("device-flow login", () => {
     expect(location.href).toBe("about:blank");
     expect(open).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("link", { name: verificationUrl })).toBeVisible();
+  });
+
+  it("does not navigate when a verification URL arrives outside the awaiting state", async () => {
+    const user = userEvent.setup();
+    const idleFlow = createFlow();
+    const startingFlow = createFlow({
+      status: "starting",
+      verificationUrl: "https://cloud.example.com/device",
+    });
+    arrangeFlowTransition(idleFlow, startingFlow);
+    const { popup, location } = createPopup();
+    const open = vi.spyOn(window, "open").mockReturnValue(popup);
+    const props = createProps();
+
+    const { rerender } = render(<DeviceFlowAuth {...props} />);
+    await user.click(screen.getByTestId("cloud-login-login-button"));
+    rerender(<DeviceFlowAuth {...props} />);
+
+    expect(location.href).toBe("about:blank");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("cloud-login-auth-starting")).toBeVisible();
   });
 
   it("opens a fallback popup when the original cannot be navigated", async () => {
@@ -415,7 +471,37 @@ describe("device-flow login", () => {
 
     expect(props.onSuccess).not.toHaveBeenCalled();
     expect(flow.reset).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("cloud-login-login-button"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("delivers an initially available API key without requiring a popup", () => {
+    const flow = createFlow({ status: "success", apiKey: "api-key-123" });
+    arrangeFlow(flow);
+    const props = createProps();
+
+    expect(() => render(<DeviceFlowAuth {...props} />)).not.toThrow();
+
+    expect(props.onSuccess).toHaveBeenCalledWith("api-key-123");
+    expect(flow.reset).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not deliver an API key before authentication succeeds", () => {
+    const flow = createFlow({
+      status: "starting",
+      apiKey: "premature-api-key",
+    });
+    arrangeFlow(flow);
+    const props = createProps();
+
+    render(<DeviceFlowAuth {...props} />);
+
+    expect(props.onSuccess).not.toHaveBeenCalled();
+    expect(flow.reset).not.toHaveBeenCalled();
   });
 
   it("shows an authorization error and retries an explicit host", async () => {
@@ -435,10 +521,10 @@ describe("device-flow login", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(screen.getByTestId("cloud-login-auth-error")).toHaveTextContent(
       "Authorization expired",
     );
-    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await user.click(screen.getByTestId("cloud-login-auth-retry"));
 
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(flow.start).toHaveBeenCalledWith("HTTP://cloud.example.com");
@@ -466,7 +552,19 @@ describe("device-flow login", () => {
     fireEvent.click(dialog.firstElementChild as HTMLElement);
     expect(flow.cancel).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    const runtimeErrors: unknown[] = [];
+    const preventRuntimeError = (event: ErrorEvent) => {
+      event.preventDefault();
+      runtimeErrors.push(event.error);
+    };
+    window.addEventListener("error", preventRuntimeError);
+    try {
+      fireEvent.keyDown(window, { key: "Escape" });
+    } finally {
+      window.removeEventListener("error", preventRuntimeError);
+    }
+
+    expect(runtimeErrors).toEqual([]);
     expect(flow.cancel).toHaveBeenCalledTimes(1);
   });
 });
