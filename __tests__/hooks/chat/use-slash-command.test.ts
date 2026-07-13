@@ -107,6 +107,16 @@ function makeKeyboardEvent(key: string) {
   } as unknown as React.KeyboardEvent;
 }
 
+function getSelectedCharacterOffset(element: HTMLElement) {
+  const selection = window.getSelection();
+  expect(selection?.rangeCount).toBe(1);
+  const range = selection!.getRangeAt(0);
+  const beforeCursor = range.cloneRange();
+  beforeCursor.selectNodeContents(element);
+  beforeCursor.setEnd(range.startContainer, range.startOffset);
+  return beforeCursor.toString().length;
+}
+
 const fallbackItem: SlashCommandItem = {
   command: "/fallback",
   skill: makeSkill("fallback", ["/fallback"]),
@@ -239,6 +249,22 @@ describe("useSlashCommand", () => {
     ]);
   });
 
+  it("adds newly loaded skills after the hook has rendered", () => {
+    mockSkills.data = [];
+    const ref = makeChatInputRef();
+    const { result, rerender } = renderHook(() => useSlashCommand(ref));
+    expect(
+      result.current.filteredItems.map((item) => item.command),
+    ).not.toContain("/late-arrival");
+
+    mockSkills.data = [makeSkill("late-arrival", ["/late-arrival"])];
+    rerender();
+
+    expect(result.current.filteredItems.map((item) => item.command)).toContain(
+      "/late-arrival",
+    );
+  });
+
   it("builds commands from explicit triggers and agent skill names", () => {
     mockSkills.data = [
       makeSkill("explicit", ["task", "/explicit", "/alias"]),
@@ -318,6 +344,61 @@ describe("useSlashCommand", () => {
     },
   );
 
+  it("filters skills without descriptions without throwing", () => {
+    mockSkills.data = [
+      { ...makeSkill("undocumented", ["/quiet"]), content: undefined },
+    ];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/absent");
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.isMenuOpen).toBe(true);
+    expect(result.current.filteredItems).toEqual([]);
+  });
+
+  it("recognizes a slash command after an internal newline", () => {
+    mockSkills.data = [makeSkill("deploy", ["/deploy"])];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "context\n/dep");
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.isMenuOpen).toBe(true);
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/deploy",
+    ]);
+  });
+
+  it("ignores repeated trailing newlines while detecting and replacing a command", () => {
+    mockSkills.data = [makeSkill("hello", ["/hello"])];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/hel\n\r");
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/hello",
+    ]);
+
+    act(() => result.current.selectItem(result.current.filteredItems[0]));
+    expect(ref.current.textContent).toBe("/hello ");
+  });
+
+  it("removes generated trailing newlines that sit after the cursor", () => {
+    mockSkills.data = [makeSkill("hello", ["/hello"])];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/hel\n\r", "/hel".length);
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+    act(() => result.current.selectItem(result.current.filteredItems[0]));
+
+    expect(ref.current.textContent).toBe("/hello ");
+  });
+
   it("closes the menu when the input has no active slash word", () => {
     mockSkills.data = [makeSkill("deploy", ["/deploy"])];
     const ref = makeChatInputRef();
@@ -383,20 +464,61 @@ describe("useSlashCommand", () => {
     ]);
   });
 
+  it("does not treat extra model arguments as a profile completion", () => {
+    mockLlmProfiles.data = {
+      profiles: [makeProfile("haiku", "anthropic/claude-haiku")],
+      active_profile: null,
+    };
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/model haiku extra");
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.isMenuOpen).toBe(false);
+  });
+
+  it("supports multiple spaces before a model profile filter", () => {
+    mockLlmProfiles.data = {
+      profiles: [
+        makeProfile("haiku", "anthropic/claude-haiku"),
+        makeProfile("gpt", "openai/gpt"),
+      ],
+      active_profile: null,
+    };
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/model   hai");
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/model haiku",
+    ]);
+  });
+
   it("replaces the entire input when selection happens without a tracked slash range", () => {
     const ref = makeChatInputRef();
     setInputText(ref.current, "draft text\n");
-    const inputListener = vi.fn();
-    ref.current.addEventListener("input", inputListener);
+    const inputListener = vi.fn<(event: InputEvent) => void>();
+    document.body.addEventListener("input", inputListener);
+    const focus = vi.spyOn(ref.current, "focus").mockImplementation(() => {});
     const { result } = renderHook(() => useSlashCommand(ref));
 
     act(() => result.current.selectItem(fallbackItem));
 
     expect(ref.current.textContent).toBe("/fallback ");
     expect(inputListener).toHaveBeenCalledOnce();
-    expect(document.activeElement).toBe(ref.current);
+    expect(inputListener.mock.calls[0][0].bubbles).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(getSelectedCharacterOffset(ref.current)).toBe("/fallback ".length);
     expect(result.current.isMenuOpen).toBe(false);
     expect(result.current.selectedIndex).toBe(0);
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/btw",
+      "/model",
+      "/goal",
+    ]);
   });
 
   it("supports selecting a command from an empty editor", () => {
@@ -418,13 +540,28 @@ describe("useSlashCommand", () => {
     expect(ref.current.textContent).toBe("/fallback ");
   });
 
+  it("does not restore cleared text when selecting a previously tracked command", () => {
+    mockSkills.data = [makeSkill("fallback", ["/fallback"])];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/fall");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+
+    ref.current.innerText = "";
+    ref.current.textContent = "";
+    act(() => result.current.selectItem(result.current.filteredItems[0]));
+
+    expect(ref.current.textContent).toBe("/fallback ");
+  });
+
   it("replaces only the slash word when the cursor is in its middle", () => {
     mockSkills.data = [makeSkill("hello", ["/hello"])];
     const ref = makeChatInputRef();
-    const input = "prefix /helXYZ suffix";
+    const input = "prefix\n/helXYZ suffix";
     setInputText(ref.current, input, input.indexOf("/hel") + 4);
     const inputListener = vi.fn();
     ref.current.addEventListener("input", inputListener);
+    const focus = vi.spyOn(ref.current, "focus").mockImplementation(() => {});
     const { result } = renderHook(() => useSlashCommand(ref));
 
     act(() => result.current.updateSlashMenu());
@@ -434,9 +571,12 @@ describe("useSlashCommand", () => {
 
     act(() => result.current.selectItem(result.current.filteredItems[0]));
 
-    expect(ref.current.textContent).toBe("prefix /hello  suffix");
+    expect(ref.current.textContent).toBe("prefix\n/hello  suffix");
     expect(inputListener).toHaveBeenCalledOnce();
-    expect(document.activeElement).toBe(ref.current);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(getSelectedCharacterOffset(ref.current)).toBe(
+      "prefix\n".length + "/hello ".length,
+    );
     expect(result.current.isMenuOpen).toBe(false);
   });
 
@@ -447,7 +587,7 @@ describe("useSlashCommand", () => {
       active_profile: null,
     };
     const ref = makeChatInputRef();
-    const input = "ask /model haiXYZ later";
+    const input = "question /model haiXYZ later";
     setInputText(ref.current, input, input.indexOf("hai") + 3);
     const { result } = renderHook(() => useSlashCommand(ref));
 
@@ -457,7 +597,77 @@ describe("useSlashCommand", () => {
     ]);
 
     act(() => result.current.selectItem(result.current.filteredItems[0]));
-    expect(ref.current.textContent).toBe("ask /model haiku  later");
+    expect(ref.current.textContent).toBe("question /model haiku  later");
+  });
+
+  it("uses the latest input ref for direct selection after rerendering", () => {
+    mockSkills.data = [makeSkill("fallback", ["/fallback"])];
+    const firstRef = makeChatInputRef();
+    setInputText(firstRef.current, "first draft");
+    const secondRef = makeChatInputRef();
+    setInputText(secondRef.current, "/fall");
+    const { result, rerender } = renderHook(
+      ({ inputRef }) => useSlashCommand(inputRef),
+      { initialProps: { inputRef: firstRef } },
+    );
+
+    rerender({ inputRef: secondRef });
+    act(() => result.current.updateSlashMenu());
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/fallback",
+    ]);
+
+    act(() => result.current.selectItem(result.current.filteredItems[0]));
+    expect(secondRef.current.textContent).toBe("/fallback ");
+    expect(firstRef.current.textContent).toBe("first draft");
+  });
+
+  it("uses the latest selection callback for keyboard completion after rerendering", () => {
+    mockSkills.data = [makeSkill("fallback", ["/fallback"])];
+    const firstRef = makeChatInputRef();
+    setInputText(firstRef.current, "first draft");
+    const secondRef = makeChatInputRef();
+    setInputText(secondRef.current, "/fall");
+    const { result, rerender } = renderHook(
+      ({ inputRef }) => useSlashCommand(inputRef),
+      { initialProps: { inputRef: firstRef } },
+    );
+
+    rerender({ inputRef: secondRef });
+    act(() => result.current.updateSlashMenu());
+    act(() => result.current.handleSlashKeyDown(makeKeyboardEvent("Enter")));
+
+    expect(secondRef.current.textContent).toBe("/fallback ");
+    expect(firstRef.current.textContent).toBe("first draft");
+  });
+
+  it("still replaces text when the browser has no active Selection object", () => {
+    mockSkills.data = [makeSkill("fallback", ["/fallback"])];
+    const trackedRef = makeChatInputRef();
+    setInputText(trackedRef.current, "/fall");
+    const tracked = renderHook(() => useSlashCommand(trackedRef));
+    act(() => tracked.result.current.updateSlashMenu());
+
+    const trackedSelection = vi
+      .spyOn(window, "getSelection")
+      .mockReturnValue(null);
+    act(() =>
+      tracked.result.current.selectItem(
+        tracked.result.current.filteredItems[0],
+      ),
+    );
+    expect(trackedRef.current.textContent).toBe("/fallback ");
+    trackedSelection.mockRestore();
+
+    const fallbackRef = makeChatInputRef();
+    setInputText(fallbackRef.current, "draft");
+    const fallback = renderHook(() => useSlashCommand(fallbackRef));
+    const fallbackSelection = vi
+      .spyOn(window, "getSelection")
+      .mockReturnValue(null);
+    act(() => fallback.result.current.selectItem(fallbackItem));
+    expect(fallbackRef.current.textContent).toBe("/fallback ");
+    fallbackSelection.mockRestore();
   });
 
   it("resets keyboard selection when the slash filter changes", () => {
