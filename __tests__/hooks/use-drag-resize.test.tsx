@@ -406,17 +406,19 @@ describe("manual drag resizing", () => {
     expect(onHeightChange).toHaveBeenCalledOnce();
   });
 
-  it.fails("removes mobile capture listeners after touchend", () => {
+  it("removes mobile capture listeners after touchend", () => {
     vi.mocked(isMobileDevice).mockReturnValue(true);
     const element = createResizeElement();
     const grip = createResizeGrip();
     const onHeightChange = vi.fn();
+    const onGripDragEnd = vi.fn();
     const { result } = renderHook(() =>
       useDragResize({
         elementRef: { current: element },
         minHeight: 100,
         maxHeight: 300,
         onHeightChange,
+        onGripDragEnd,
       }),
     );
 
@@ -424,8 +426,10 @@ describe("manual drag resizing", () => {
     act(() => grip.dispatchEvent(createTouchEvent("touchmove", [80])));
     act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
     act(() => grip.dispatchEvent(createTouchEvent("touchmove", [70])));
+    act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
 
     expect(onHeightChange).toHaveBeenCalledOnce();
+    expect(onGripDragEnd).toHaveBeenCalledOnce();
   });
 
   it("finishes a mobile drag safely when the grip is detached before touchend", () => {

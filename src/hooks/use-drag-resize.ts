@@ -40,11 +40,11 @@ export const useDragResize = ({
   const setupMobileEventListeners = (
     handleDragMove: (event: MouseEvent | TouchEvent) => void,
     handleDragEnd: () => void,
-  ) => {
+  ): HTMLElement | null => {
     const resizeGrip = document.getElementById("resize-grip");
 
     if (!resizeGrip) {
-      return;
+      return null;
     }
 
     resizeGrip.addEventListener("touchmove", handleDragMove, {
@@ -54,6 +54,8 @@ export const useDragResize = ({
     resizeGrip.addEventListener("touchend", handleDragEnd, {
       capture: true,
     });
+
+    return resizeGrip;
   };
 
   // Setup event listeners for desktop devices
@@ -70,6 +72,7 @@ export const useDragResize = ({
     const isMobile = isMobileDevice();
     const startHeight = elementRef.current?.offsetHeight || minHeight;
     let dragCommitted = false;
+    let mobileResizeGrip: HTMLElement | null = null;
 
     const handleDragMove = (moveEvent: MouseEvent | TouchEvent) => {
       moveEvent.preventDefault();
@@ -121,27 +124,24 @@ export const useDragResize = ({
       }
 
       if (isMobile) {
-        const resizeGrip = document.getElementById("resize-grip");
-        if (!resizeGrip) {
-          return;
-        }
-
-        // Remove both mouse and touch event listeners
-        resizeGrip.removeEventListener("mousemove", handleDragMove);
-        resizeGrip.removeEventListener("mouseup", handleDragEnd);
-        resizeGrip.removeEventListener("touchmove", handleDragMove);
-        resizeGrip.removeEventListener("touchend", handleDragEnd);
+        mobileResizeGrip!.removeEventListener(
+          "touchmove",
+          handleDragMove,
+          true,
+        );
+        mobileResizeGrip!.removeEventListener("touchend", handleDragEnd, true);
       } else {
         document.removeEventListener("mousemove", handleDragMove);
         document.removeEventListener("mouseup", handleDragEnd);
-        document.removeEventListener("touchmove", handleDragMove);
-        document.removeEventListener("touchend", handleDragEnd);
       }
     };
 
     // Setup event listeners based on device type
     if (isMobile) {
-      setupMobileEventListeners(handleDragMove, handleDragEnd);
+      mobileResizeGrip = setupMobileEventListeners(
+        handleDragMove,
+        handleDragEnd,
+      );
     } else {
       setupDesktopEventListeners(handleDragMove, handleDragEnd);
     }
