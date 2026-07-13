@@ -101,7 +101,7 @@ export default function AutomationsList() {
     return data.automations.filter(
       (a) =>
         a.name.toLowerCase().includes(q) ||
-        (a.prompt ?? "").toLowerCase().includes(q) ||
+        a.prompt?.toLowerCase().includes(q) ||
         a.repository?.toLowerCase().includes(q) ||
         a.model?.toLowerCase().includes(q),
     );
@@ -190,11 +190,9 @@ export default function AutomationsList() {
     }
   };
 
-  const handleImportConfirm = () => {
-    if (!importSpec) return;
-
+  const handleImportConfirm = (spec: AutomationSpec) => {
     importMutation.mutate(
-      { ...importSpec, enabled: false },
+      { ...spec, enabled: false },
       {
         onSuccess: (created) => {
           setImportSpec(null);
@@ -220,11 +218,9 @@ export default function AutomationsList() {
     );
   };
 
-  const handleDeleteConfirm = () => {
-    if (deleteTarget) {
-      deleteMutation.mutate(deleteTarget.id);
-      setDeleteTarget(null);
-    }
+  const handleDeleteConfirm = (target: { id: string; name: string }) => {
+    deleteMutation.mutate(target.id);
+    setDeleteTarget(null);
   };
 
   const handleViewModeChange = useCallback((view: AutomationViewMode) => {
@@ -232,7 +228,6 @@ export default function AutomationsList() {
     writeStoredAutomationViewMode(view);
   }, []);
 
-  const hasMore = data ? data.total > data.automations.length : false;
   const hasNoAutomations =
     !isLoading && !isError && data?.automations.length === 0;
 
@@ -377,7 +372,7 @@ export default function AutomationsList() {
                 onEdit={canEdit ? handleEditRequest : undefined}
               />
 
-              {hasMore && (
+              {data.total > data.automations.length && (
                 <button
                   type="button"
                   onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
@@ -395,18 +390,20 @@ export default function AutomationsList() {
         </div>
 
         {/* Delete confirmation modal */}
-        <DeleteConfirmationModal
-          automationName={deleteTarget?.name ?? ""}
-          isOpen={deleteTarget !== null}
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteTarget(null)}
-        />
+        {deleteTarget && (
+          <DeleteConfirmationModal
+            automationName={deleteTarget.name}
+            isOpen
+            onConfirm={() => handleDeleteConfirm(deleteTarget)}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        )}
 
         {/* Edit modal — local backends only */}
         {editTarget && (
           <EditAutomationModal
             automation={editTarget}
-            isOpen={editTarget !== null}
+            isOpen
             onClose={() => setEditTarget(null)}
           />
         )}
@@ -416,13 +413,15 @@ export default function AutomationsList() {
           onClose={() => setIsAddAutomationOpen(false)}
         />
 
-        <ImportAutomationModal
-          isOpen={importSpec !== null}
-          spec={importSpec}
-          isImporting={importMutation.isPending}
-          onClose={() => setImportSpec(null)}
-          onImport={handleImportConfirm}
-        />
+        {importSpec && (
+          <ImportAutomationModal
+            isOpen
+            spec={importSpec}
+            isImporting={importMutation.isPending}
+            onClose={() => setImportSpec(null)}
+            onImport={() => handleImportConfirm(importSpec)}
+          />
+        )}
       </div>
     </div>
   );
