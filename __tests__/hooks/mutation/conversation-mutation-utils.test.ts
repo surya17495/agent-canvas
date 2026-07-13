@@ -277,6 +277,22 @@ describe("conversation cache synchronization", () => {
     });
   });
 
+  it("does not alter unrelated query families", () => {
+    const queryClient = makeQueryClient();
+    const unrelatedKey = ["settings", "conversation"];
+    const unrelatedData = {
+      activeProfile: "default",
+      confirmationPolicy: "never",
+    };
+    queryClient.setQueryData(unrelatedKey, unrelatedData);
+
+    patchConversationInCache(queryClient, CONV_ID, {
+      sandbox_status: "PAUSED",
+    });
+
+    expect(queryClient.getQueryData(unrelatedKey)).toBe(unrelatedData);
+  });
+
   it("patches every matching list item while preserving pages and other conversations", () => {
     const queryClient = makeQueryClient();
     const queryKey = ["user", "conversations", "backend-local", null];
