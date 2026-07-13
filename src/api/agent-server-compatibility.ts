@@ -13,7 +13,6 @@ import {
 import defaults from "../../config/defaults.json";
 
 const AGENT_SERVER_INFO_TIMEOUT_MS = 5000;
-const UNKNOWN_AGENT_SERVER_VERSION = "unknown";
 
 export const MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION =
   defaults.compatibility.minimumAgentServer;
@@ -164,20 +163,10 @@ function getRawAgentServerVersion(serverInfo: AgentServerInfo): string | null {
   return trimmed || null;
 }
 
-function getComparableAgentServerVersion(
-  serverInfo: AgentServerInfo,
-): string | null {
-  const version = getRawAgentServerVersion(serverInfo);
-  if (!version || version.toLowerCase() === UNKNOWN_AGENT_SERVER_VERSION) {
-    return null;
-  }
-  return version;
-}
-
 export function getDisplayAgentServerVersion(
   serverInfo: AgentServerInfo,
 ): string | null {
-  const version = getComparableAgentServerVersion(serverInfo);
+  const version = getRawAgentServerVersion(serverInfo);
   if (!version || !parseAgentServerVersion(version)) {
     return null;
   }
@@ -204,9 +193,6 @@ function compareAgentServerVersions(actual: string, required: string) {
   if (parsedActual.prerelease && !parsedRequired.prerelease) {
     return -1;
   }
-  if (!parsedActual.prerelease && parsedRequired.prerelease) {
-    return 1;
-  }
   if (parsedActual.prerelease && parsedRequired.prerelease) {
     return parsedActual.prerelease.localeCompare(parsedRequired.prerelease);
   }
@@ -215,7 +201,7 @@ function compareAgentServerVersions(actual: string, required: string) {
 }
 
 function parseAgentServerVersion(version: string) {
-  const trimmed = version.trim().replace(/^v/, "");
+  const trimmed = version.replace(/^v/, "");
   const [withoutBuild] = trimmed.split("+");
   const [core, prerelease] = withoutBuild.split("-", 2);
   const parts = core.split(".");
@@ -225,9 +211,7 @@ function parseAgentServerVersion(version: string) {
   }
 
   const [major, minor, patch] = parts.map((part) => Number(part));
-  if (
-    ![major, minor, patch].every((part) => Number.isInteger(part) && part >= 0)
-  ) {
+  if (![major, minor, patch].every((part) => Number.isInteger(part))) {
     return null;
   }
 
@@ -237,7 +221,7 @@ function parseAgentServerVersion(version: string) {
 export function assertAgentServerVersionIsSupported(
   serverInfo: AgentServerInfo,
 ) {
-  const actualVersion = getComparableAgentServerVersion(serverInfo);
+  const actualVersion = getRawAgentServerVersion(serverInfo);
   if (!actualVersion) {
     clearCachedAgentServerInfo();
     throw new AgentServerUnknownVersionError(
@@ -285,7 +269,6 @@ export async function loadAgentServerInfo() {
 
   const clientOptions = getAgentServerClientOptions({
     host: local.host,
-    sessionApiKey: local.apiKey || null,
     timeout: AGENT_SERVER_INFO_TIMEOUT_MS,
   });
   let serverInfo: AgentServerInfo;
