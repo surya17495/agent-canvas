@@ -23,6 +23,7 @@ vi.mock("./uploaded-file", () => ({
       data-testid="uploaded-file"
       data-name={file.name}
       data-loading={String(isLoading)}
+      data-size={String(file.size)}
       onClick={onRemove}
     >
       {file.name}
@@ -50,6 +51,7 @@ vi.mock("./uploaded-image", () => ({
       data-testid="uploaded-image"
       data-name={image.name}
       data-loading={String(isLoading)}
+      data-size={String(image.size)}
       data-show-toggle={String(showUploadAsFileToggle)}
       data-upload-as-file={String(uploadAsFileActive)}
     >
@@ -101,6 +103,35 @@ describe("UploadedFiles", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it.each([
+    [
+      "an uploaded image",
+      () => setStore({ images: [new File([], "image.png")] }),
+      "uploaded-image",
+    ],
+    [
+      "an uploaded file",
+      () => setStore({ files: [new File([], "notes.txt")] }),
+      "uploaded-file",
+    ],
+    [
+      "a loading file",
+      () => setStore({ loadingFiles: ["processing.txt"] }),
+      "uploaded-file",
+    ],
+    [
+      "a loading image",
+      () => setStore({ loadingImages: ["generating.png"] }),
+      "uploaded-image",
+    ],
+  ])("renders when its only item is %s", (_label, arrange, testId) => {
+    arrange();
+
+    render(<UploadedFiles />);
+
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
+  });
+
   it("renders regular and loading files with their exact loading state", () => {
     setStore({
       files: [new File(["ready"], "ready.txt"), new File([], "pending.txt")],
@@ -121,6 +152,10 @@ describe("UploadedFiles", () => {
     expect(screen.getByText("processing.txt")).toHaveAttribute(
       "data-loading",
       "true",
+    );
+    expect(screen.getByText("processing.txt")).toHaveAttribute(
+      "data-size",
+      "0",
     );
   });
 
@@ -160,6 +195,7 @@ describe("UploadedFiles", () => {
     expect(images[1]).toHaveAttribute("data-upload-as-file", "false");
     expect(images[3]).toHaveAttribute("data-name", "generating.png");
     expect(images[3]).toHaveAttribute("data-loading", "true");
+    expect(images[3]).toHaveAttribute("data-size", "0");
     expect(images[3]).toHaveAttribute("data-upload-as-file", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "remove diagram.png" }));
@@ -182,5 +218,25 @@ describe("UploadedFiles", () => {
       2,
       "generating.png",
     );
+  });
+
+  it("renders every collection without React key collisions", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    setStore({
+      files: [new File([], "first.txt"), new File([], "second.txt")],
+      loadingFiles: ["loading-one.txt", "loading-two.txt"],
+      images: [new File([], "first.png"), new File([], "second.png")],
+      loadingImages: ["loading-one.png", "loading-two.png"],
+    });
+
+    try {
+      render(<UploadedFiles />);
+
+      expect(screen.getAllByTestId("uploaded-file")).toHaveLength(4);
+      expect(screen.getAllByTestId("uploaded-image")).toHaveLength(4);
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
