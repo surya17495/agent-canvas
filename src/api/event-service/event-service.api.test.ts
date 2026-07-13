@@ -304,6 +304,27 @@ describe("EventService", () => {
       warn.mockRestore();
     });
 
+    it("treats a sort-only cloud failure as unsupported filtered pagination", async () => {
+      callCloudProxyMock.mockRejectedValue(new Error("pagination unsupported"));
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+
+      await expect(
+        EventService.searchEvents("conversation-cloud", null, null, {
+          sortOrder: "TIMESTAMP_DESC",
+        }),
+      ).resolves.toEqual({ items: [], next_page_id: null });
+
+      expect(callCloudProxyMock).toHaveBeenCalledWith({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100&sort_order=TIMESTAMP_DESC",
+      });
+      expect(warn).toHaveBeenCalledOnce();
+      warn.mockRestore();
+    });
+
     it("recognizes a lower timestamp bound as a cloud pagination filter", async () => {
       callCloudProxyMock.mockResolvedValue({
         items: [],
