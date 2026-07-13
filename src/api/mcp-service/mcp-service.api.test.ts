@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MCPClient } from "@openhands/typescript-client/clients";
 import {
   setActiveSelection,
@@ -6,6 +6,7 @@ import {
 } from "../backend-registry/active-store";
 import SettingsService from "../settings-service/settings-service.api";
 import McpService from "./mcp-service.api";
+import type { MCPServerConfig } from "#/types/mcp-server";
 import { REDACTED_MCP_SECRET_VALUE } from "#/utils/mcp-config";
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -19,6 +20,25 @@ const submitOAuthCallback = vi.fn();
 const close = vi.fn();
 
 const encryptedAuth = "gAAAAAencrypted-auth";
+
+const oauthServer = (): MCPServerConfig => ({
+  id: "shttp-oauth",
+  type: "shttp",
+  name: "oauth-server",
+  url: "https://mcp.example.com/mcp",
+  auth: {
+    strategy: "oauth2",
+    authentication: {
+      type: "oauth",
+      client_auth_method: "none",
+    },
+  },
+});
+
+const popupWindow = () => ({
+  close: vi.fn(),
+  location: { href: "about:blank" },
+});
 
 describe("McpService.testServer", () => {
   beforeEach(() => {
@@ -60,6 +80,11 @@ describe("McpService.testServer", () => {
       job_id: "job-1",
       tools: ["search_mail"],
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("tests stored remote MCP credentials as encrypted auth, not redacted text", async () => {
@@ -234,5 +259,379 @@ describe("McpService.testServer", () => {
 
     expect(getOAuthStatus).toHaveBeenCalledWith("job/1");
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits empty stdio options and optional local credentials", async () => {
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        host: "http://127.0.0.1:8001",
+        apiKey: "",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
+
+    await McpService.testServer({
+      id: "stdio-empty-options",
+      type: "stdio",
+      command: "node",
+      args: [],
+      env: {},
+      timeout: 17,
+    });
+
+    expect(MCPClient).toHaveBeenCalledWith({
+      host: "http://127.0.0.1:8001",
+    });
+    expect(testServer).toHaveBeenCalledWith({
+      server: { transport: "stdio", command: "node" },
+      timeout: 17,
+    });
+  });
+
+  it("maps SSE headers to the connectivity request", async () => {
+    await McpService.testServer({
+      id: "sse-with-headers",
+      type: "sse",
+      url: "https://mcp.example.com/events",
+      headers: { Authorization: "Bearer secret" },
+    });
+
+    expect(testServer).toHaveBeenCalledWith({
+      server: {
+        transport: "sse",
+        url: "https://mcp.example.com/events",
+        headers: { Authorization: "Bearer secret" },
+      },
+    });
+  });
+
+  it("omits empty remote headers from the connectivity request", async () => {
+    await McpService.testServer({
+      id: "shttp-empty-headers",
+      type: "shttp",
+      url: "https://mcp.example.com/mcp",
+      headers: {},
+    });
+
+    expect(testServer).toHaveBeenCalledWith({
+      server: {
+        transport: "http",
+        url: "https://mcp.example.com/mcp",
+      },
+    });
+  });
+
+  it("uses the active local backend without an optional API key for OAuth probes", async () => {
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        host: "http://127.0.0.1:8001",
+        apiKey: "",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
+
+    await McpService.getOAuthStatus("job-without-key");
+
+    expect(MCPClient).toHaveBeenCalledWith({
+      host: "http://127.0.0.1:8001",
+      timeout: 125_000,
+    });
+  });
+
+  it("uses a registered local backend when OAuth starts from a cloud session", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+      {
+        id: "local",
+        name: "Local",
+        host: "http://127.0.0.1:8001///",
+        apiKey: "local-key",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud", orgId: "org-1" });
+
+    await McpService.startOAuth(oauthServer());
+
+    expect(MCPClient).toHaveBeenCalledWith({
+      host: "http://127.0.0.1:8001",
+      apiKey: "local-key",
+      timeout: 125_000,
+    });
+  });
+
+  it("omits an empty fallback API key when probing OAuth from the cloud", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+      {
+        id: "local",
+        name: "Local",
+        host: "http://127.0.0.1:8001",
+        apiKey: "",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud", orgId: "org-1" });
+
+    await McpService.getOAuthStatus("job-with-fallback");
+
+    expect(MCPClient).toHaveBeenCalledWith({
+      host: "http://127.0.0.1:8001",
+      timeout: 125_000,
+    });
+  });
+
+  it("rejects OAuth when no registered local backend is reachable", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+      {
+        id: "unreachable-local",
+        name: "Unreachable local",
+        host: "",
+        apiKey: "",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud", orgId: "org-1" });
+
+    await expect(McpService.startOAuth(oauthServer())).rejects.toThrow(
+      "OAuth authorization requires a reachable local backend.",
+    );
+    expect(MCPClient).not.toHaveBeenCalled();
+  });
+
+  it("returns a reported OAuth start failure and closes the popup", async () => {
+    const popup = popupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    startOAuth.mockResolvedValueOnce({
+      ok: false,
+      error: "OAuth client registration failed",
+      error_kind: "connection",
+    });
+
+    const result = await McpService.authorizeOAuth(oauthServer());
+
+    expect(result).toEqual({
+      ok: false,
+      error: "OAuth client registration failed",
+      error_kind: "connection",
+    });
+    expect(popup.close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("uses default details when OAuth starts without a job", async () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+    startOAuth.mockResolvedValueOnce({
+      ok: true,
+      authorization_url: "https://auth.example/authorize",
+    });
+
+    const result = await McpService.authorizeOAuth(oauthServer());
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Could not start OAuth authorization",
+      error_kind: "unknown",
+    });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an OAuth start response without an authorization URL", async () => {
+    const popup = popupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    startOAuth.mockResolvedValueOnce({ ok: true, job_id: "job-1" });
+
+    const result = await McpService.authorizeOAuth(oauthServer());
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Could not start OAuth authorization",
+      error_kind: "unknown",
+    });
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("returns an immediately completed OAuth result with optional state", async () => {
+    const popup = popupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    getOAuthStatus.mockResolvedValueOnce({
+      ok: true,
+      status: "succeeded",
+      job_id: "job-1",
+      tools: null,
+      tool_result: null,
+      oauth_state: null,
+    });
+
+    const result = await McpService.authorizeOAuth(oauthServer());
+
+    expect(result).toEqual({
+      ok: true,
+      tools: [],
+      tool_result: null,
+      oauth_state: null,
+    });
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("returns an immediately failed OAuth result with default details", async () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+    getOAuthStatus.mockResolvedValueOnce({
+      ok: false,
+      status: "failed",
+      job_id: "job-1",
+    });
+
+    const result = await McpService.authorizeOAuth(oauthServer());
+
+    expect(result).toEqual({
+      ok: false,
+      error: "OAuth authorization did not complete",
+      error_kind: "unknown",
+    });
+  });
+
+  it("opens the authorization URL and returns the completed tool result", async () => {
+    vi.useFakeTimers();
+    const popup = popupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    getOAuthStatus
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "authorizing",
+        job_id: "job-1",
+        callback_ready: true,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "succeeded",
+        job_id: "job-1",
+        tools: ["search"],
+        tool_result: { is_error: false, text: '{"ok":true}' },
+        oauth_state: { token_expires_at: 12_345 },
+      });
+
+    const authorization = McpService.authorizeOAuth(oauthServer());
+    await vi.runAllTimersAsync();
+    const result = await authorization;
+
+    expect(popup.location.href).toBe("https://auth.example/authorize");
+    expect(result).toEqual({
+      ok: true,
+      tools: ["search"],
+      tool_result: { is_error: false, text: '{"ok":true}' },
+      oauth_state: { token_expires_at: 12_345 },
+    });
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("detects a failure while waiting for callback readiness", async () => {
+    vi.useFakeTimers();
+    const popup = popupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    getOAuthStatus
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "pending",
+        job_id: "job-1",
+        callback_ready: false,
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: "failed",
+        job_id: "job-1",
+        error: "Authorization was denied",
+        error_kind: "credentials",
+      });
+
+    const authorization = McpService.authorizeOAuth(oauthServer());
+    await vi.runAllTimersAsync();
+    const result = await authorization;
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Authorization was denied",
+      error_kind: "credentials",
+    });
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("returns a failure discovered after the authorization popup opens", async () => {
+    vi.useFakeTimers();
+    const popup = popupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    getOAuthStatus
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "authorizing",
+        job_id: "job-1",
+        callback_ready: true,
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: "failed",
+        job_id: "job-1",
+        error: "OAuth callback was rejected",
+        error_kind: "credentials",
+      });
+
+    const authorization = McpService.authorizeOAuth(oauthServer());
+    await vi.runAllTimersAsync();
+    const result = await authorization;
+
+    expect(result).toEqual({
+      ok: false,
+      error: "OAuth callback was rejected",
+      error_kind: "credentials",
+    });
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("times out when OAuth never becomes ready or completes", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "open").mockReturnValue(null);
+    getOAuthStatus.mockResolvedValue({
+      ok: true,
+      status: "pending",
+      job_id: "job-1",
+      callback_ready: false,
+    });
+
+    const authorization = McpService.authorizeOAuth(oauthServer());
+    await vi.runAllTimersAsync();
+    const result = await authorization;
+
+    expect(result).toEqual({
+      ok: false,
+      error: "OAuth authorization timed out",
+      error_kind: "timeout",
+    });
+    expect(getOAuthStatus).toHaveBeenCalledTimes(141);
+    expect(close).toHaveBeenCalledOnce();
   });
 });
