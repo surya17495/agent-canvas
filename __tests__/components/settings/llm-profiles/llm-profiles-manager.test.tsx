@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import React from "react";
@@ -180,6 +180,14 @@ describe("LlmProfilesManager", () => {
 
     await screen.findByText("gpt-4-profile");
     expect(screen.getByText("claude-profile")).toBeInTheDocument();
+
+    const profileRows = screen.getAllByTestId("profile-row");
+    expect(
+      within(profileRows[0]).getByTestId("profile-active-badge"),
+    ).toHaveTextContent("Default");
+    expect(
+      within(profileRows[1]).queryByTestId("profile-active-badge"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows empty state when no profiles exist", async () => {
@@ -235,6 +243,23 @@ describe("LlmProfilesManager", () => {
     await user.click(screen.getByText("Edit"));
 
     expect(handleEditProfile).toHaveBeenCalledWith(mockProfiles[0]);
+  });
+
+  it("closes the Edit menu safely when no edit callback is provided", async () => {
+    const user = userEvent.setup();
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager();
+    await screen.findByText("gpt-4-profile");
+    await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+
+    await user.click(screen.getByTestId("profile-edit"));
+
+    expect(screen.queryByTestId("profile-edit")).not.toBeInTheDocument();
+    expect(screen.getByText("gpt-4-profile")).toBeInTheDocument();
   });
 
   it("activates a profile and confirms the selected profile to the user", async () => {
