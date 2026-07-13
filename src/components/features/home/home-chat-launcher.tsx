@@ -1,6 +1,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
@@ -38,7 +39,10 @@ export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
   const { navigate } = useNavigation();
+  const [searchParams] = useSearchParams();
   const isLocal = backend.kind === "local";
+  // Cloud sandbox ID to reuse (passed via URL param from extensions or other flows)
+  const sandboxId = searchParams.get("sandbox_id") ?? undefined;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [pendingWorkspace, setPendingWorkspace] =
@@ -97,6 +101,8 @@ export function HomeChatLauncher() {
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
       entryPoint: "home_chat_launcher",
+      // Pass sandbox_id from URL params if present (cloud sandbox reuse)
+      sandboxId,
     };
     if (isLocal && pendingWorkspace) {
       variables = {

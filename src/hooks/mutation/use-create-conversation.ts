@@ -46,6 +46,9 @@ interface CreateConversationVariables {
   // active AgentProfile (if any) is used so home-composed conversations
   // launch from the user's selected profile (#3727).
   agentProfileId?: string;
+  // Cloud sandbox ID to reuse. When provided, the conversation is created
+  // inside an existing sandbox rather than provisioning a new one.
+  sandboxId?: string;
   entryPoint?: string; // analytics only; not forwarded to the service
 }
 
@@ -87,6 +90,7 @@ export const useCreateConversation = () => {
         parentConversationId,
         agentType,
         agentProfileId,
+        sandboxId,
       } = variables;
 
       // The active AgentProfile is the default launch profile for new
@@ -195,16 +199,9 @@ export const useCreateConversation = () => {
         }
       }
 
-      // Only extend the call with the [sandboxId, agentProfileId] tail when
-      // launching from a profile, so a plain create stays byte-identical to
-      // the legacy agent_settings path (#3727). sandboxId is unused here.
       // TODO(#1587): createConversation has grown to 10 positional params;
       // refactor it to an options object so this position-skipping tail isn't
       // needed.
-      const profileArgs: [undefined, string] | [] = effectiveAgentProfileId
-        ? [undefined, effectiveAgentProfileId]
-        : [];
-
       const conversation =
         await AgentServerConversationService.createConversation(
           query,
@@ -221,7 +218,8 @@ export const useCreateConversation = () => {
           workspaceMode,
           parentConversationId,
           agentType,
-          ...profileArgs,
+          sandboxId,
+          effectiveAgentProfileId,
         );
 
       // Stamp the active LLM profile onto the (local) conversation so the
