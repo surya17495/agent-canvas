@@ -4,9 +4,16 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const toolSource = readFileSync(resolve(repoRoot, "tools/canvas_ui_tool.py"), "utf8");
+const toolSource = readFileSync(
+  resolve(repoRoot, "tools/canvas_ui_tool.py"),
+  "utf8",
+);
 
 describe("canvas_ui browser guidance", () => {
+  it("declares itself as a runtime default", () => {
+    expect(toolSource).toContain("runtime_default: ClassVar[bool] = True");
+  });
+
   it("tells the agent to capture a browser screenshot before opening the browser tab", () => {
     const captureInstruction = "browser_get_state(include_screenshot=true)";
     const openBrowserInstruction = 'command="open_tab", tab="browser"';

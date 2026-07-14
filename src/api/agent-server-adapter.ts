@@ -84,11 +84,7 @@ export interface DirectConversationInfo {
   tags?: Record<string, string> | null;
 }
 
-// Module qualname for the Canvas-UI tool. The agent-server imports this via
-// tool_module_qualnames; the host directory is exposed via OH_EXTRA_PYTHON_PATH
-// (see scripts/dev-safe.mjs).
 const CANVAS_UI_TOOL_NAME = "canvas_ui";
-const CANVAS_UI_TOOL_MODULE = "canvas_ui_tool";
 
 const DEFAULT_TOOL_NAMES = [
   "terminal",
@@ -887,7 +883,6 @@ type StartConversationPayload = Record<string, unknown> & {
   tool_module_qualnames?: Record<string, string>;
   agent_launch_additions?: {
     system_message_suffix_append?: string;
-    tools_append?: AgentToolSpec[];
   };
 };
 
@@ -906,7 +901,6 @@ export interface StartConversationOptions {
   // When set, the conversation launches from this AgentProfile (resolved
   // server-side) instead of an inline ``agent_settings`` dump (#3727).
   agentProfileId?: string;
-  agentProfileKind?: "openhands" | "acp";
 }
 
 export function buildStartConversationRequest(
@@ -939,8 +933,6 @@ export function buildStartConversationRequest(
   const payload: StartConversationPayload = {
     // ``agent_profile_id`` and ``agent_settings`` are mutually exclusive agent
     // sources; the profile path lets the server resolve the profile (#3727).
-    //
-    // Canvas-owned launch additions are attached below, outside the profile.
     ...(options.agentProfileId
       ? { agent_profile_id: options.agentProfileId }
       : { agent_settings: agentSettings }),
@@ -955,23 +947,13 @@ export function buildStartConversationRequest(
     autotitle: true,
     worktree: options.worktree ?? true,
   };
-  const canvasUiAvailable = isAgentServerToolAvailable(CANVAS_UI_TOOL_NAME);
 
   if (options.agentProfileId) {
-    const launchAdditions: NonNullable<
-      StartConversationPayload["agent_launch_additions"]
-    > = {};
     const runtimeServicesSuffix = buildRuntimeServicesSystemSuffix();
     if (runtimeServicesSuffix) {
-      launchAdditions.system_message_suffix_append = runtimeServicesSuffix;
-    }
-    if (options.agentProfileKind === "openhands" && canvasUiAvailable) {
-      launchAdditions.tools_append = [
-        { name: CANVAS_UI_TOOL_NAME, params: {} },
-      ];
-    }
-    if (Object.keys(launchAdditions).length > 0) {
-      payload.agent_launch_additions = launchAdditions;
+      payload.agent_launch_additions = {
+        system_message_suffix_append: runtimeServicesSuffix,
+      };
     }
   }
 
@@ -1017,22 +999,11 @@ export function buildStartConversationRequest(
     payload.hook_config = conversationSettings.hook_config;
   }
 
-  const toolModuleQualnames: Record<string, string> = {};
-  const includeCanvasUi =
-    canvasUiAvailable &&
-    (!options.agentProfileId || options.agentProfileKind === "openhands");
-  if (includeCanvasUi) {
-    toolModuleQualnames[CANVAS_UI_TOOL_NAME] = CANVAS_UI_TOOL_MODULE;
-  }
-  Object.assign(
-    toolModuleQualnames,
-    (conversationSettings.tool_module_qualnames as
+  const toolModuleQualnames = {
+    ...((conversationSettings.tool_module_qualnames as
       | Record<string, string>
-      | undefined) ?? {},
-  );
-  if (!includeCanvasUi) {
-    delete toolModuleQualnames[CANVAS_UI_TOOL_NAME];
-  }
+      | undefined) ?? {}),
+  };
   if (Object.keys(toolModuleQualnames).length > 0) {
     payload.tool_module_qualnames = toolModuleQualnames;
   }
@@ -1101,7 +1072,6 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   workingDir?: string;
   worktree?: boolean;
   agentProfileId?: string;
-  agentProfileKind?: "openhands" | "acp";
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
 

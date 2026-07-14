@@ -166,14 +166,7 @@ export const isBrowserNavigateActionEvent = (
 ): event is ActionEvent<BrowserNavigateAction> =>
   isActionEvent(event) && event.action.kind === "BrowserNavigateAction";
 
-/**
- * Type guard for the canvas_ui custom tool's ActionEvent.
- *
- * The tool is injected via tool_module_qualnames (see canvas_ui_tool.py and
- * agent-server-adapter.ts). We discriminate on tool_name (which we control
- * via register_tool("canvas_ui", ...)). The predicate narrows the event so
- * the call site can read `event.action.command` etc. without further casts.
- */
+/** Narrow an ActionEvent emitted by canvas_ui. */
 export const isCanvasUIActionEvent = (
   event: OpenHandsEvent,
 ): event is ActionEvent<CanvasUIAction> =>

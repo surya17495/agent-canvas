@@ -399,6 +399,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "agent-client-protocol<0.11",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.35.0, default)");
   });
@@ -421,6 +423,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "agent-client-protocol<0.11",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
   });
@@ -442,6 +446,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-workspace",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
   });
@@ -461,6 +467,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-workspace",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
   });
@@ -495,6 +503,8 @@ describe("buildAgentServerCommand", () => {
       "--with-editable",
       path.join(sdk, "openhands-workspace"),
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
   });

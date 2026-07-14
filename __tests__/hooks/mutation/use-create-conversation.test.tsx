@@ -428,7 +428,6 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[9]).toBe("profile-default");
-    expect(call?.[10]).toBe("openhands");
   });
 
   it("uses agent_settings for the local `default` profile on agent-server 1.34.0", async () => {
@@ -466,7 +465,6 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[9]).toBeUndefined();
-    expect(call?.[10]).toBeUndefined();
     expect(isCachedAgentServerVersionAtLeastMock).toHaveBeenCalledWith(
       "1.36.0",
     );
@@ -510,7 +508,6 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[9]).toBe("profile-acp-default");
-    expect(call?.[10]).toBe("acp");
   });
 
   it("launches the seeded `default` profile from its resolved id on cloud (no agent_settings fallback exists there) (#1571)", async () => {

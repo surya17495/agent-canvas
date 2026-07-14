@@ -10,7 +10,7 @@ UI effect happens client-side: the frontend watches the WebSocket stream for
 """
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field
 
@@ -105,6 +105,8 @@ the same turn."""
 class CanvasUITool(ToolDefinition[CanvasUIAction, CanvasUIObservation]):
     """Tool for controlling the Agent Canvas UI from the agent."""
 
+    runtime_default: ClassVar[bool] = True
+
     @classmethod
     def create(
         cls,
@@ -127,7 +129,4 @@ class CanvasUITool(ToolDefinition[CanvasUIAction, CanvasUIObservation]):
         ]
 
 
-# Auto-register at import time. The agent-server imports this module via
-# tool_module_qualnames; this call wires the tool into the registry so it can
-# be referenced by name in conversation tool lists.
 register_tool("canvas_ui", CanvasUITool)

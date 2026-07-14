@@ -362,7 +362,6 @@ class AgentServerConversationService {
     // cloud app-server (OpenHands #15060): local threads it through the
     // encrypted-settings builder; cloud sends it as a flat request field.
     agentProfileId?: string,
-    agentProfileKind?: "openhands" | "acp",
   ): Promise<AppConversationStartTask> {
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
@@ -416,7 +415,6 @@ class AgentServerConversationService {
       workingDir,
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
-      agentProfileKind,
     });
 
     const data = await new ConversationClient(

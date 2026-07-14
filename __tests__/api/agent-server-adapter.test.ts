@@ -412,11 +412,7 @@ describe("buildStartConversationRequest", () => {
     }) as Record<string, unknown>;
 
     expect(payload.hook_config).toEqual({ on_start: [] });
-    // Canvas-UI tool is auto-injected; user-supplied entries are merged in
-    // alongside it. The dedicated canvas_ui describe block below pins the
-    // exact merge semantics.
     expect(payload.tool_module_qualnames).toEqual({
-      canvas_ui: "canvas_ui_tool",
       demo_tool: "pkg.tools.demo",
     });
     expect(payload.agent_definitions).toEqual([
@@ -595,46 +591,22 @@ describe("buildStartConversationRequest", () => {
     });
   });
 
-  describe("canvas_ui tool injection", () => {
-    it("appends the server-side canvas_ui tool to OpenHands profile launches", () => {
+  describe("canvas_ui runtime tool", () => {
+    it("selects canvas_ui when the runtime advertises it", () => {
       const payload = buildStartConversationRequest({
         settings: DEFAULT_SETTINGS,
-        agentProfileId: "profile-xyz",
-        agentProfileKind: "openhands",
-      });
+      }) as {
+        agent_settings: { tools: Array<{ name: string }> };
+        tool_module_qualnames?: Record<string, string>;
+      };
 
-      expect(payload.agent_launch_additions).toEqual({
-        tools_append: [{ name: "canvas_ui", params: {} }],
-      });
-      expect(payload.tool_module_qualnames).toEqual({
-        canvas_ui: "canvas_ui_tool",
-      });
-    });
-
-    it("omits canvas_ui from OpenHands profile launches when unavailable", () => {
-      mockIsAgentServerToolAvailable.mockReturnValue(false);
-
-      const payload = buildStartConversationRequest({
-        settings: DEFAULT_SETTINGS,
-        agentProfileId: "profile-xyz",
-        agentProfileKind: "openhands",
-      });
-
-      expect(payload.agent_launch_additions).toBeUndefined();
+      expect(payload.agent_settings.tools.map((tool) => tool.name)).toContain(
+        "canvas_ui",
+      );
       expect(payload.tool_module_qualnames).toBeUndefined();
     });
 
-    it("registers canvas_ui_tool in tool_module_qualnames when the backend advertises canvas_ui", () => {
-      const payload = buildStartConversationRequest({
-        settings: DEFAULT_SETTINGS,
-      }) as { tool_module_qualnames: Record<string, string> };
-
-      expect(payload.tool_module_qualnames).toMatchObject({
-        canvas_ui: "canvas_ui_tool",
-      });
-    });
-
-    it("omits canvas_ui and its module qualname when the backend does not advertise canvas_ui", () => {
+    it("omits canvas_ui when the runtime does not advertise it", () => {
       mockIsAgentServerToolAvailable.mockImplementation(
         (toolName: string) => toolName !== "canvas_ui",
       );
@@ -652,7 +624,7 @@ describe("buildStartConversationRequest", () => {
       expect(payload.tool_module_qualnames).toBeUndefined();
     });
 
-    it("drops a user-supplied canvas_ui module qualname when the backend does not advertise canvas_ui", () => {
+    it("preserves configured tool module qualnames", () => {
       mockIsAgentServerToolAvailable.mockImplementation(
         (toolName: string) => toolName !== "canvas_ui",
       );
@@ -671,23 +643,7 @@ describe("buildStartConversationRequest", () => {
       }) as { tool_module_qualnames: Record<string, string> };
 
       expect(payload.tool_module_qualnames).toEqual({
-        my_tool: "my_package.my_tool",
-      });
-    });
-
-    it("merges user-supplied tool_module_qualnames alongside canvas_ui_tool without dropping either side", () => {
-      const payload = buildStartConversationRequest({
-        settings: {
-          ...DEFAULT_SETTINGS,
-          conversation_settings: {
-            ...DEFAULT_SETTINGS.conversation_settings,
-            tool_module_qualnames: { my_tool: "my_package.my_tool" },
-          },
-        },
-      }) as { tool_module_qualnames: Record<string, string> };
-
-      expect(payload.tool_module_qualnames).toEqual({
-        canvas_ui: "canvas_ui_tool",
+        canvas_ui: "custom_canvas_ui_tool",
         my_tool: "my_package.my_tool",
       });
     });

@@ -126,8 +126,7 @@ COPY --from=frontend-build /build/node_modules/totalist /opt/agent-canvas/node_m
 # emit the agent's <RUNTIME_SERVICES> block; same builder the dev stack uses).
 COPY scripts/runtime-services-info.mjs /opt/agent-canvas/runtime-services-info.mjs
 
-# Copy custom tools (e.g. canvas_ui_tool.py) so the agent-server can import
-# them via tool_module_qualnames. OH_EXTRA_PYTHON_PATH is set in entrypoint.sh.
+# Copy Canvas tools for agent-server startup.
 COPY tools/ /opt/agent-canvas/tools/
 
 # Copy generated defaults.env (from config/defaults.json via config-gen stage)
