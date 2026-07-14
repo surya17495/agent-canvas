@@ -420,15 +420,14 @@ test.describe("mock-LLM automation lifecycle", () => {
 
     // ── Verify: runtime services info is included in LLM requests ──
 
-    await test.step("verify runtime services info in LLM system prompt", async () => {
+    await test.step("verify runtime services info in the first user message", async () => {
       const llmRequests = await getMockLLMRequests(request);
       expect(
         llmRequests.length,
         "mock LLM should have received at least one completion request",
       ).toBeGreaterThan(0);
 
-      // The <RUNTIME_SERVICES> block should appear in a system message
-      // sent to the LLM. Walk all captured requests looking for it.
+      // The hidden client context is folded into the user message sent to the LLM.
       function findRuntimeServicesContent(
         reqs: Record<string, unknown>[],
       ): string | null {
@@ -438,7 +437,7 @@ test.describe("mock-LLM automation lifecycle", () => {
             | undefined;
           if (!Array.isArray(messages)) continue;
           for (const msg of messages) {
-            if (msg.role !== "system") continue;
+            if (msg.role !== "user") continue;
             const text =
               typeof msg.content === "string"
                 ? msg.content
@@ -457,7 +456,7 @@ test.describe("mock-LLM automation lifecycle", () => {
       const runtimeBlock = findRuntimeServicesContent(llmRequests);
       expect(
         runtimeBlock,
-        `Expected <RUNTIME_SERVICES> block in a system message.\n` +
+        `Expected <RUNTIME_SERVICES> block in a user message.\n` +
           `Received ${llmRequests.length} LLM request(s) but none contained it.`,
       ).toBeTruthy();
 

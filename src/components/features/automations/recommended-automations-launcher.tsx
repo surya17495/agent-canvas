@@ -44,7 +44,7 @@ function getRequiredEntries(automation: RecommendedAutomation) {
 /**
  * The catalog prompt (or slash command) is passed through as-is.
  * API routing (host, auth) is discovered by the agent at runtime from
- * `<RUNTIME_SERVICES>` in the system prompt — the skills themselves
+ * `<RUNTIME_SERVICES>` in user-message context — the skills themselves
  * contain the instructions for reading that block.
  */
 export function buildAutomationPrompt(basePrompt: string): string {

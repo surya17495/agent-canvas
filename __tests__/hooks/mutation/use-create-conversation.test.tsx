@@ -15,6 +15,16 @@ vi.mock("#/hooks/use-tracking", () => ({
   }),
 }));
 
+const { isCachedAgentServerVersionAtLeastMock } = vi.hoisted(() => ({
+  isCachedAgentServerVersionAtLeastMock: vi.fn(() => true),
+}));
+vi.mock("#/api/agent-server-compatibility", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/agent-server-compatibility")
+  >()),
+  isCachedAgentServerVersionAtLeast: isCachedAgentServerVersionAtLeastMock,
+}));
+
 // The default→agent_settings downgrade is local-only (#1571 review); default
 // to local so the existing (pre-review) assertions below are unaffected, and
 // override per-test to exercise the cloud path.
@@ -96,6 +106,8 @@ describe("useCreateConversation", () => {
       active_profile: null,
     });
     useLlmProfilesMock.mockReturnValue({ data: { active_profile: null } });
+    isCachedAgentServerVersionAtLeastMock.mockReset();
+    isCachedAgentServerVersionAtLeastMock.mockReturnValue(true);
     removeStoredConversationMetadata("conv-with-plugins");
     removeStoredConversationMetadata("conv-ref-stamp");
   });
@@ -378,12 +390,7 @@ describe("useCreateConversation", () => {
     );
   });
 
-  it("launches the seeded `default` profile via agent_settings so canvas enrichments survive", async () => {
-    // The active profile IS the well-known default → it's the enriched baseline
-    // (mirrors agent_settings), not a deliberate profile pick, so the launch
-    // stays on the agent_settings path (no profile tail) even though its
-    // llm_profile_ref resolves. Keeps <RUNTIME_SERVICES>/canvas_ui/project
-    // skills, which the profile-resolution path drops.
+  it("launches the seeded `default` profile from its authoritative id", async () => {
     listAgentProfilesMock.mockResolvedValue({
       profiles: [
         {
@@ -420,7 +427,49 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     const call = createConversationSpy.mock.lastCall;
+    expect(call?.[9]).toBe("profile-default");
+    expect(call?.[10]).toBe("openhands");
+  });
+
+  it("uses agent_settings for the local `default` profile before client tools are supported", async () => {
+    isCachedAgentServerVersionAtLeastMock.mockReturnValue(false);
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-default",
+          name: "default",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "gpt",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-default",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    const call = createConversationSpy.mock.lastCall;
     expect(call?.[9]).toBeUndefined();
+    expect(call?.[10]).toBeUndefined();
+    expect(isCachedAgentServerVersionAtLeastMock).toHaveBeenCalledWith(
+      "1.37.0",
+    );
   });
 
   it("keeps the profile path for an ACP `default` profile (agent_settings can't carry ACP config)", async () => {
@@ -461,6 +510,7 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[9]).toBe("profile-acp-default");
+    expect(call?.[10]).toBe("acp");
   });
 
   it("launches the seeded `default` profile from its resolved id on cloud (no agent_settings fallback exists there) (#1571)", async () => {
@@ -473,6 +523,7 @@ describe("useCreateConversation", () => {
       backend: { id: "cloud-1", kind: "cloud" },
       orgId: null,
     });
+    isCachedAgentServerVersionAtLeastMock.mockReturnValue(false);
     listAgentProfilesMock.mockResolvedValue({
       profiles: [
         {
@@ -510,6 +561,7 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[9]).toBe("profile-default");
+    expect(call?.[10]).toBe("openhands");
   });
 
   it("stamps the launched openhands profile's llm_profile_ref into conversation metadata (#1082)", async () => {
@@ -556,6 +608,7 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[9]).toBe("profile-custom");
+    expect(call?.[10]).toBe("openhands");
     await waitFor(() =>
       expect(
         getStoredConversationMetadata("conv-ref-stamp")?.active_profile,

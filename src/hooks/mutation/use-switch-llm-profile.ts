@@ -88,6 +88,7 @@ export const useSwitchLlmProfile = () => {
           selected_workspace: prev?.selected_workspace ?? null,
           active_profile: profileName,
           plugins: prev?.plugins ?? null,
+          runtime_services_context: prev?.runtime_services_context ?? null,
         });
       } else {
         // Home-page activate path (same server endpoint as

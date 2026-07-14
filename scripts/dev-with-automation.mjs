@@ -939,8 +939,7 @@ function startIngress(config) {
 /**
  * Build the JSON-serializable runtime services info for an automation
  * stack. Used by both the Vite dev server (dev mode) and static-build.mjs
- * (static mode) so the frontend can populate the agent's
- * `<RUNTIME_SERVICES>` system-prompt block.
+ * (static mode) so the frontend can populate the agent's runtime context.
  */
 export function buildAutomationRuntimeServicesInfo(config) {
   return buildRuntimeServicesInfo({
@@ -978,8 +977,7 @@ function startVite(config) {
   }
 
   if (runtimeServicesInfo) {
-    // Inform the frontend (and downstream, the agent's system prompt) about
-    // which services are available in this dev stack.
+    // Tell the frontend which services are available in this dev stack.
     viteEnv.VITE_RUNTIME_SERVICES_INFO = JSON.stringify(runtimeServicesInfo);
   }
 
@@ -1204,8 +1202,7 @@ async function main(options = {}) {
     staticDir: staticDirOverride,
     // Hostname the agent uses to reach services running on the host.
     agentHostAlias = "localhost",
-    // Human-readable label for the dev mode, surfaced in the agent's
-    // <RUNTIME_SERVICES> system-prompt block.
+    // Human-readable label surfaced in the agent's runtime context.
     mode = "dev:automation",
     // When true, enable public mode (require LOCAL_BACKEND_API_KEY,
     // don't bake session key into frontend).
@@ -1359,9 +1356,7 @@ function startStaticFrontend(config, staticDir) {
   logService("static", `Starting on port ${config.vitePort}...`, c.magenta);
   logService("static", `Serving from: ${staticDir}`, c.dim);
 
-  // Build the runtime-services info JSON so the pre-built frontend can
-  // populate the agent's <RUNTIME_SERVICES> system-prompt block without
-  // VITE_RUNTIME_SERVICES_INFO baked in at build time.
+  // Build runtime context for the pre-built frontend.
   const runtimeServicesInfo = config.launchAgentServer
     ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
     : null;

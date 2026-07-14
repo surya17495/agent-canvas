@@ -37,6 +37,7 @@ import {
 import {
   DirectConversationInfo,
   assertSubscriptionAuthReady,
+  buildRuntimeServicesClientContext,
   buildStartConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
   getDefaultConversationTitle,
@@ -65,6 +66,7 @@ import type {
   AppConversationStartTask,
   MetricsSnapshot,
   RuntimeConversationInfo,
+  MessageTextContent,
   SendMessageRequest,
   SendMessageResponse,
 } from "./agent-server-conversation-service.types";
@@ -74,6 +76,52 @@ const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
   "update the agent server if needed.";
+
+function addRuntimeServicesContext(
+  conversationId: string,
+  message: SendMessageRequest,
+): {
+  request: SendMessageRequest;
+  runtimeServicesContext: string | null;
+} {
+  const runtimeServicesContext = buildRuntimeServicesClientContext();
+  const previousContext =
+    getStoredConversationMetadata(conversationId)?.runtime_services_context;
+  if (!runtimeServicesContext || previousContext === runtimeServicesContext) {
+    return { request: message, runtimeServicesContext: null };
+  }
+
+  const contextContent: MessageTextContent = {
+    type: "text",
+    text: runtimeServicesContext,
+  };
+  const hasContext = message.client_context?.some(
+    (content) => content.text === runtimeServicesContext,
+  );
+  return {
+    request: hasContext
+      ? message
+      : {
+          ...message,
+          client_context: [...(message.client_context ?? []), contextContent],
+        },
+    runtimeServicesContext,
+  };
+}
+
+function storeRuntimeServicesContext(
+  conversationId: string,
+  runtimeServicesContext: string,
+) {
+  const existing = getStoredConversationMetadata(conversationId);
+  setStoredConversationMetadata(conversationId, {
+    selected_repository: existing?.selected_repository ?? null,
+    selected_branch: existing?.selected_branch ?? null,
+    git_provider: existing?.git_provider ?? null,
+    ...existing,
+    runtime_services_context: runtimeServicesContext,
+  });
+}
 function invalidConversationResponse(): Error {
   return new Error(INVALID_CONVERSATION_RESPONSE_MESSAGE);
 }
@@ -338,11 +386,18 @@ class AgentServerConversationService {
       return message;
     }
 
+    const { request, runtimeServicesContext } = addRuntimeServicesContext(
+      conversationId,
+      message,
+    );
     await new ConversationClient(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-    ).sendEvent(conversationId, message, {
+    ).sendEvent(conversationId, request, {
       run: true,
     });
+    if (runtimeServicesContext) {
+      storeRuntimeServicesContext(conversationId, runtimeServicesContext);
+    }
 
     return message;
   }
@@ -362,6 +417,7 @@ class AgentServerConversationService {
     // cloud app-server (OpenHands #15060): local threads it through the
     // encrypted-settings builder; cloud sends it as a flat request field.
     agentProfileId?: string,
+    agentProfileKind?: "openhands" | "acp",
   ): Promise<AppConversationStartTask> {
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
@@ -415,6 +471,7 @@ class AgentServerConversationService {
       workingDir,
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
+      agentProfileKind,
     });
 
     const data = await new ConversationClient(
@@ -423,7 +480,16 @@ class AgentServerConversationService {
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
-    if (metadata?.selected_repository || workingDirOverride) {
+    const initialRuntimeServicesContext = (
+      payload.initial_message as
+        | { client_context?: MessageTextContent[] }
+        | undefined
+    )?.client_context?.[0]?.text;
+    if (
+      metadata?.selected_repository ||
+      workingDirOverride ||
+      initialRuntimeServicesContext
+    ) {
       // The agent-server runtime has no concept of selected repo/branch/
       // workspace, so persist the home-page selection client-side.
       // `toAppConversation` reads the repo/branch fields back to hydrate
@@ -436,6 +502,7 @@ class AgentServerConversationService {
         git_provider: metadata?.git_provider ?? null,
         selected_workspace: workingDirOverride ?? null,
         workspace_mode: resolvedWorkspaceMode,
+        runtime_services_context: initialRuntimeServicesContext ?? null,
       });
     }
 

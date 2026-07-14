@@ -13,6 +13,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 
 vi.mock("axios");
 
@@ -29,6 +30,7 @@ const {
   mockGetSettingsForConversation,
   mockGetProfile,
   mockActivateProfile,
+  mockSendEvent,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -42,6 +44,7 @@ const {
   mockGetSettingsForConversation: vi.fn(),
   mockGetProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
+  mockSendEvent: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", async () => {
@@ -102,6 +105,7 @@ describe("AgentServerConversationService", () => {
     mockActivateProfile.mockReset();
     mockSwitchProfile.mockReset();
     mockSwitchLLM.mockReset();
+    mockSendEvent.mockReset();
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
@@ -126,7 +130,7 @@ describe("AgentServerConversationService", () => {
       },
       searchConversations: vi.fn(),
       getConversation: vi.fn(),
-      sendEvent: vi.fn(),
+      sendEvent: mockSendEvent,
       updateConversation: vi.fn(),
       switchProfile: mockSwitchProfile,
       switchLLM: mockSwitchLLM,
@@ -152,6 +156,116 @@ describe("AgentServerConversationService", () => {
     });
     mockSettingsClient.mockReturnValue({
       listSecrets: vi.fn().mockResolvedValue({ secrets: [] }),
+    });
+  });
+
+  describe("sendMessage runtime services context", () => {
+    const localBackend: Backend = {
+      id: "runtime-local",
+      name: "Runtime local",
+      kind: "local",
+      host: "http://localhost:54928",
+      apiKey: "test-api-key",
+    };
+
+    beforeEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+      setRegisteredBackends([localBackend]);
+      setActiveSelection({ backendId: localBackend.id });
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_RUNTIME_SERVICES_INFO__ = JSON.stringify({
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://agent-server:8000" },
+        },
+      });
+    });
+
+    afterEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+      delete (window as unknown as Record<string, unknown>)
+        .__AGENT_CANVAS_RUNTIME_SERVICES_INFO__;
+    });
+
+    it("injects once per runtime binding and re-injects after a binding change", async () => {
+      const message = {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "visible request" }],
+      };
+
+      await AgentServerConversationService.sendMessage("conv-1", message);
+      await AgentServerConversationService.sendMessage("conv-1", message);
+
+      expect(mockSendEvent.mock.calls[0]?.[1]).toMatchObject({
+        content: message.content,
+        client_context: [
+          {
+            type: "text",
+            text: expect.stringContaining("http://agent-server:8000"),
+          },
+        ],
+      });
+      expect(mockSendEvent.mock.calls[1]?.[1]).toEqual(message);
+      expect(
+        getStoredConversationMetadata("conv-1")?.runtime_services_context,
+      ).toContain("http://agent-server:8000");
+
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_RUNTIME_SERVICES_INFO__ = JSON.stringify({
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://moved-runtime:8000" },
+        },
+      });
+      await AgentServerConversationService.sendMessage("conv-1", message);
+
+      expect(mockSendEvent.mock.calls[2]?.[1]).toMatchObject({
+        client_context: [
+          {
+            type: "text",
+            text: expect.stringContaining("http://moved-runtime:8000"),
+          },
+        ],
+      });
+    });
+
+    it("records context delivered with the initial user message", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conv-initial",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation(
+        "initial request",
+      );
+
+      const payload = mockHttpPost.mock.calls[0]?.[1] as {
+        initial_message: {
+          client_context: Array<{ type: "text"; text: string }>;
+        };
+      };
+      expect(payload.initial_message.client_context[0]?.text).toContain(
+        "http://agent-server:8000",
+      );
+      expect(
+        getStoredConversationMetadata("conv-initial")?.runtime_services_context,
+      ).toBe(payload.initial_message.client_context[0]?.text);
     });
   });
 

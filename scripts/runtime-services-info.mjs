@@ -2,10 +2,8 @@
  * Single source of truth for the `<RUNTIME_SERVICES>` block.
  *
  * Builds a structured description of the services that are reachable from
- * inside the agent's sandbox. The frontend forwards it (verbatim, as a JSON
- * string) and renders it into the system prompt via
- * `AgentContext.system_message_suffix`, so the agent sees a
- * `<RUNTIME_SERVICES>` block listing what's available without having to probe.
+ * inside the agent's sandbox. The frontend renders it as hidden context on a
+ * user message, so the agent sees what's available without having to probe.
  *
  * Two callers share this one definition:
  *   - the dev launchers (scripts/dev-*.mjs), which know the stack as a set of
@@ -80,7 +78,7 @@ export function buildRuntimeServicesInfo(options) {
     (agentServerPort != null ? `http://localhost:${agentServerPort}` : null);
   if (!agentServerUrlResolved) {
     // Without this the URL becomes `http://localhost:undefined` and ends up
-    // verbatim in the agent's system prompt, which is worse than failing fast.
+    // verbatim in the agent context, which is worse than failing fast.
     throw new Error(
       "buildRuntimeServicesInfo: agentServerPort or agentServerUrl is required " +
         "(otherwise the agent_server URL would be `http://localhost:undefined`).",

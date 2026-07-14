@@ -624,6 +624,8 @@ export function ConversationWebSocketProvider({
               // Full-object replace: carry the plugins snapshot forward so the
               // in-conversation plugins view survives a profile switch.
               plugins: prevMetadata?.plugins ?? null,
+              runtime_services_context:
+                prevMetadata?.runtime_services_context ?? null,
             });
 
             if (switchLLMObservation.observation.active_model) {

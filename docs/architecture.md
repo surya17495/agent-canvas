@@ -28,7 +28,7 @@ Optional runtime services include:
 - An Automation Server for scheduled or event-triggered agent runs.
 - OpenHands Cloud APIs for hosted sandbox and organization workflows.
 
-The development launchers expose runtime service information through `VITE_RUNTIME_SERVICES_INFO`. The frontend forwards that information into new conversations as an agent context suffix so agents can use the correct URLs instead of guessing ports.
+The development launchers expose runtime service information through `VITE_RUNTIME_SERVICES_INFO`. The frontend attaches that information as hidden context on the first user message for each runtime binding, so agents use the correct URLs without changing the system prompt.
 
 ## Frontend modules
 

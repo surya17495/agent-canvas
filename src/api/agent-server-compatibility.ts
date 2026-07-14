@@ -17,6 +17,7 @@ const UNKNOWN_AGENT_SERVER_VERSION = "unknown";
 
 export const MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION =
   defaults.compatibility.minimumAgentServer;
+export const CONVERSATION_SCOPED_CLIENT_TOOLS_MINIMUM_VERSION = "1.37.0";
 export const AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE =
   "AGENT_SERVER_UNSUPPORTED_VERSION";
 export const AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE =
@@ -137,6 +138,16 @@ export function isAgentServerToolAvailable(toolName: string) {
     return true;
   }
   return availableTools.includes(toolName);
+}
+
+export function isCachedAgentServerVersionAtLeast(requiredVersion: string) {
+  if (!cachedAgentServerInfo) return false;
+
+  const actualVersion = getComparableAgentServerVersion(cachedAgentServerInfo);
+  if (!actualVersion) return false;
+
+  const comparison = compareAgentServerVersions(actualVersion, requiredVersion);
+  return comparison !== null && comparison >= 0;
 }
 
 export function isSdkHttpError(error: unknown) {

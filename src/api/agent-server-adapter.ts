@@ -9,7 +9,11 @@ import {
   resolveEffectiveAcpModel,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
-import { isAgentServerToolAvailable } from "./agent-server-compatibility";
+import {
+  CONVERSATION_SCOPED_CLIENT_TOOLS_MINIMUM_VERSION,
+  isAgentServerToolAvailable,
+  isCachedAgentServerVersionAtLeast,
+} from "./agent-server-compatibility";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
 import { buildAuthHeaders } from "./backend-registry/auth";
@@ -89,6 +93,54 @@ export interface DirectConversationInfo {
 // (see scripts/dev-safe.mjs).
 const CANVAS_UI_TOOL_NAME = "canvas_ui";
 const CANVAS_UI_TOOL_MODULE = "canvas_ui_tool";
+const CANVAS_UI_CLIENT_TOOL = {
+  name: CANVAS_UI_TOOL_NAME,
+  description: `The user is interacting with you inside Agent Canvas — a web UI with a chat panel on the left and a tabbed right-side panel (files, terminal, browser, vscode, planner, tasklist). This tool lets you drive that right-side panel so the user sees what you just produced.
+
+They will NOT see the files you wrote, the terminal output, or the browser unless you call this tool to switch the right-side panel to the relevant tab. Call this every time you finish work that produces something the user should look at — don't rely on them noticing on their own.
+
+When to call (pick the most specific option that matches your last action):
+
+* You wrote or modified a single file (ANY language, ANY size — including small scripts like a hello-world bash file) → command="navigate_to_file", path=<workspace-relative path of that file>
+
+* You generated an HTML page, image, SVG, PDF, markdown report, or other previewable artifact → command="show_preview", path=<that file>
+
+* You finished editing multiple files in one logical step → command="open_tab", tab="files" (The Files tab automatically renders a diff view when the workspace has uncommitted git changes, which covers the "highlight changes" case.)
+
+* You ran a long-running terminal command, or one whose output the user should inspect → command="open_tab", tab="terminal"
+
+* You browsed to a URL the user should see → First call browser_get_state(include_screenshot=true) after your final browser interaction so Agent Canvas has a screenshot to display, then call command="open_tab", tab="browser" (browser_navigate alone only updates the URL; without browser_get_state, the Browser tab will open without a screenshot.)
+
+Call this BEFORE writing your chat-message summary of the change, so the artifact is visible while the user reads what you did. One canvas_ui call per logical step is enough — don't repeat it for the same file or tab in the same turn.`,
+  parameters: {
+    type: "object",
+    properties: {
+      command: {
+        type: "string",
+        enum: ["navigate_to_file", "open_tab", "show_preview"],
+        description: "UI command to dispatch.",
+      },
+      path: {
+        type: "string",
+        description:
+          "Workspace-relative file path. Required for navigate_to_file and show_preview; ignored otherwise.",
+      },
+      tab: {
+        type: "string",
+        enum: ["files", "browser", "vscode", "terminal", "planner", "tasklist"],
+        description: "Tab to open. Required for open_tab; ignored otherwise.",
+      },
+    },
+    required: ["command"],
+    additionalProperties: false,
+  },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+};
 
 const DEFAULT_TOOL_NAMES = [
   "terminal",
@@ -108,9 +160,8 @@ function browserToolsEnabled() {
  * scripts/dev-*.mjs as `VITE_RUNTIME_SERVICES_INFO`, or injected at serve time
  * by `scripts/static-server.mjs` for static builds — see
  * `getRawRuntimeServicesInfo`). All URLs are written from the agent's point of
- * view, not the browser's. The block is rendered into the agent's system prompt
- * via `AgentContext.system_message_suffix` so the agent knows what's
- * reachable from inside its sandbox without having to probe.
+ * view, not the browser's. The block is attached to a user message as client
+ * context so the agent knows what's reachable without having to probe.
  */
 interface RuntimeServicesInfo {
   mode?: string;
@@ -188,14 +239,13 @@ export function getDeploymentMode(): string | null {
 }
 
 /**
- * Render the runtime services info into a markdown block suitable for
- * appending to the system prompt via `AgentContext.system_message_suffix`.
+ * Render the runtime services info into client context for a user message.
  *
  * Returns `undefined` when no runtime info is configured, so callers can
  * safely omit the field on production builds (where the launcher doesn't
  * set `VITE_RUNTIME_SERVICES_INFO`).
  */
-export function buildRuntimeServicesSystemSuffix(): string | undefined {
+export function buildRuntimeServicesClientContext(): string | undefined {
   const info = parseRuntimeServicesInfo();
   if (!info?.services) return undefined;
 
@@ -262,7 +312,7 @@ export function buildRuntimeServicesSystemSuffix(): string | undefined {
   // Anchor the "don't guess" warning to the actual agent-server URL for
   // this stack instead of a hardcoded port. The agent-server listens on
   // different ports across dev modes, and baking the wrong port into the
-  // system prompt is exactly the kind of confusion this block is meant to
+  // client context is exactly the kind of confusion this block is meant to
   // prevent.
   const agentServerUrl = agent_server?.url_from_agent;
   lines.push(
@@ -411,6 +461,7 @@ interface LocalWorkspacePayload {
 interface InitialMessagePayload {
   role: "user";
   content: Array<{ type: "text"; text: string }>;
+  client_context?: Array<{ type: "text"; text: string }>;
   run: true;
 }
 
@@ -575,9 +626,15 @@ function buildInitialMessage(
     return null;
   }
 
+  const runtimeServicesContext = buildRuntimeServicesClientContext();
   return {
     role: "user",
     content: [{ type: "text", text: parts.join("\n\n") }],
+    ...(runtimeServicesContext
+      ? {
+          client_context: [{ type: "text", text: runtimeServicesContext }],
+        }
+      : {}),
     run: true,
   };
 }
@@ -635,7 +692,6 @@ function buildBundledSkills(): BundledSkill[] {
 }
 
 function buildAgentContext(agentSettings: SettingsRecord): SettingsRecord {
-  const runtimeServicesSuffix = buildRuntimeServicesSystemSuffix();
   const existingContext = toRecord(agentSettings.agent_context);
 
   // Merge bundled public skills with any skills already present in the
@@ -660,9 +716,6 @@ function buildAgentContext(agentSettings: SettingsRecord): SettingsRecord {
     load_public_skills: false,
     load_user_skills: true,
     load_project_skills: true,
-    ...(runtimeServicesSuffix
-      ? { system_message_suffix: runtimeServicesSuffix }
-      : {}),
   };
 }
 
@@ -885,6 +938,7 @@ type StartConversationPayload = Record<string, unknown> & {
   secrets?: Record<string, LookupSecret>;
   tags?: Record<string, string>;
   tool_module_qualnames?: Record<string, string>;
+  client_tools?: Array<Record<string, unknown>>;
 };
 
 export interface StartConversationOptions {
@@ -902,6 +956,7 @@ export interface StartConversationOptions {
   // When set, the conversation launches from this AgentProfile (resolved
   // server-side) instead of an inline ``agent_settings`` dump (#3727).
   agentProfileId?: string;
+  agentProfileKind?: "openhands" | "acp";
 }
 
 export function buildStartConversationRequest(
@@ -934,18 +989,6 @@ export function buildStartConversationRequest(
   const payload: StartConversationPayload = {
     // ``agent_profile_id`` and ``agent_settings`` are mutually exclusive agent
     // sources; the profile path lets the server resolve the profile (#3727).
-    //
-    // Enrichment boundary: on the profile path the server rebuilds the agent
-    // purely from the stored profile fields, so the client-owned enrichments
-    // this adapter folds into ``agent_settings`` do NOT apply. The exec toolset
-    // (terminal/file_editor/task_tracker) and public-skill loading are the
-    // server/SDK's responsibility to restore on the profile path — tracked in
-    // software-agent-sdk#3967 (profile resolution must attach the default
-    // toolset + public skills, else a profile-launched OpenHands agent has only
-    // Finish/Think). The two genuinely canvas-only enrichments — the
-    // ``canvas_ui`` tool and the dev ``RUNTIME_SERVICES`` system-message-suffix
-    // (``buildAgentContext``) — have no server-side representation and are
-    // intentionally not carried on the profile path.
     ...(options.agentProfileId
       ? { agent_profile_id: options.agentProfileId }
       : { agent_settings: agentSettings }),
@@ -960,6 +1003,16 @@ export function buildStartConversationRequest(
     autotitle: true,
     worktree: options.worktree ?? true,
   };
+
+  if (
+    options.agentProfileId &&
+    options.agentProfileKind === "openhands" &&
+    isCachedAgentServerVersionAtLeast(
+      CONVERSATION_SCOPED_CLIENT_TOOLS_MINIMUM_VERSION,
+    )
+  ) {
+    payload.client_tools = [CANVAS_UI_CLIENT_TOOL];
+  }
 
   // A profile launch resolves the ACP server server-side, so don't stamp the
   // tag from current settings (it may not match the launched profile).
@@ -1005,7 +1058,7 @@ export function buildStartConversationRequest(
 
   const toolModuleQualnames: Record<string, string> = {};
   const canvasUiAvailable = isAgentServerToolAvailable(CANVAS_UI_TOOL_NAME);
-  if (canvasUiAvailable) {
+  if (canvasUiAvailable && !options.agentProfileId) {
     toolModuleQualnames[CANVAS_UI_TOOL_NAME] = CANVAS_UI_TOOL_MODULE;
   }
   Object.assign(
@@ -1014,7 +1067,7 @@ export function buildStartConversationRequest(
       | Record<string, string>
       | undefined) ?? {},
   );
-  if (!canvasUiAvailable) {
+  if (!canvasUiAvailable || options.agentProfileId) {
     delete toolModuleQualnames[CANVAS_UI_TOOL_NAME];
   }
   if (Object.keys(toolModuleQualnames).length > 0) {
@@ -1085,6 +1138,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   workingDir?: string;
   worktree?: boolean;
   agentProfileId?: string;
+  agentProfileKind?: "openhands" | "acp";
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
 

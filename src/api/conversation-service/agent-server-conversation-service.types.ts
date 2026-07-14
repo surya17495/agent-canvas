@@ -60,6 +60,7 @@ type MessageRole = "user" | "system" | "assistant" | "tool";
 export interface SendMessageRequest {
   role: MessageRole;
   content: MessageContent[];
+  client_context?: MessageTextContent[];
 }
 
 export interface AppConversationStartRequest {

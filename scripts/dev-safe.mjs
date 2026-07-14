@@ -972,8 +972,7 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
-      // Inform the frontend (and downstream, the agent's system prompt) about
-      // which services are available in this dev stack.
+      // Tell the frontend which services are available in this dev stack.
       VITE_RUNTIME_SERVICES_INFO: JSON.stringify(runtimeServicesInfo),
     },
   });

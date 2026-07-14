@@ -45,6 +45,7 @@ export interface ConversationMetadata {
    * after this shipped, and only when `app_conversation_id` is known.
    */
   plugins?: PluginSpec[] | null;
+  runtime_services_context?: string | null;
 }
 
 type StoredMetadata = Record<string, ConversationMetadata>;

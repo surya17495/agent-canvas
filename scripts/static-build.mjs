@@ -45,9 +45,7 @@ export function buildFrontend(config, args = {}) {
     // Bake the session API key — used by the frontend for both agent-server
     // and automation auth via the `X-Session-API-Key` header.
     VITE_SESSION_API_KEY: config.sessionApiKey,
-    // Bake a description of the runtime services in this dev stack so the
-    // frontend can populate the agent's <RUNTIME_SERVICES> system-prompt
-    // block when creating a conversation.
+    // Bake runtime context for conversations created from this build.
     VITE_RUNTIME_SERVICES_INFO: JSON.stringify(
       buildAutomationRuntimeServicesInfo(config),
     ),

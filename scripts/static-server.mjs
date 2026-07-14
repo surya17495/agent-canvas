@@ -188,9 +188,8 @@ OPTIONS:
   --runtime-services-info <json>
                                Inject a JSON description of the local runtime
                                services into index.html so the pre-built
-                               frontend can populate the agent's
-                               <RUNTIME_SERVICES> system-prompt block without
-                               VITE_RUNTIME_SERVICES_INFO baked in.
+                               frontend can populate the agent's runtime
+                               context without a build-time value.
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
@@ -241,7 +240,7 @@ ROUTING:
  *   `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__`. Read by
  *   `parseRuntimeServicesInfo()` in `agent-server-adapter.ts` as a fallback
  *   when `VITE_RUNTIME_SERVICES_INFO` is empty, so static builds (Docker /
- *   published binary) still populate the agent's `<RUNTIME_SERVICES>` block.
+ *   published binary) still populate the agent's runtime context.
  *
  * - `lockToCloud`: an OpenHands Cloud URL exposed as
  *   `window.__AGENT_CANVAS_LOCK_TO_CLOUD__`. Read by `getLockedCloudHost()` in
