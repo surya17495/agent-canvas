@@ -19,6 +19,7 @@ import { useBrowserStore } from "#/stores/browser-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { useModelStore } from "#/stores/model-store";
 import useMetricsStore from "#/stores/metrics-store";
+import { useFilesTabStore } from "#/stores/files-tab-store";
 import EventService from "#/api/event-service/event-service.api";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import {
@@ -341,6 +342,10 @@ describe("Conversation websocket behavior", () => {
       max_budget_per_task: null,
       usage: null,
     });
+    useFilesTabStore.setState({
+      selectedPath: null,
+      selectedConversationId: null,
+    });
   });
 
   afterEach(() => {
@@ -358,8 +363,22 @@ describe("Conversation websocket behavior", () => {
     const first = makeMessageEvent("01", "assistant", ["first"]);
     const latest = makeMessageEvent("02", "user", ["hello", " world"]);
     historyCapture.result.data = { events: [first, latest] };
+    const consumeMatchingPendingMessage = vi.spyOn(
+      useOptimisticUserMessageStore.getState(),
+      "consumeMatchingPendingMessage",
+    );
     useOptimisticUserMessageStore.setState({
       pendingMessages: [
+        {
+          id: "pending-decoy",
+          conversationId: "conv-main",
+          text: "different message",
+          content: "different message",
+          status: "sending",
+          imageUrls: [],
+          fileUrls: [],
+          timestamp: "2024-01-01T00:00:00.000Z",
+        },
         {
           id: "pending-1",
           conversationId: "conv-main",
@@ -378,8 +397,13 @@ describe("Conversation websocket behavior", () => {
     await waitFor(() =>
       expect(useEventStore.getState().events).toHaveLength(2),
     );
-    expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
-      [],
+    expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual([
+      expect.objectContaining({ id: "pending-decoy" }),
+    ]);
+    expect(consumeMatchingPendingMessage).toHaveBeenCalledOnce();
+    expect(consumeMatchingPendingMessage).toHaveBeenCalledWith(
+      "conv-main",
+      "hello world",
     );
     expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
     expect(mainOptions().queryParams).toEqual({
@@ -391,15 +415,34 @@ describe("Conversation websocket behavior", () => {
       resend_all: true,
       session_api_key: "session-key",
     });
+    expect(mainOptions().reconnect).toEqual({ enabled: true });
+    expect(planningOptions().reconnect).toEqual({ enabled: true });
   });
 
   it("waits for an in-flight history refresh before opening the main socket", () => {
+    const latest = makeMessageEvent("03", "assistant", ["cached"]);
+    historyCapture.result.data = { events: [latest] };
     historyCapture.result.isFetching = true;
 
     renderProvider();
 
     expect(socketCapture.mainUrl).toBe("");
     expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(screen.getByTestId("connection-state")).toHaveTextContent(
+      "CONNECTING",
+    );
+  });
+
+  it("shows first-load history only for a selected conversation", () => {
+    historyCapture.result.isPending = true;
+
+    const selected = renderProvider();
+    expect(screen.getByTestId("loading-history")).toHaveTextContent("true");
+    selected.unmount();
+
+    socketCapture.callIndex = 0;
+    renderProvider({ conversationId: undefined });
+    expect(screen.getByTestId("loading-history")).toHaveTextContent("false");
   });
 
   it("falls back to an all-events socket when history loading fails", () => {
@@ -413,28 +456,137 @@ describe("Conversation websocket behavior", () => {
   });
 
   it("does not build socket URLs without complete conversation coordinates", () => {
-    renderProvider({ conversationId: undefined, conversationUrl: null });
+    const missingBoth = renderProvider({
+      conversationId: undefined,
+      conversationUrl: null,
+    });
 
     expect(socketCapture.mainUrl).toBe("");
     expect(socketCapture.planningUrl).toBe("");
     expect(useEventStore.getState().loadedConversationId).toBeNull();
+    missingBoth.unmount();
+
+    socketCapture.callIndex = 0;
+    const missingUrl = renderProvider({ conversationUrl: null });
+    expect(socketCapture.mainUrl).toBe("");
+    missingUrl.unmount();
+
+    socketCapture.callIndex = 0;
+    renderProvider({
+      conversationId: undefined,
+      conversationUrl: "http://localhost:8000/api/conversations/conv-main",
+    });
+    expect(socketCapture.mainUrl).toBe("");
   });
 
   it("accepts absent history and history without a selected conversation", () => {
+    const addEvents = vi.spyOn(useEventStore.getState(), "addEvents");
+    const empty = renderProvider();
+    expect(addEvents).not.toHaveBeenCalled();
+    empty.unmount();
+
+    socketCapture.callIndex = 0;
     historyCapture.result.data = undefined;
     const first = renderProvider();
     expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(addEvents).not.toHaveBeenCalled();
     first.unmount();
 
     socketCapture.callIndex = 0;
+    const consumeMatchingPendingMessage = vi.spyOn(
+      useOptimisticUserMessageStore.getState(),
+      "consumeMatchingPendingMessage",
+    );
     historyCapture.result.data = {
-      events: [makeMessageEvent("03", "assistant", ["unscoped history"])],
+      events: [makeMessageEvent("04", "user", ["unscoped history"])],
     };
     renderProvider({ conversationId: undefined });
     expect(useEventStore.getState().events).toHaveLength(1);
+    expect(consumeMatchingPendingMessage).not.toHaveBeenCalled();
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
       [],
     );
+  });
+
+  it("clears conversation-owned stores once per conversation identity", () => {
+    useEventStore
+      .getState()
+      .addEvent(makeMessageEvent("05", "assistant", ["old conversation"]));
+    useEventStore.setState({ loadedConversationId: "conv-old" });
+    useBrowserStore.getState().setUrl("https://old.example");
+
+    const first = renderProvider();
+    expect(useEventStore.getState()).toMatchObject({
+      events: [],
+      loadedConversationId: "conv-main",
+    });
+    expect(useBrowserStore.getState().url).toBe("");
+    first.unmount();
+
+    useEventStore
+      .getState()
+      .addEvent(makeMessageEvent("06", "assistant", ["keep on remount"]));
+    useBrowserStore.getState().setUrl("https://current.example");
+    socketCapture.callIndex = 0;
+    const sameConversation = renderProvider();
+    expect(useEventStore.getState().events).toHaveLength(1);
+    expect(useBrowserStore.getState().url).toBe("https://current.example");
+
+    sameConversation.rerender(
+      <QueryClientProvider client={sameConversation.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-next"
+          conversationUrl="http://localhost:8000/api/conversations/conv-next"
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    expect(useEventStore.getState()).toMatchObject({
+      events: [],
+      loadedConversationId: "conv-next",
+    });
+    expect(useBrowserStore.getState().url).toBe("");
+  });
+
+  it("hydrates and opens the socket when an in-flight history query settles", async () => {
+    historyCapture.result.data = undefined;
+    historyCapture.result.isFetching = true;
+    const view = renderProvider();
+    expect(socketCapture.mainUrl).toBe("");
+
+    const latest = makeMessageEvent("07", "assistant", ["fresh tail"]);
+    historyCapture.result = {
+      data: { events: [latest] },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    };
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-main"
+          conversationUrl="http://localhost:8000/api/conversations/conv-main"
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(useEventStore.getState().events).toHaveLength(1),
+    );
+    expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
+    expect(mainOptions().queryParams).toEqual({
+      resend_mode: "since",
+      after_timestamp: latest.timestamp,
+    });
+    expect(
+      Object.hasOwn(mainOptions().queryParams ?? {}, "session_api_key"),
+    ).toBe(false);
+    expect(
+      Object.hasOwn(planningOptions().queryParams ?? {}, "session_api_key"),
+    ).toBe(false);
   });
 
   it("ignores incomplete planning conversations and connects complete ones", () => {
@@ -460,11 +612,21 @@ describe("Conversation websocket behavior", () => {
     );
   });
 
+  it("safely ignores an empty planning conversation slot", () => {
+    expect(() =>
+      renderProvider({
+        subConversations: [undefined as unknown as AppConversation],
+      }),
+    ).not.toThrow();
+    expect(socketCapture.planningUrl).toBe("");
+  });
+
   it("reports the main socket lifecycle and only surfaces errors after a successful connection", () => {
     renderProvider();
 
     act(() => mainOptions().onError?.(new Event("error")));
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     useErrorMessageStore
       .getState()
@@ -489,6 +651,10 @@ describe("Conversation websocket behavior", () => {
       subConversations: [makeSubConversation()],
       subConversationIds: ["conv-planning"],
     });
+    expect(screen.getByTestId("connection-state")).toHaveTextContent(
+      "CONNECTING",
+    );
+    expect(screen.getByTestId("loading-history")).toHaveTextContent("true");
 
     await act(async () => {
       mainOptions().onOpen?.(new Event("open"));
@@ -504,9 +670,10 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     act(() => planningOptions().onError?.(new Event("error")));
-    expect(useErrorMessageStore.getState().errorMessage).toBe(
-      SERVER_CONNECTION_ERROR_MESSAGE,
-    );
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+      errorType: "connection",
+    });
   });
 
   for (const [label, readyState, expected] of [
@@ -540,6 +707,36 @@ describe("Conversation websocket behavior", () => {
     );
   });
 
+  it("keeps the planning connection in its initial connecting state", async () => {
+    socketCapture.mainSocket = makeSocket(WebSocket.OPEN);
+    renderProvider({ subConversations: [makeSubConversation()] });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-state")).toHaveTextContent(
+        "CONNECTING",
+      ),
+    );
+  });
+
+  for (const [label, mainReadyState, planningReadyState, expected] of [
+    ["main connecting", WebSocket.CONNECTING, WebSocket.OPEN, "CONNECTING"],
+    ["main closed", WebSocket.CLOSED, WebSocket.OPEN, "CLOSED"],
+    ["planning closing", WebSocket.CLOSED, WebSocket.CLOSING, "CLOSING"],
+    ["main closing", WebSocket.CLOSING, WebSocket.CLOSED, "CLOSING"],
+  ] as const) {
+    it(`merges ${label} with the other socket`, async () => {
+      socketCapture.mainSocket = makeSocket(mainReadyState);
+      socketCapture.planningSocket = makeSocket(planningReadyState);
+      renderProvider({ subConversations: [makeSubConversation()] });
+
+      await waitFor(() =>
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          expected,
+        ),
+      );
+    });
+  }
+
   for (const [label, readyState, expected] of [
     ["connecting", WebSocket.CONNECTING, "CONNECTING"],
     ["closed", WebSocket.CLOSED, "CLOSED"],
@@ -558,6 +755,62 @@ describe("Conversation websocket behavior", () => {
     });
   }
 
+  it("resets connection history and planning loading when identities change", () => {
+    const view = renderProvider({ subConversations: [makeSubConversation()] });
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-main"
+          conversationUrl="http://localhost:8000/api/conversations/conv-main"
+          subConversations={[makeSubConversation()]}
+          subConversationIds={["conv-planning"]}
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("loading-history")).toHaveTextContent("true");
+    act(() => mainOptions().onError?.(new Event("error")));
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-next"
+          conversationUrl="http://localhost:8000/api/conversations/conv-next"
+          subConversations={[makeSubConversation()]}
+          subConversationIds={["conv-planning"]}
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    act(() => mainOptions().onError?.(new Event("error")));
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
+  it("forgets a successful main connection when the conversation changes", () => {
+    const view = renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-next"
+          conversationUrl="http://localhost:8000/api/conversations/conv-next"
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    act(() => mainOptions().onError?.(new Event("error")));
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
   it("dismisses the error and reconnects the socket for the active mode", () => {
     const { unmount } = renderProvider({
       subConversations: [makeSubConversation()],
@@ -571,6 +824,11 @@ describe("Conversation websocket behavior", () => {
     expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
     expect(socketCapture.reconnectMain).not.toHaveBeenCalled();
 
+    useConversationStore.setState({ conversationMode: "code" });
+    act(() => contextCapture.current?.reconnect());
+    expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+    expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+
     unmount();
     socketCapture.callIndex = 0;
     socketCapture.reconnectMain.mockClear();
@@ -578,6 +836,42 @@ describe("Conversation websocket behavior", () => {
     useConversationStore.setState({ conversationMode: "plan" });
     act(() => contextCapture.current?.reconnect());
     expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+  });
+
+  it("uses sockets and reconnect routing introduced after the first render", async () => {
+    const view = renderProvider();
+    const mainSocket = makeSocket(WebSocket.OPEN);
+    const planningSocket = makeSocket(WebSocket.OPEN);
+    socketCapture.mainSocket = mainSocket;
+    socketCapture.planningSocket = planningSocket;
+
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-main"
+          conversationUrl="http://localhost:8000/api/conversations/conv-main"
+          subConversations={[makeSubConversation()]}
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN"),
+    );
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("new socket")),
+    ).resolves.toEqual({ queued: false });
+    expect(mainSocket.send).toHaveBeenCalledWith(
+      JSON.stringify({ ...makeSendRequest("new socket"), run: true }),
+    );
+    expect(socketCapture.queueMessage).not.toHaveBeenCalled();
+
+    useConversationStore.setState({ conversationMode: "plan" });
+    act(() => contextCapture.current?.reconnect());
+    expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+    expect(socketCapture.reconnectMain).not.toHaveBeenCalled();
   });
 
   it("sends code and plan messages through their open sockets", async () => {
@@ -672,12 +966,20 @@ describe("Conversation websocket behavior", () => {
   });
 
   it("routes main-conversation events to their user-visible stores", () => {
+    const consumeMatchingPendingMessage = vi.spyOn(
+      useOptimisticUserMessageStore.getState(),
+      "consumeMatchingPendingMessage",
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { queryClient } = renderProvider();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
     useErrorMessageStore.getState().setErrorMessage("temporary", "connection");
     dispatchMain(makeMessageEvent("10", "assistant", ["connected"]));
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(consumeMatchingPendingMessage).not.toHaveBeenCalled();
+    expect(socketCapture.captureException).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
 
     dispatchMain({
       ...baseEvent("11"),
@@ -698,6 +1000,7 @@ describe("Conversation websocket behavior", () => {
         errorCode: "BadRequest",
       }),
     );
+    expect(socketCapture.captureException).toHaveBeenCalledTimes(1);
 
     dispatchMain(makeMessageEvent("12", "assistant", ["still connected"]));
     expect(useErrorMessageStore.getState().errorMessage).toBe(
@@ -719,6 +1022,7 @@ describe("Conversation websocket behavior", () => {
         toolCallId: "call-13",
       }),
     );
+    expect(socketCapture.captureException).toHaveBeenCalledTimes(2);
 
     useOptimisticUserMessageStore.setState({
       pendingMessages: [
@@ -738,6 +1042,11 @@ describe("Conversation websocket behavior", () => {
     dispatchMain(makeMessageEvent("14", "user", ["hello", " world"]));
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
       [],
+    );
+    expect(consumeMatchingPendingMessage).toHaveBeenCalledOnce();
+    expect(consumeMatchingPendingMessage).toHaveBeenCalledWith(
+      "conv-main",
+      "hello world",
     );
     expect(getConversationState("conv-main").draftMessage).toBeNull();
 
@@ -772,7 +1081,13 @@ describe("Conversation websocket behavior", () => {
       "paused",
     );
 
+    dispatchMain(
+      makeStateEvent("18-no-metrics", "stats", {
+        usage_to_metrics: undefined,
+      }),
+    );
     dispatchMain(makeStateEvent("18", "stats", { usage_to_metrics: {} }));
+    expect(warn).not.toHaveBeenCalled();
     dispatchMain(
       makeStateEvent("19", "stats", {
         usage_to_metrics: {
@@ -819,6 +1134,9 @@ describe("Conversation websocket behavior", () => {
         per_turn_token: 30,
       },
     });
+    expect(useConversationStateStore.getState().execution_status).toBe(
+      "paused",
+    );
 
     const goalStatus = {
       active: false,
@@ -831,6 +1149,9 @@ describe("Conversation websocket behavior", () => {
     dispatchMain(makeStateEvent("21", "goal", goalStatus));
     expect(useGoalStore.getState().statusByConversation["conv-main"]).toEqual(
       goalStatus,
+    );
+    expect(useConversationStateStore.getState().execution_status).toBe(
+      "paused",
     );
 
     dispatchMain(
@@ -940,6 +1261,30 @@ describe("Conversation websocket behavior", () => {
     ).toBe("fast-profile");
 
     dispatchMain(
+      makeObservationEvent(
+        "28-without-model",
+        {
+          kind: "SwitchLLMObservation",
+          content: [{ type: "text", text: "Profile switched" }],
+          is_error: false,
+          profile_name: "profile-without-model",
+          reason: null,
+          active_model: null,
+        },
+        "switch_llm",
+      ),
+    );
+    expect(
+      useModelStore.getState().activeProfileByConversation["conv-main"],
+    ).toBe("profile-without-model");
+    expect(getStoredConversationMetadata("conv-main")).toMatchObject({
+      active_profile: "profile-without-model",
+    });
+    expect(
+      queryClient.getQueryData(["user", "conversation", "conv-main"]),
+    ).toMatchObject({ llm_model: "new-model" });
+
+    dispatchMain(
       makeActionEvent(
         "29",
         {
@@ -953,6 +1298,37 @@ describe("Conversation websocket behavior", () => {
     expect(useConversationStore.getState()).toMatchObject({
       selectedTab: "terminal",
       isRightPanelShown: true,
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("uses the latest conversation identity for canvas file navigation", () => {
+    const view = renderProvider();
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-next"
+          conversationUrl="http://localhost:8000/api/conversations/conv-next"
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    dispatchMain(
+      makeActionEvent(
+        "30",
+        {
+          kind: "CanvasUIAction",
+          command: "navigate_to_file",
+          path: "/workspace/src/index.ts",
+        },
+        "canvas_ui",
+      ),
+    );
+    expect(useFilesTabStore.getState()).toMatchObject({
+      selectedPath: "/workspace/src/index.ts",
+      selectedConversationId: "conv-next",
     });
   });
 
@@ -971,6 +1347,10 @@ describe("Conversation websocket behavior", () => {
   });
 
   it("keeps conversation-scoped effects inactive when no main conversation is selected", () => {
+    const consumeMatchingPendingMessage = vi.spyOn(
+      useOptimisticUserMessageStore.getState(),
+      "consumeMatchingPendingMessage",
+    );
     const { queryClient } = renderProvider({ conversationId: undefined });
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     useOptimisticUserMessageStore.setState({
@@ -1019,6 +1399,7 @@ describe("Conversation websocket behavior", () => {
     expect(
       useOptimisticUserMessageStore.getState().pendingMessages,
     ).toHaveLength(1);
+    expect(consumeMatchingPendingMessage).not.toHaveBeenCalled();
     expect(useGoalStore.getState().statusByConversation).toEqual({});
     expect(invalidateQueries).toHaveBeenCalledWith(
       { queryKey: ["file_changes", "test-conversation-id"] },
@@ -1039,6 +1420,7 @@ describe("Conversation websocket behavior", () => {
     await act(async () => {
       await planningOptions().onOpen?.(new Event("open"));
     });
+    expect(screen.getByTestId("loading-history")).toHaveTextContent("true");
     dispatchPlanning(
       makeObservationEvent(
         "35",
@@ -1055,6 +1437,8 @@ describe("Conversation websocket behavior", () => {
         "planning_file_editor",
       ),
     );
+    expect(screen.getByTestId("loading-history")).toHaveTextContent("true");
+    expect(socketCapture.readConversationFile).not.toHaveBeenCalled();
     dispatchPlanning(makeMessageEvent("36", "assistant", ["planned"]));
 
     await waitFor(() =>
@@ -1091,6 +1475,7 @@ describe("Conversation websocket behavior", () => {
     dispatchPlanning({ type: "history-envelope" });
     dispatchPlanning({ type: "history-envelope" });
     expect(screen.getByTestId("loading-history")).toHaveTextContent("true");
+    expect(useEventStore.getState().events).toEqual([]);
 
     await act(async () => {
       await planningOptions().onOpen?.(new Event("open"));
@@ -1172,11 +1557,56 @@ describe("Conversation websocket behavior", () => {
       ),
     );
 
-    expect(socketCapture.readConversationFile).toHaveBeenCalledOnce();
+    expect(socketCapture.readConversationFile).toHaveBeenCalledWith(
+      {
+        conversationId: "conv-planning",
+        filePath: "/workspace/PLAN.MD",
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
     expect(warn).toHaveBeenCalledWith(
       "Failed to read conversation file:",
       expect.objectContaining({ message: "read failed" }),
     );
+    warn.mockClear();
+
+    dispatchPlanning(
+      makeObservationEvent(
+        "37-not-plan",
+        {
+          kind: "PlanningFileEditorObservation",
+          content: [],
+          is_error: false,
+          command: "view",
+          path: "/workspace/notes.md",
+          prev_exist: true,
+          old_content: null,
+          new_content: null,
+        },
+        "planning_file_editor",
+      ),
+    );
+    dispatchPlanning(
+      makeObservationEvent(
+        "37-null-path",
+        {
+          kind: "PlanningFileEditorObservation",
+          content: [],
+          is_error: false,
+          command: "view",
+          path: null,
+          prev_exist: true,
+          old_content: null,
+          new_content: null,
+        },
+        "planning_file_editor",
+      ),
+    );
+    expect(socketCapture.readConversationFile).toHaveBeenCalledOnce();
+    expect(warn).not.toHaveBeenCalled();
 
     socketCapture.readConversationFile.mockImplementation(
       (_variables, callbacks) => callbacks.onSuccess("# Live plan"),
@@ -1216,6 +1646,23 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("loading-history")).toHaveTextContent("false");
   });
 
+  it("does not request a planning history count without coordinates", async () => {
+    const getEventCount = vi
+      .spyOn(EventService, "getEventCount")
+      .mockResolvedValue(0);
+    renderProvider({
+      subConversations: [
+        makeSubConversation({ id: "", conversation_url: null }),
+      ],
+    });
+
+    await act(async () => {
+      await planningOptions().onOpen?.(new Event("open"));
+    });
+
+    expect(getEventCount).not.toHaveBeenCalled();
+  });
+
   it("does not show a planning connection error before its first open", () => {
     renderProvider({ subConversations: [makeSubConversation()] });
 
@@ -1225,11 +1672,23 @@ describe("Conversation websocket behavior", () => {
   });
 
   it("routes planning-agent events to the shared conversation experience", () => {
+    const consumeMatchingPendingMessage = vi.spyOn(
+      useOptimisticUserMessageStore.getState(),
+      "consumeMatchingPendingMessage",
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { queryClient } = renderProvider({
       subConversations: [makeSubConversation()],
       subConversationIds: ["conv-planning"],
     });
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    useErrorMessageStore.getState().setErrorMessage("temporary", "connection");
+    dispatchPlanning(makeMessageEvent("37-normal", "assistant", ["ready"]));
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(consumeMatchingPendingMessage).not.toHaveBeenCalled();
+    expect(socketCapture.captureException).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
 
     dispatchPlanning({
       ...baseEvent("38"),
@@ -1244,7 +1703,11 @@ describe("Conversation websocket behavior", () => {
     });
     expect(socketCapture.captureException).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Planner failed" }),
-      expect.objectContaining({ error_source: "planning_conversation" }),
+      expect.objectContaining({
+        error_source: "planning_conversation",
+        eventId: "38",
+        errorCode: "PlannerUnavailable",
+      }),
     );
 
     dispatchPlanning({
@@ -1255,8 +1718,14 @@ describe("Conversation websocket behavior", () => {
     });
     expect(socketCapture.captureException).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Planner model failed" }),
-      expect.objectContaining({ error_source: "planning_agent" }),
+      expect.objectContaining({
+        error_source: "planning_agent",
+        eventId: "39",
+        toolName: "planner_llm",
+        toolCallId: "call-39",
+      }),
     );
+    expect(socketCapture.captureException).toHaveBeenCalledTimes(2);
 
     useOptimisticUserMessageStore.setState({
       pendingMessages: [
@@ -1276,6 +1745,11 @@ describe("Conversation websocket behavior", () => {
     dispatchPlanning(makeMessageEvent("40", "user", ["plan this"]));
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
       [],
+    );
+    expect(consumeMatchingPendingMessage).toHaveBeenCalledOnce();
+    expect(consumeMatchingPendingMessage).toHaveBeenCalledWith(
+      "conv-main",
+      "plan this",
     );
     expect(getConversationState("conv-main").draftMessage).toBeNull();
 
@@ -1302,6 +1776,9 @@ describe("Conversation websocket behavior", () => {
         execution_status: "running",
       }),
     );
+    expect(useConversationStateStore.getState().execution_status).toBe(
+      "running",
+    );
     dispatchPlanning(makeStateEvent("43", "execution_status", "finished"));
     expect(useConversationStateStore.getState().execution_status).toBe(
       "finished",
@@ -1318,6 +1795,9 @@ describe("Conversation websocket behavior", () => {
       }),
     );
     expect(useMetricsStore.getState().cost).toBe(4);
+    expect(useConversationStateStore.getState().execution_status).toBe(
+      "finished",
+    );
 
     const planningGoal = {
       active: true,
@@ -1331,6 +1811,9 @@ describe("Conversation websocket behavior", () => {
     expect(useGoalStore.getState().statusByConversation["conv-main"]).toEqual(
       planningGoal,
     );
+    expect(useConversationStateStore.getState().execution_status).toBe(
+      "finished",
+    );
 
     dispatchPlanning(
       makeObservationEvent("46", {
@@ -1338,12 +1821,13 @@ describe("Conversation websocket behavior", () => {
         content: [
           { type: "text", text: "plan output" },
           { type: "image", image_urls: [] },
+          { type: "text", text: "second line" },
         ],
       }),
     );
     expect(useCommandStore.getState().commands).toContainEqual({
       type: "output",
-      content: "plan output",
+      content: "plan output\nsecond line",
     });
 
     dispatchPlanning(
@@ -1363,6 +1847,7 @@ describe("Conversation websocket behavior", () => {
       ),
     );
     expect(socketCapture.readConversationFile).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("keeps planning fallbacks safe without conversation identities", async () => {
@@ -1429,6 +1914,7 @@ describe("Conversation websocket behavior", () => {
         "planning_file_editor",
       ),
     );
+    expect(warn).not.toHaveBeenCalled();
     act(() =>
       planningOptions().onMessage?.({ data: "not-json" } as MessageEvent),
     );
@@ -1443,5 +1929,6 @@ describe("Conversation websocket behavior", () => {
       "Failed to parse WebSocket message as JSON:",
       expect.any(SyntaxError),
     );
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });

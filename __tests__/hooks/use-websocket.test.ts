@@ -154,6 +154,37 @@ describe("useWebSocket connection lifecycle", () => {
     expect("messages" in result.current).toBe(false);
   });
 
+  it("handles messages and native errors without optional callbacks", () => {
+    const { result } = renderWebSocket<{ sequence: number }>(
+      "ws://acme.test/events",
+    );
+    const socket = getSocket();
+
+    act(() => socket.open());
+    act(() => socket.receive({ sequence: 8 }));
+    expect(result.current.lastMessage).toEqual({ sequence: 8 });
+
+    act(() => socket.emitError());
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.error).toBe(null);
+  });
+
+  it("handles messages and native errors when options omit callbacks", () => {
+    const { result } = renderWebSocket<{ sequence: number }>(
+      "ws://acme.test/events",
+      {},
+    );
+    const socket = getSocket();
+
+    act(() => socket.open());
+    act(() => socket.receive({ sequence: 9 }));
+    expect(result.current.lastMessage).toEqual({ sequence: 9 });
+
+    act(() => socket.emitError());
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.error).toBe(null);
+  });
+
   it("reports native socket errors through the current error callback", () => {
     const onError = vi.fn();
     const { result } = renderWebSocket("ws://acme.test/events", { onError });
@@ -241,6 +272,14 @@ describe("useWebSocket messaging", () => {
     act(() => socket.emitClose(1000));
     act(() => result.current.sendMessage("too late"));
     expect(socket.send).toHaveBeenCalledOnce();
+  });
+
+  it("ignores sends before a socket exists", () => {
+    const { result } = renderWebSocket("");
+
+    act(() => result.current.sendMessage("not connected"));
+
+    expect(BrowserWebSocketDouble.instances).toHaveLength(0);
   });
 });
 
@@ -382,11 +421,49 @@ describe("useWebSocket reconnection", () => {
 
     act(() => result.current.reconnect());
     expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+    expect(firstSocket.close).not.toHaveBeenCalled();
     expect(result.current.error).toBe(null);
     expect(result.current.attemptCount).toBe(0);
 
     act(() => vi.advanceTimersByTime(3000));
     expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+  });
+
+  it("keeps automatic retries enabled after a manual reconnect", () => {
+    vi.useFakeTimers();
+    const { result } = renderWebSocket("ws://acme.test/events", {
+      reconnect: { enabled: true, maxAttempts: 2 },
+    });
+    const firstSocket = getSocket();
+
+    act(() => result.current.reconnect());
+    expect(firstSocket.close).toHaveBeenCalledOnce();
+    expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+
+    act(() => getSocket().emitClose(1000));
+    expect(result.current.isReconnecting).toBe(true);
+    expect(result.current.attemptCount).toBe(1);
+
+    act(() => vi.advanceTimersByTime(3000));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(3);
+  });
+
+  it("manually reconnects with the latest URL", () => {
+    vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+    const { result, rerender } = renderHook(
+      ({ url }: { url: string }) => useWebSocket(url),
+      { initialProps: { url: "ws://acme.test/first" } },
+    );
+
+    rerender({ url: "ws://acme.test/second" });
+    const secondSocket = getSocket();
+    expect(secondSocket.url).toBe("ws://acme.test/second");
+
+    act(() => result.current.reconnect());
+
+    expect(secondSocket.close).toHaveBeenCalledOnce();
+    expect(BrowserWebSocketDouble.instances).toHaveLength(3);
+    expect(getSocket().url).toBe("ws://acme.test/second");
   });
 
   it("can be explicitly connected after starting without a URL", () => {
