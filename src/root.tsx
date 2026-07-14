@@ -26,7 +26,10 @@ import {
   isSameCloudHost,
 } from "#/api/agent-server-config";
 import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
-import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import {
+  ActiveBackendProvider,
+  useActiveBackendContext,
+} from "#/contexts/active-backend-context";
 import {
   isCloudBackendApiKeyOrNetworkHealthError,
   isCloudBackendLoggedOutHealthError,
@@ -84,13 +87,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body data-agent-server-ui="" className="m-0">
-        <AgentServerUIRoot contentClassName="min-h-screen">
-          <ColorThemeApplier />
-          {children}
-          <Toaster toastOptions={TOAST_OPTIONS} />
-          <TelemetryConsentBanner />
-          <div id="modal-portal-exit" />
-        </AgentServerUIRoot>
+        <ActiveBackendProvider>
+          <AgentServerUIRoot contentClassName="min-h-screen">
+            <ColorThemeApplier />
+            {children}
+            <Toaster toastOptions={TOAST_OPTIONS} />
+            <TelemetryConsentBanner />
+            <div id="modal-portal-exit" />
+          </AgentServerUIRoot>
+        </ActiveBackendProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
