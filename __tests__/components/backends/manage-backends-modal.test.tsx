@@ -560,6 +560,47 @@ describe("ManageBackendsModal", () => {
       expect.anything(),
     );
   });
+  it("uses Cloud reconnect recovery controls when locked to Cloud", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    const user = userEvent.setup();
+    vi.spyOn(window, "open").mockReturnValue({
+      closed: false,
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "OpenHands Cloud",
+            host: "https://app.all-hands.dev",
+            apiKey: "expired-token",
+            kind: "cloud",
+          });
+        }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "BACKEND$RECONNECT_CLOUD_TITLE",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("manage-backends-add")).not.toBeInTheDocument();
+
+    const reconnectButton = await screen.findByTestId(
+      "manage-backends-reconnect-cloud-login-button",
+    );
+    expect(reconnectButton).toHaveTextContent("BACKEND$RECONNECT_CLOUD");
+
+    await user.click(reconnectButton);
+    expect(deviceFlowMocks.startDeviceFlow).toHaveBeenCalledWith(
+      "https://app.all-hands.dev",
+    );
+  });
 });
 
 function renderInQueryClient(ui: React.ReactElement) {
