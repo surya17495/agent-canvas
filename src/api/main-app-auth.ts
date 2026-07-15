@@ -3,7 +3,7 @@ import { getLockedCloudAuthMode } from "./agent-server-config";
 
 export const MAIN_APP_AUTHENTICATE_PATH = "/api/authenticate";
 export const MAIN_APP_LOGIN_PATH = "/login";
-export const MAIN_APP_LOGIN_REDIRECT_PARAM = "redirect";
+export const MAIN_APP_LOGIN_REDIRECT_PARAM = "returnTo";
 
 const LOCAL_BROWSER_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 

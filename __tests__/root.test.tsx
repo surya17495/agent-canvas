@@ -677,7 +677,7 @@ describe("App root agent-server availability guard", () => {
 
     await waitFor(() => {
       expect(assign).toHaveBeenCalledWith(
-        "/login?redirect=%2Fcanvas%3Ftab%3Dhome%23top",
+        "/login?returnTo=%2Fcanvas%3Ftab%3Dhome%23top",
       );
     });
     expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
