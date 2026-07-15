@@ -33,3 +33,6 @@ ralph/
 workspace/
 build-fresh/
 .playwright-mcp/
+
+# Dev-only local extension registry (see src/extensions/dev/local-extension-registry.ts)
+.agent-canvas/

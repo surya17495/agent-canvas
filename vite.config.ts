@@ -19,6 +19,11 @@ import {
   generateCspNonce,
   stampCspNonce,
 } from "./src/extensions/webview-security";
+import { LocalExtensionRegistry } from "./src/extensions/dev/local-extension-registry";
+import {
+  LOCAL_EXTENSION_REGISTER_PATH,
+  LOCAL_EXTENSION_ROUTE_PREFIX,
+} from "./src/extensions/sources/local-path";
 
 const LIB_ENTRY = fileURLToPath(new URL("./src/index.ts", import.meta.url));
 const LIB_EXTERNALS = [
@@ -42,6 +47,15 @@ const EXTENSIONS_SKILLS_DIR = resolve(
 const PUBLIC_LOCALES_DIR = resolve(process.cwd(), "public", "locales");
 const EXAMPLE_EXTENSIONS_DIR = resolve(process.cwd(), "examples", "extensions");
 
+// Durable-but-gitignored registry file for local dev extension directories. The dev
+// server is disposable; this file lets the same `~/…` paths resolve to the same ids
+// (and URLs) across restarts, so a developer never has to re-add a directory.
+const LOCAL_EXTENSIONS_REGISTRY_FILE = resolve(
+  process.cwd(),
+  ".agent-canvas",
+  "dev-extensions.json",
+);
+
 // Content types for files served from example extension bundles in dev.
 const EXTENSION_ASSET_CONTENT_TYPES: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
@@ -51,6 +65,48 @@ const EXTENSION_ASSET_CONTENT_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
 };
+
+/**
+ * Serve one already-confined extension asset file with the correct content type,
+ * `no-cache`, `nosniff`, and — for `.html` — a per-load CSP nonce stamped into both the
+ * header and the document. Shared by the example-bundle middleware and the local-dev
+ * middleware so webview HTML is never served without a host-stamped nonce (a bare static
+ * mount would break the strict webview CSP). Returns false when the file is missing so
+ * the caller can fall through to `next()`.
+ */
+async function serveExtensionFile(
+  filePath: string,
+  method: string,
+  res: import("node:http").ServerResponse,
+): Promise<boolean> {
+  const ext = filePath.slice(filePath.lastIndexOf("."));
+  let content: Buffer;
+  try {
+    content = await readFile(filePath);
+  } catch {
+    return false;
+  }
+  const headers: Record<string, string> = {
+    "Content-Type":
+      EXTENSION_ASSET_CONTENT_TYPES[ext] ?? "application/octet-stream",
+    "Cache-Control": "no-cache",
+    "X-Content-Type-Options": "nosniff",
+  };
+  // Webview documents run untrusted code: enforce the strict CSP host-side (authoritative
+  // over any <meta> the bundle ships). A per-load nonce ties script execution to the
+  // host-stamped tags. A real deployment must send the same header from its asset server.
+  if (ext === ".html") {
+    const nonce = generateCspNonce();
+    headers["Content-Security-Policy"] = buildWebviewCsp({ nonce });
+    content = Buffer.from(
+      stampCspNonce(content.toString("utf8"), nonce),
+      "utf8",
+    );
+  }
+  res.writeHead(200, headers);
+  res.end(method === "HEAD" ? "" : content);
+  return true;
+}
 
 const appBuildConfig = {
   rolldownOptions: {
@@ -198,31 +254,92 @@ export default defineConfig(({ mode }) => {
               return;
             }
 
-            const ext = filePath.slice(filePath.lastIndexOf("."));
-            try {
-              let content = await readFile(filePath);
-              const headers: Record<string, string> = {
-                "Content-Type":
-                  EXTENSION_ASSET_CONTENT_TYPES[ext] ??
-                  "application/octet-stream",
-                "Cache-Control": "no-cache",
-                "X-Content-Type-Options": "nosniff",
-              };
-              // Webview documents run untrusted code: enforce the strict CSP host-side
-              // (authoritative over any <meta> the bundle ships). A per-load nonce ties
-              // script execution to the host-stamped tags. A real deployment must send
-              // the same header (and stamp the same nonce) from its asset server.
-              if (ext === ".html") {
-                const nonce = generateCspNonce();
-                headers["Content-Security-Policy"] = buildWebviewCsp({ nonce });
-                content = Buffer.from(
-                  stampCspNonce(content.toString("utf8"), nonce),
-                  "utf8",
-                );
+            if (!(await serveExtensionFile(filePath, method, res))) {
+              next();
+            }
+          });
+        },
+      },
+      {
+        // Dev-only: register + serve **local extension directories** the developer names
+        // at runtime (`~/…`, absolute, or `file:///…`). A fixed route over a mutable
+        // registry, so adding a directory is an API call — no server restart. Only exists
+        // in the serve build; a deployed build never has this surface (`local:` is
+        // dev-only by construction). See `src/extensions/dev/local-extension-registry.ts`.
+        name: "serve-local-extensions",
+        apply: "serve",
+        configureServer(server) {
+          const registry = new LocalExtensionRegistry(
+            LOCAL_EXTENSIONS_REGISTRY_FILE,
+          );
+
+          server.middlewares.use(async (req, res, next) => {
+            const pathname = new URL(req.url ?? "", "http://localhost")
+              .pathname;
+            const method = req.method ?? "GET";
+
+            // POST /__ext-local/register { path } -> { id }. Resolve + confine happens
+            // in the registry (expanduser -> realpath -> is-dir); a bad path is a 400.
+            if (pathname === LOCAL_EXTENSION_REGISTER_PATH) {
+              if (method !== "POST") {
+                res.writeHead(405, { Allow: "POST" });
+                res.end();
+                return;
               }
-              res.writeHead(200, headers);
-              res.end(method === "HEAD" ? "" : content);
-            } catch {
+              const chunks: Buffer[] = [];
+              req.on("data", (chunk) => chunks.push(chunk as Buffer));
+              req.on("end", () => {
+                try {
+                  const body = JSON.parse(
+                    Buffer.concat(chunks).toString("utf8") || "{}",
+                  ) as { path?: unknown };
+                  if (typeof body.path !== "string" || !body.path.trim()) {
+                    throw new Error("expected a non-empty { path } string");
+                  }
+                  const entry = registry.register(body.path);
+                  res.writeHead(200, {
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Cache-Control": "no-cache",
+                  });
+                  res.end(JSON.stringify({ id: entry.id }));
+                } catch (error) {
+                  res.writeHead(400, {
+                    "Content-Type": "application/json; charset=utf-8",
+                  });
+                  res.end(
+                    JSON.stringify({
+                      error:
+                        error instanceof Error ? error.message : String(error),
+                    }),
+                  );
+                }
+              });
+              return;
+            }
+
+            // GET /__ext-local/<id>/<file> -> confined file serve with nonce-stamped HTML.
+            if (!pathname.startsWith(LOCAL_EXTENSION_ROUTE_PREFIX)) {
+              next();
+              return;
+            }
+            if (method !== "GET" && method !== "HEAD") {
+              next();
+              return;
+            }
+            const remainder = decodeURIComponent(
+              pathname.slice(LOCAL_EXTENSION_ROUTE_PREFIX.length),
+            );
+            const slash = remainder.indexOf("/");
+            const id = slash === -1 ? remainder : remainder.slice(0, slash);
+            const filePart = slash === -1 ? "" : remainder.slice(slash + 1);
+            // Resolve-then-confine: reject unknown ids and any path that escapes the root.
+            const filePath = registry.resolveFileWithinRoot(id, filePart);
+            if (!filePath) {
+              res.writeHead(403);
+              res.end();
+              return;
+            }
+            if (!(await serveExtensionFile(filePath, method, res))) {
               next();
             }
           });
