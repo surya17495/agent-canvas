@@ -264,8 +264,7 @@ a CDN. Pick the channel that matches the ref users will type:
   `git tag v1.0.0 && git push --tags`. Users install `gh:owner/repo/<subpath>@^1` (omit the
   subpath when the bundle is the repo root).
 
-Full step-by-step (including monorepos): **"Publishing a versioned release"** in
-[`src/extensions/README.md`](../src/extensions/README.md).
+Full step-by-step (including monorepos): the **[Author Guide](./extensions/AUTHOR_GUIDE.md)**.
 
 ### Share via a marketplace (optional)
 
@@ -314,8 +313,8 @@ subdomain) - see **section 6** of the [Self-hosting guide](./SELF_HOSTING.md).
 
 ## See also
 
-- [`src/extensions/README.md`](../src/extensions/README.md) - full reference: architecture,
-  manifest schema, source-ref resolution, security model, and publishing.
+- [`docs/extensions/ARCHITECTURE.md`](./extensions/ARCHITECTURE.md) - full reference:
+  architecture, manifest schema, source-ref resolution, security model, and publishing.
 - [`examples/extensions/hello-sidebar/`](../examples/extensions/hello-sidebar/) - the working
   sample bundle.
 - [UI extension points (roadmap)](./EXTENSION_POINTS.md) - the contribution points available

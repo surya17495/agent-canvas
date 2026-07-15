@@ -1,7 +1,6 @@
 import React from "react";
 import { ExtensionManager } from "#/extensions/extension-manager";
 import { createAppHostDeps } from "#/extensions/host/create-app-host-deps";
-import { createHttpBundleSource } from "#/extensions/dev-bundle-source";
 import { useExtensionPanelStore } from "#/extensions/panel-store";
 import {
   useInstalledExtensionsStore,
@@ -18,6 +17,7 @@ import {
 import { parseManifest, type ExtensionManifest } from "#/extensions/manifest";
 import { assertHostCompatible } from "#/extensions/engines";
 import {
+  bundleSourceForUrl,
   resolveSource,
   toBundleSource,
   type ArtifactDescriptor,
@@ -355,18 +355,12 @@ export function ExtensionManagerProviderInner({
       origin: InstalledExtensionOrigin,
       sourceRef?: string,
     ) => {
-      // Detect GitHub sources that require the asset relay system.
+      // Route GitHub sources through the asset relay and everything else over HTTP,
+      // sharing `toBundleSource`'s decision via `bundleSourceForUrl`.
+      const bundleSource = bundleSourceForUrl(url);
+      // GitHub sources additionally need the source ref threaded to the webview's asset
+      // relay via `extensionSource`.
       const isGitHubSource = splitGithubScheme(url) !== null;
-      const bundleSource = isGitHubSource
-        ? toBundleSource({
-            sourceRef: sourceRef ?? url,
-            kind: "gh",
-            version: url.split("@").pop(),
-            baseUrl: url,
-            format: "dir",
-            requiresProxy: true,
-          })
-        : createHttpBundleSource(url);
       const options = isGitHubSource ? { extensionSource: url } : {};
 
       const result = await manager.install(bundleSource, options);

@@ -20,6 +20,7 @@ import { createRelayBundleSource } from "./relay-bundle-source";
 import {
   formatSourceRef,
   parseSourceRef,
+  splitGithubScheme,
   type ExtensionSourceRef,
 } from "./ref";
 import { npmBaseUrl, resolveNpmVersion } from "./jsdelivr";
@@ -157,4 +158,22 @@ export function toBundleSource(descriptor: ArtifactDescriptor): BundleSource {
   }
   // npm and url sources load directly via HTTP
   return createHttpBundleSource(descriptor.baseUrl);
+}
+
+/**
+ * Turn a persisted install *URL string* into a {@link BundleSource}, applying the same
+ * GitHub-vs-HTTP routing as {@link toBundleSource} without an intermediate
+ * {@link ArtifactDescriptor}.
+ *
+ * The re-install-on-reload path (dev bundles + persisted user installs) only has the
+ * pinned URL string, not a freshly-resolved descriptor. A GitHub source (canonical
+ * `github:`, or the legacy `gh:` alias in older persisted records) goes through the
+ * parent-window asset relay; everything else (npm/`url:` HTTP bundles) loads directly.
+ * This mirrors `toBundleSource`'s `requiresProxy` branch so the two routing sites stay
+ * in lockstep.
+ */
+export function bundleSourceForUrl(url: string): BundleSource {
+  return splitGithubScheme(url) !== null
+    ? createRelayBundleSource(url)
+    : createHttpBundleSource(url);
 }

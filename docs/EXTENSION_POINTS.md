@@ -6,7 +6,7 @@ catalog of candidate future extension points mapped to the actual UI surfaces th
 host them. It complements:
 
 - [`EXTENSIONS.md`](./EXTENSIONS.md) - the user/author guide (try and publish extensions).
-- [`../src/extensions/README.md`](../src/extensions/README.md) - the implementation reference.
+- [`extensions/ARCHITECTURE.md`](./extensions/ARCHITECTURE.md) - the implementation reference.
 - [`proposals/ui-extensions.md`](./proposals/ui-extensions.md) - the original design proposal
   (its sections 2, 6, and 7 already sketch several of the items below).
 
@@ -425,7 +425,7 @@ Whatever point you add, keep these invariants - they are what make the system sa
 
 ## See also
 
-- [`../src/extensions/README.md`](../src/extensions/README.md) - architecture, file map, and
+- [`extensions/ARCHITECTURE.md`](./extensions/ARCHITECTURE.md) - architecture, file map, and
   the source-ref/security details referenced above.
 - [`proposals/ui-extensions.md`](./proposals/ui-extensions.md) - sections 2 (VS Code mapping),
   4 (technical design), 6 (out of scope), 7 (open questions).
