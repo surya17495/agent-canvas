@@ -13,7 +13,7 @@ import {
 import "./tailwind.css";
 import "./index.css";
 import React from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import {
   clearCachedAgentServerInfo,
@@ -26,6 +26,11 @@ import {
   isAuthRequiredAndMissing,
   isSameCloudHost,
 } from "#/api/agent-server-config";
+import {
+  authenticateWithMainAppCookie,
+  redirectToMainAppLogin,
+  shouldUseMainAppCookieAuth,
+} from "#/api/main-app-auth";
 import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
@@ -280,15 +285,43 @@ export default function App() {
       (lockedCloudAuthMode !== "cookie" && !onboardingCompleted)
     : !onboardingCompleted;
 
+  const shouldCheckMainAppAuth = shouldUseMainAppCookieAuth();
+  const mainAppAuth = useQuery({
+    queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
+    queryFn: authenticateWithMainAppCookie,
+    enabled: shouldCheckMainAppAuth && !showFirstRunOnboarding,
+    retry: false,
+    staleTime: 1000 * 60 * 5,
+    meta: { disableToast: true },
+  });
+  const waitingForMainAppAuth =
+    shouldCheckMainAppAuth &&
+    !showFirstRunOnboarding &&
+    mainAppAuth.isPending &&
+    !mainAppAuth.isError;
+  const redirectingToMainAppLogin =
+    shouldCheckMainAppAuth && mainAppAuth.data === false;
+  const mainAppAuthAllowsBackendQueries =
+    !shouldCheckMainAppAuth || mainAppAuth.data === true || mainAppAuth.isError;
+
+  React.useEffect(() => {
+    if (redirectingToMainAppLogin) redirectToMainAppLogin();
+  }, [redirectingToMainAppLogin]);
+
   // Skip the /server_info probe entirely when we already know auth is
   // required and missing — it would just 401 and waste time. Also keep the
   // root bootstrap quiet while the first-run onboarding modal owns backend
   // collection; the onboarding steps issue their own backend-specific queries.
   const config = useConfig({
-    enabled: !authMissing && !showFirstRunOnboarding,
+    enabled:
+      !authMissing &&
+      !showFirstRunOnboarding &&
+      mainAppAuthAllowsBackendQueries,
   });
   const activeCloudHealth = useBackendsHealth(
-    active.backend.kind === "cloud" ? [active.backend] : [],
+    active.backend.kind === "cloud" && mainAppAuthAllowsBackendQueries
+      ? [active.backend]
+      : [],
   )[active.backend.id];
   const activeCloudLoggedOut =
     active.backend.kind === "cloud" &&
@@ -306,6 +339,10 @@ export default function App() {
 
   if (showFirstRunOnboarding) {
     return <FirstRunOnboardingScreen onClose={markCompleted} />;
+  }
+
+  if (waitingForMainAppAuth || redirectingToMainAppLogin) {
+    return <AgentServerBootstrapLoading />;
   }
 
   // No key at all after onboarding was skipped/completed → auth screen.
