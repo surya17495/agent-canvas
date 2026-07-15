@@ -26,6 +26,16 @@ const cloudAcme: Backend = {
   kind: "cloud",
 };
 
+const cookieCloud: Backend = {
+  id: "cloud-cookie",
+  name: "Production - Cookie",
+  host: "https://app.all-hands.dev",
+  apiKey: "",
+  kind: "cloud",
+  authMode: "cookie",
+};
+
+
 beforeEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
@@ -96,6 +106,44 @@ describe("callCloudProxy X-Org-Id injection", () => {
     expect(
       (config as { headers: Record<string, string> }).headers,
     ).not.toHaveProperty("X-Org-Id");
+  });
+});
+
+describe("callCloudProxy cookie auth", () => {
+  it("omits bearer auth and includes credentials for same-origin cookie-backed Cloud requests", async () => {
+    setRegisteredBackends([cookieCloud]);
+    setActiveSelection({ backendId: cookieCloud.id, orgId: null });
+
+    await callCloudProxy({
+      backend: cookieCloud,
+      method: "GET",
+      path: "/api/v1/users/me",
+    });
+
+    const [config] = vi.mocked(axios.request).mock.calls[0]!;
+    expect(config).toMatchObject({
+      url: `${cookieCloud.host}/api/v1/users/me`,
+      method: "GET",
+      withCredentials: true,
+    });
+    expect(
+      (config as { headers: Record<string, string> }).headers,
+    ).not.toHaveProperty("Authorization");
+  });
+
+  it("includes credentials on runtime proxy envelope requests", async () => {
+    setRegisteredBackends([cookieCloud]);
+    setActiveSelection({ backendId: cookieCloud.id, orgId: null });
+
+    await callCloudProxy({
+      backend: cookieCloud,
+      method: "GET",
+      path: "/api/bash/bash_events/search",
+      hostOverride: "https://abc123.prod-runtime.all-hands.dev",
+    });
+
+    const [, , config] = vi.mocked(axios.post).mock.calls[0]!;
+    expect(config).toMatchObject({ withCredentials: true });
   });
 });
 

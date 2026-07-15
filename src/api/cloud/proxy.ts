@@ -93,6 +93,8 @@ export async function callCloudProxy<TResponse = unknown>(
   };
   const upstreamHost = req.hostOverride ?? req.backend.host;
 
+  const useCookieAuth = req.backend.authMode === "cookie";
+
   if (!req.hostOverride) {
     const response = await axios.request<TResponse>({
       url: `${upstreamHost.replace(/\/+$/, "")}${req.path}`,
@@ -100,6 +102,7 @@ export async function callCloudProxy<TResponse = unknown>(
       headers: upstreamHeaders,
       ...(req.body !== undefined ? { data: req.body } : {}),
       timeout: (req.timeoutSeconds ?? 30) * 1000,
+      withCredentials: useCookieAuth,
       ...(req.responseType ? { responseType: req.responseType } : {}),
     });
 
@@ -127,6 +130,7 @@ export async function callCloudProxy<TResponse = unknown>(
     {
       headers: localAuthHeaders,
       timeout: 30_000,
+      withCredentials: useCookieAuth,
       ...(req.responseType ? { responseType: req.responseType } : {}),
     },
   );

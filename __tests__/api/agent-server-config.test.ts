@@ -6,6 +6,7 @@ import {
   getAgentServerFormDefaults,
   getAgentServerSessionApiKey,
   getAgentServerWorkingDir,
+  getLockedCloudAuthMode,
   getLockedCloudHost,
   isAuthRequired,
   isAuthRequiredAndMissing,
@@ -78,13 +79,13 @@ describe("agent server config", () => {
   });
 });
 
-describe("getLockedCloudHost", () => {
-  function setInjectedCloudHost(value: unknown) {
-    (
-      window as unknown as Record<string, unknown>
-    ).__AGENT_CANVAS_LOCK_TO_CLOUD__ = value;
-  }
+function setInjectedCloudHost(value: unknown) {
+  (
+    window as unknown as Record<string, unknown>
+  ).__AGENT_CANVAS_LOCK_TO_CLOUD__ = value;
+}
 
+describe("getLockedCloudHost", () => {
   it("returns null when no Cloud lock is configured", () => {
     expect(getLockedCloudHost()).toBeNull();
   });
@@ -114,6 +115,22 @@ describe("getLockedCloudHost", () => {
 
     setInjectedCloudHost(12345);
     expect(getLockedCloudHost()).toBeNull();
+  });
+});
+
+describe("getLockedCloudAuthMode", () => {
+  it("uses cookie auth when the locked Cloud host matches the current origin", () => {
+    mockWindowLocation("https://app.all-hands.dev/canvas");
+    setInjectedCloudHost("https://app.all-hands.dev");
+
+    expect(getLockedCloudAuthMode()).toBe("cookie");
+  });
+
+  it("uses API-key auth when the locked Cloud host is cross-origin", () => {
+    mockWindowLocation("https://canvas.example.dev/");
+    setInjectedCloudHost("https://app.all-hands.dev");
+
+    expect(getLockedCloudAuthMode()).toBe("api-key");
   });
 });
 

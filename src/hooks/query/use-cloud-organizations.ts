@@ -26,10 +26,10 @@ export function useAllCloudOrganizations() {
       // selector would advertise orgs the key cannot use. Legacy keys
       // with no binding fall through unfiltered.
       queryFn: async () => {
-        const [orgs, key] = await Promise.all([
-          getCloudOrganizations(backend),
-          getCurrentCloudApiKey(backend),
-        ]);
+        const orgs = await getCloudOrganizations(backend);
+        if (backend.authMode === "cookie") return orgs;
+
+        const key = await getCurrentCloudApiKey(backend);
         if (key.isLegacyKey || key.orgId === null) return orgs;
         return {
           ...orgs,

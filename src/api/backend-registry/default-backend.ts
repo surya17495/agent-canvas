@@ -1,6 +1,7 @@
 import {
   getAgentServerBaseUrl,
   getAgentServerSessionApiKey,
+  getLockedCloudAuthMode,
   getLockedCloudHost,
 } from "../agent-server-config";
 import type { Backend } from "./types";
@@ -15,6 +16,22 @@ import type { Backend } from "./types";
 export const SEEDED_DEFAULT_BACKEND_ID = "default-local";
 
 export const DEFAULT_LOCAL_BACKEND_NAME = "Local";
+export const LOCKED_CLOUD_BACKEND_ID = "locked-cloud";
+export const LOCKED_CLOUD_BACKEND_NAME = "OpenHands Cloud";
+
+export function makeLockedCloudBackend(): Backend | null {
+  const host = getLockedCloudHost();
+  if (!host || getLockedCloudAuthMode() !== "cookie") return null;
+
+  return {
+    id: LOCKED_CLOUD_BACKEND_ID,
+    name: LOCKED_CLOUD_BACKEND_NAME,
+    host,
+    apiKey: "",
+    kind: "cloud",
+    authMode: "cookie",
+  };
+}
 
 /**
  * Construct the default local backend from environment/runtime config.

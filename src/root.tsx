@@ -21,6 +21,7 @@ import {
   isAgentServerAuthError,
 } from "#/api/agent-server-compatibility";
 import {
+  getLockedCloudAuthMode,
   getLockedCloudHost,
   isAuthRequiredAndMissing,
   isSameCloudHost,
@@ -244,6 +245,7 @@ export default function App() {
   // onboarding instead of the Manage Backends recovery modal — the onboarding
   // flow owns the Cloud login that replaces the stale backend.
   const lockedCloudHost = getLockedCloudHost();
+  const lockedCloudAuthMode = getLockedCloudAuthMode();
   const isLockedToCloud = lockedCloudHost !== null;
   // True only when the active backend IS the configured locked Cloud host
   // (normalized comparison so trailing slash / case / protocol differences
@@ -274,7 +276,8 @@ export default function App() {
   // active backend really is the locked Cloud host, so the stale-flag bypass
   // concerns above don't apply here.)
   const showFirstRunOnboarding = isLockedToCloud
-    ? !isActiveLockedCloudBackend || !onboardingCompleted
+    ? !isActiveLockedCloudBackend ||
+      (lockedCloudAuthMode !== "cookie" && !onboardingCompleted)
     : !onboardingCompleted;
 
   // Skip the /server_info probe entirely when we already know auth is

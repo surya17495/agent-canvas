@@ -12,6 +12,8 @@ import type { Backend } from "#/api/backend-registry/types";
 afterEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_LOCK_TO_CLOUD__;
   vi.unstubAllEnvs();
 });
 
@@ -67,6 +69,64 @@ describe("backend-registry storage", () => {
     });
     expect(window.localStorage.getItem(BACKENDS_STORAGE_KEY)).not.toBeNull();
     expect(readStoredBackends()).toEqual(result);
+  });
+
+  it("seeds a cookie-auth Cloud backend when locked to the current origin", () => {
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_LOCK_TO_CLOUD__ = window.location.origin;
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "stale-local",
+          name: "Stale Local",
+          host: "http://localhost:18000",
+          apiKey: "stale-session",
+          kind: "local",
+        },
+      ]),
+    );
+
+    const result = readStoredBackends();
+
+    expect(result).toEqual([
+      {
+        id: "locked-cloud",
+        name: "OpenHands Cloud",
+        host: window.location.origin,
+        apiKey: "",
+        kind: "cloud",
+        authMode: "cookie",
+      },
+    ]);
+    expect(readStoredActiveBackend()).toEqual({
+      backendId: "locked-cloud",
+      orgId: null,
+    });
+  });
+
+  it("preserves an existing locked Cloud org selection while reseeding", () => {
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_LOCK_TO_CLOUD__ = window.location.origin;
+    writeStoredActiveBackend({ backendId: "locked-cloud", orgId: "org-1" });
+
+    expect(readStoredBackends()[0]).toMatchObject({ id: "locked-cloud" });
+    expect(readStoredActiveBackend()).toEqual({
+      backendId: "locked-cloud",
+      orgId: "org-1",
+    });
+  });
+
+
+  it("does not seed a cookie-auth Cloud backend when locked cross-origin", () => {
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_LOCK_TO_CLOUD__ = "https://app.all-hands.dev";
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+
+    expect(readStoredBackends()).toEqual([]);
   });
 
   it("re-seeds the default Local backend when storage holds an empty array and launcher details are available", () => {

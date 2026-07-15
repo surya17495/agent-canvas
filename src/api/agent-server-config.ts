@@ -1,5 +1,7 @@
 export const DEFAULT_WORKING_DIR = "workspace/project";
 
+export type LockedCloudAuthMode = "api-key" | "cookie";
+
 export interface AgentServerFormDefaults {
   baseUrl: string;
   sessionApiKey: string;
@@ -122,6 +124,19 @@ export function isSameCloudHost(
   const b = normalizeCloudHost(lockedHost);
   if (!a || !b) return false;
   return a.toLowerCase() === b.toLowerCase();
+}
+
+export function getLockedCloudAuthMode(): LockedCloudAuthMode {
+  const lockedHost = getLockedCloudHost();
+  if (
+    lockedHost &&
+    typeof window !== "undefined" &&
+    isSameCloudHost(window.location.origin, lockedHost)
+  ) {
+    return "cookie";
+  }
+
+  return "api-key";
 }
 
 export function getAgentServerBaseUrl(): string | null {
