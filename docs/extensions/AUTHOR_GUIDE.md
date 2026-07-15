@@ -631,7 +631,58 @@ Control when your extension's worker activates:
 
 ## Testing Your Extension
 
-### Local Development
+### Local Development (recommended: add a directory)
+
+The fastest inner loop is to point Agent Canvas straight at a directory on your machine —
+no HTTP server to run, no config to edit, and no restart to add another one.
+
+1. **Enable the feature flag** in `.env`:
+
+   ```bash
+   # .env
+   VITE_ENABLE_EXTENSIONS=true
+   ```
+
+2. **Run the dev server:** `npm run dev`
+
+3. **Open "Add extension"** (`/extensions` → Add) and type a **path to your extension
+   directory**. All of these are accepted:
+
+   - `~/code/my-ext` — home-relative (the `~` is expanded **server-side**; the browser
+     never resolves your home directory or touches disk)
+   - `/Users/jp/code/my-ext` — a bare absolute path
+   - `file:///Users/jp/code/my-ext` — the `file://` + three-slash + absolute-path form
+
+   > `file://~/…` is **rejected** with a helpful message — the segment after `file://` is
+   > a URL host, so `~` cannot mean "home". Use `~/path` without the `file://` prefix, or
+   > `file:///absolute/path`.
+
+   The directory loads through the **same capability-consent card** as a remote extension —
+   local convenience never skips consent.
+
+4. **Edit → rebuild → Reload.** If your extension has a build step, run its watcher (e.g.
+   `esbuild src/main.ts --bundle --watch --outfile=main.js`) so a source edit rebuilds the
+   bundle. Then click **Reload** on the extension's card on `/extensions` — the current
+   bytes are re-fetched (local sources are served `no-cache`), with no restart and no
+   re-adding. A local extension shows a **"Local"** badge and a Reload button.
+
+5. **Adding a second directory** later works the same way — type another path, no config
+   edit, no restart.
+
+6. **Restarts are cheap.** The dev server persists the set of registered directories to a
+   gitignored `.agent-canvas/dev-extensions.json`. If you ever need to restart the dev
+   server (for example to recover a wedged watcher), the same paths resolve to the same
+   URLs, so your local extensions reload automatically — you don't have to re-add anything.
+
+> **Dev-only, localhost-only.** The register endpoint and the `/__ext-local/<id>/`
+> file handler exist **only in the Vite dev server** — never in a production/library build.
+> Every register and every file request is `expanduser → realpath → confine`, so a path
+> that escapes a registered root (`~/../../etc/passwd`, `/__ext-local/<id>/../../secret`)
+> is rejected. This is meaningful only where the browser and dev server share a machine.
+
+### Local Development (HTTP bundle)
+
+If you prefer serving over HTTP (or need the pre-loaded "Dev" badge behavior):
 
 1. **Create your extension folder** in a known location (e.g., `~/my-extensions/my-ext/`)
 

@@ -119,6 +119,20 @@ source string ──parse──▶ ExtensionSourceRef ──resolve──▶ Art
 | **npm** | `npm:<package>[@<range>]` | `npm:@acme/ext@^1.0.0` | jsDelivr API → CDN URL |
 | **GitHub** | `github:<owner>/<repo>[/<path>][@<ref>]` | `github:acme/repo/ext@v1.0.0` | GitHub API → SHA → Asset Relay |
 | **URL** | `https://...` | `https://cdn.example.com/ext` | Pass-through |
+| **Local (dev only)** | `~/path`, `/abs`, `file:///abs` | `~/code/my-ext` | Dev middleware registry → `/__ext-local/<id>` URL |
+
+**Local dev sources** are a **dev-only** convenience with a two-layer design. The browser
+(`src/extensions/sources/local-path.ts`) stays filesystem-blind: it recognizes a local
+path, rejects the invalid `file://~/…` form, and `POST`s the *raw* path (with `~`
+un-expanded) to a dev-only register endpoint. The Vite dev middleware
+(`serve-local-extensions` in `vite.config.ts`, backed by
+`src/extensions/dev/local-extension-registry.ts`) does the filesystem work: `expanduser →
+realpath → assert-is-directory → confine`, stores `{ id → resolvedRoot }` in a runtime
+registry (persisted to a gitignored `.agent-canvas/dev-extensions.json`), and serves files
+under `/__ext-local/<id>/` with the **same traversal guard and CSP-nonce stamping** as the
+example-bundle middleware. The result is represented as a `url`-kind `ArtifactDescriptor`
+(mutable/unpinned: its `sourceRef` is the raw path, so Reload/restart re-resolves the
+current bytes). The register endpoint and file handler exist **only** in the serve build.
 
 `github:` is the canonical GitHub scheme. `gh:` and `github://` are accepted as **parser-only aliases** and normalized to `github:` (the scheme token is matched case-insensitively; owner/repo/ref/subpath are case-sensitive). All parsing — single installs, marketplaces, and the asset relay — funnels through the one `parseGithubRef` helper in `src/extensions/sources/ref.ts`. Note that the GitHub `<ref>` is a **branch, tag, or SHA only**; semver ranges are rejected by the resolver (`github-api.ts`), so GitHub installs are not range-versioned the way npm sources are.
 

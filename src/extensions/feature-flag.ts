@@ -15,5 +15,11 @@ export const EXTENSIONS_ENABLED =
  *
  * To test dev extensions locally, add paths to `examples/extensions/<name>` here
  * and the Vite middleware will serve them at `/__extensions/<name>`.
+ *
+ * For an interactive local-dev loop, prefer adding a **local directory** from the
+ * "Add extension" box (`~/path`, `/abs`, or `file:///abs`): the dev middleware registers
+ * and serves it at `/__ext-local/<id>` with hot Reload and no restart. See
+ * `docs/extensions/AUTHOR_GUIDE.md` ("Local Development") and
+ * `src/extensions/sources/local-path.ts`.
  */
 export const DEV_EXTENSION_BUNDLE_URLS: string[] = [];
