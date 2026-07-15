@@ -444,13 +444,15 @@ function stripBasePathFromUrl(rawUrl, basePath) {
   return rest.length > 0 ? `${path}?${rest.join("?")}` : path;
 }
 
-function redirectToMountedRoot(req, res, basePath) {
-  if (basePath === "/" || !isGetOrHead(req)) return false;
+function redirectToMountedPath(req, res, urlPath, basePath) {
+  if (basePath === "/" || !isGetOrHead(req) || looksLikeAssetRequest(urlPath)) {
+    return false;
+  }
 
-  const urlPath = parseUrlPath(req, res);
-  if (urlPath !== "/") return false;
-
-  res.writeHead(308, { Location: `${basePath}/` });
+  const [, query = ""] = (req.url ?? "/").split("?", 2);
+  const path = urlPath === "/" ? "/" : urlPath;
+  const location = `${basePath}${path}${query ? `?${query}` : ""}`;
+  res.writeHead(308, { Location: location });
   res.end();
   return true;
 }
@@ -489,7 +491,11 @@ async function handleStatic(
   if (urlPath === null) return;
 
   if (!isMountedPath(urlPath, basePath)) {
-    if (!redirectToMountedRoot(req, res, basePath)) notFound(res);
+    if (matchesAnyPrefix(urlPath, rejectPrefixes)) {
+      rejectUnavailable(res);
+      return;
+    }
+    if (!redirectToMountedPath(req, res, urlPath, basePath)) notFound(res);
     return;
   }
 

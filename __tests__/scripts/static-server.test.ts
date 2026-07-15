@@ -463,13 +463,31 @@ describe("static-server.mjs", () => {
       await expect(response.text()).resolves.toContain("loaded = true");
     });
 
-    it("does not serve app routes outside the configured mount", async () => {
+    it("redirects app routes outside the mount to the configured base path", async () => {
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
       tempDirs.push(buildDir);
       writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
 
       const origin = await startServer(buildDir, { basePath: "/canvas" });
-      const response = await fetch(`${origin}/conversations/abc`);
+      const response = await fetch(`${origin}/conversations/abc?tab=files`, {
+        redirect: "manual",
+      });
+
+      expect(response.status).toBe(308);
+      expect(response.headers.get("location")).toBe(
+        "/canvas/conversations/abc?tab=files",
+      );
+    });
+
+    it("does not redirect asset-like requests outside the configured mount", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+      const origin = await startServer(buildDir, { basePath: "/canvas" });
+      const response = await fetch(`${origin}/assets/missing.js`, {
+        redirect: "manual",
+      });
 
       expect(response.status).toBe(404);
     });
