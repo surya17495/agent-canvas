@@ -49,6 +49,7 @@ export function useAllCloudOrganizations() {
       backend: Backend;
       isLoading: boolean;
       orgs: { id: string; name: string; is_personal?: boolean }[];
+      currentOrgId: string | null;
     }
   > = {};
   cloudBackends.forEach((backend, index) => {
@@ -57,6 +58,7 @@ export function useAllCloudOrganizations() {
       backend,
       isLoading: q.isLoading,
       orgs: q.data?.items ?? [],
+      currentOrgId: q.data?.currentOrgId ?? null,
     };
   });
 
