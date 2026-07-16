@@ -15,6 +15,7 @@ import {
   markAnalyticsEventProcessed,
   wasAnalyticsEventProcessed,
 } from "#/services/deferred-analytics";
+import { getTelemetryConsent } from "#/services/telemetry";
 
 export type CloudConnectionSource =
   | "onboarding"
@@ -32,10 +33,12 @@ interface TrackOptions {
  * Hook that provides tracking functions with automatic data collection
  * from available hooks (settings, etc.)
  *
- * All events require explicit user consent (user_consents_to_analytics === true).
+ * All events require explicit user consent. Before a backend is connected, the
+ * local telemetry choice is authoritative; once settings load, the backend
+ * setting is authoritative.
  * Events are silently dropped when:
  *  - posthog is not initialized (VITE_POSTHOG_CLIENT_KEY not set)
- *  - user_consents_to_analytics is false or null (consent not yet collected)
+ *  - the authoritative consent source is false
  */
 export const useTracking = () => {
   const posthog = usePostHog();
@@ -60,6 +63,17 @@ export const useTracking = () => {
     }
     posthog.capture(event, properties);
     if (dedupeKey) markAnalyticsEventProcessed(dedupeKey);
+  };
+
+  const getAnalyticsConsent = (): boolean | null => {
+    if (settingsQuery.isFetched) {
+      return settings?.user_consents_to_analytics ?? null;
+    }
+
+    const localConsent = getTelemetryConsent();
+    if (localConsent === "granted") return true;
+    if (localConsent === "denied") return false;
+    return null;
   };
 
   useEffect(() => {
@@ -89,14 +103,13 @@ export const useTracking = () => {
     if (!posthog) return;
 
     const eventProperties = { ...properties, ...commonProperties };
-    if (settings?.user_consents_to_analytics === true) {
+    const consent = getAnalyticsConsent();
+    if (consent === true) {
       capture(event, eventProperties, options.dedupeKey);
       return;
     }
 
-    const consentIsPending =
-      !settingsQuery.isFetched || settings?.user_consents_to_analytics === null;
-    if (options.deferUntilConsent && consentIsPending) {
+    if (options.deferUntilConsent && consent === null) {
       deferAnalyticsEvent({
         event,
         properties: eventProperties,

@@ -27,10 +27,67 @@ beforeEach(() => {
   mocks.capture.mockReset();
   mocks.settingsQuery.data.user_consents_to_analytics = false;
   mocks.settingsQuery.isFetched = false;
+  window.localStorage.clear();
   window.sessionStorage.clear();
 });
 
 describe("useTracking deferred consent", () => {
+  it("captures first-run device auth after local telemetry consent", () => {
+    const { result } = renderHook(() => useTracking());
+
+    // The consent banner is a sibling of the auth UI, so granting consent does
+    // not necessarily rerender this hook before the user starts device auth.
+    window.localStorage.setItem("openhands-telemetry-consent", "granted");
+
+    act(() => {
+      result.current.trackCloudDeviceAuthorizationStarted({
+        isOpenhandsCloud: true,
+        source: "onboarding",
+      });
+      result.current.trackCloudDeviceAuthorizationSucceeded({
+        isOpenhandsCloud: true,
+        source: "onboarding",
+      });
+      result.current.trackBackendAdded({
+        backendKind: "cloud",
+        connectionMethod: "cloud_login",
+        isOpenhandsCloud: true,
+        isCustomHost: false,
+        hasApiKey: true,
+        source: "onboarding",
+      });
+    });
+
+    expect(mocks.capture).toHaveBeenNthCalledWith(
+      1,
+      "cloud_device_authorization_started",
+      expect.objectContaining({
+        is_openhands_cloud: true,
+        source: "onboarding",
+        client_source: "agent_canvas",
+      }),
+    );
+    expect(mocks.capture).toHaveBeenNthCalledWith(
+      2,
+      "cloud_device_authorization_succeeded",
+      expect.objectContaining({
+        is_openhands_cloud: true,
+        source: "onboarding",
+        client_source: "agent_canvas",
+      }),
+    );
+    expect(mocks.capture).toHaveBeenNthCalledWith(
+      3,
+      "backend_added",
+      expect.objectContaining({
+        backend_kind: "cloud",
+        connection_method: "cloud_login",
+        source: "onboarding",
+        client_source: "agent_canvas",
+      }),
+    );
+  });
+
   it("captures the initial onboarding backend after consent resolves true", async () => {
     const { result, rerender } = renderHook(() => useTracking());
 
