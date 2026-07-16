@@ -46,7 +46,13 @@ Two distinct PostHog systems exist. **Never mix them at a call site.**
 - **Consent**: `user_consents_to_analytics` (backend setting) + `useSyncPostHogConsent` in `root-layout`; `AnalyticsConsentFormModal` also calls `setTelemetryConsent` to keep both systems in sync
 - **All events** are typed, named functions in `src/hooks/use-tracking.ts` — add a new function there for every new event; never call `posthog.capture()` raw from a component
 - **`commonProperties`** (`current_url`, `user_email`) are attached automatically by the hook
+- **Pre-backend consent deferral**: events that explicitly opt into `deferUntilConsent` are held only in `sessionStorage` while Cloud settings/consent are unresolved. `useTracking` flushes them if consent resolves `true` and deletes them if it resolves `false`; do not use the deferred queue for ordinary events.
 - **Rule**: Do NOT use raw `usePostHog()` + `posthog.capture()` in components — always go through `useTracking`
+
+### Cloud funnel observability
+- OAuth device authorization, token polling, and Cloud conversation-start requests include the coarse `X-OpenHands-Client: agent_canvas` and `X-OpenHands-Client-Version` headers from `src/api/client-source.ts`. Never put device codes, API keys, conversation content, raw hosts, or other user data in these headers.
+- Production ingress must retain those two headers as structured Datadog facets before source-specific operational queries will work.
+- The consented product funnel uses typed `cloud_device_authorization_started`, `cloud_device_authorization_succeeded`, `backend_added`, and `cloud_conversation_ready` events. `cloud_conversation_ready` is globally deduplicated per start-task ID because `useTaskPolling` can mount in multiple components.
 
 ### Adding a new event
 1. Add a typed function to `useTracking` in `src/hooks/use-tracking.ts`

@@ -15,7 +15,7 @@ import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggl
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
-import { useTracking } from "#/hooks/use-tracking";
+import { useTracking, type CloudConnectionSource } from "#/hooks/use-tracking";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { isOpenHandsCloudHost } from "#/api/device-flow-client";
@@ -140,7 +140,7 @@ const DEFAULT_OPENHANDS_CLOUD_HOST = "https://app.all-hands.dev";
 
 export type BackendConnectionMethod = "manual" | "cloud_login";
 
-export type BackendAddedSource = "add_backend_modal" | "manage_backends_modal";
+export type BackendAddedSource = CloudConnectionSource;
 
 function getConnectionTestFailedTitle(
   t: ReturnType<typeof useTranslation>["t"],
@@ -700,6 +700,7 @@ interface BackendConnectionOptionsProps {
   manualSubmitLabel?: React.ReactNode;
   manualSubmittingLabel?: React.ReactNode;
   manualSubmitTestId?: string;
+  analyticsSource?: CloudConnectionSource;
 }
 
 /**
@@ -715,6 +716,7 @@ export function BackendConnectionOptions({
   manualSubmitLabel,
   manualSubmittingLabel,
   manualSubmitTestId,
+  analyticsSource,
 }: BackendConnectionOptionsProps) {
   const { t } = useTranslation("openhands");
   const lockedCloudHost = getLockedCloudHost();
@@ -730,6 +732,7 @@ export function BackendConnectionOptions({
             onConnected={onConnected}
             testIdRoot={testIdRoot}
             lockedHost={lockedCloudHost}
+            analyticsSource={analyticsSource}
           />
         </div>
       </div>
@@ -757,7 +760,11 @@ export function BackendConnectionOptions({
       </div>
 
       <div className="flex-1 min-w-0">
-        <CloudLoginColumn onConnected={onConnected} testIdRoot={testIdRoot} />
+        <CloudLoginColumn
+          onConnected={onConnected}
+          testIdRoot={testIdRoot}
+          analyticsSource={analyticsSource}
+        />
       </div>
     </div>
   );
@@ -934,6 +941,7 @@ interface CloudLoginColumnProps {
   ) => void;
   testIdRoot: string;
   lockedHost?: string;
+  analyticsSource?: CloudConnectionSource;
 }
 
 /**
@@ -945,6 +953,7 @@ function CloudLoginColumn({
   onConnected,
   testIdRoot,
   lockedHost,
+  analyticsSource,
 }: CloudLoginColumnProps) {
   const { t } = useTranslation("openhands");
 
@@ -987,6 +996,7 @@ function CloudLoginColumn({
         host={effectiveHost}
         onSuccess={handleLoginSuccess}
         testIdRoot={testIdRoot}
+        analyticsSource={analyticsSource}
       />
 
       {lockedHost ? null : (
@@ -1052,7 +1062,7 @@ function AddBackendConnectionOptions({
     ) => {
       addBackend(payload);
       // Coarse, non-sensitive host classification — never emit the raw host.
-      const isOpenHandsCloud = payload.host === DEFAULT_OPENHANDS_CLOUD_HOST;
+      const isOpenHandsCloud = isOpenHandsCloudHost(payload.host);
       trackBackendAdded({
         backendKind: payload.kind,
         connectionMethod,
@@ -1067,7 +1077,12 @@ function AddBackendConnectionOptions({
     [addBackend, redirectAfterAdd, onClose, trackBackendAdded, source],
   );
 
-  return <BackendConnectionOptions onConnected={handleConnected} />;
+  return (
+    <BackendConnectionOptions
+      onConnected={handleConnected}
+      analyticsSource={source}
+    />
+  );
 }
 
 // ── Modal wrappers ──────────────────────────────────────────────────

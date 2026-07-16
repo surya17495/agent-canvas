@@ -1,8 +1,32 @@
+import { useEffect } from "react";
 import { usePostHog } from "posthog-js/react";
 import { useSettings } from "./query/use-settings";
 import { Provider } from "#/types/settings";
 import type { BackendKind } from "#/api/backend-registry/types";
 import type { WorkspaceMode } from "#/api/conversation-metadata-store";
+import {
+  AGENT_CANVAS_CLIENT_SOURCE,
+  AGENT_CANVAS_CLIENT_VERSION,
+} from "#/api/client-source";
+import {
+  clearDeferredAnalyticsEvents,
+  deferAnalyticsEvent,
+  drainDeferredAnalyticsEvents,
+  markAnalyticsEventProcessed,
+  wasAnalyticsEventProcessed,
+} from "#/services/deferred-analytics";
+
+export type CloudConnectionSource =
+  | "onboarding"
+  | "add_backend_modal"
+  | "manage_backends_modal";
+
+interface TrackOptions {
+  /** Retain locally until the backend resolves the user's consent choice. */
+  deferUntilConsent?: boolean;
+  /** Prevent duplicate capture across components observing the same task. */
+  dedupeKey?: string;
+}
 
 /**
  * Hook that provides tracking functions with automatic data collection
@@ -15,21 +39,70 @@ import type { WorkspaceMode } from "#/api/conversation-metadata-store";
  */
 export const useTracking = () => {
   const posthog = usePostHog();
-  const { data: settings } = useSettings();
+  const settingsQuery = useSettings();
+  const { data: settings } = settingsQuery;
 
   // Common properties included in all tracking events
   const commonProperties = {
     current_url: window.location.href,
     user_email: settings?.email || settings?.git_user_email || null,
+    client_source: AGENT_CANVAS_CLIENT_SOURCE,
+    client_version: AGENT_CANVAS_CLIENT_VERSION,
   };
+
+  const capture = (
+    event: string,
+    properties: Record<string, unknown>,
+    dedupeKey?: string,
+  ) => {
+    if (!posthog || (dedupeKey && wasAnalyticsEventProcessed(dedupeKey))) {
+      return;
+    }
+    posthog.capture(event, properties);
+    if (dedupeKey) markAnalyticsEventProcessed(dedupeKey);
+  };
+
+  useEffect(() => {
+    if (!posthog || !settingsQuery.isFetched) return;
+
+    const consent = settings?.user_consents_to_analytics;
+    if (consent === false) {
+      clearDeferredAnalyticsEvents();
+      return;
+    }
+    if (consent !== true) return;
+
+    for (const pending of drainDeferredAnalyticsEvents()) {
+      capture(pending.event, pending.properties, pending.dedupeKey);
+    }
+  }, [posthog, settings?.user_consents_to_analytics, settingsQuery.isFetched]);
 
   /**
    * Capture an event only when PostHog is available and the user has
    * explicitly consented. null and false are both treated as "not consented".
    */
-  const track = (event: string, properties: Record<string, unknown> = {}) => {
-    if (!posthog || settings?.user_consents_to_analytics !== true) return;
-    posthog.capture(event, { ...properties, ...commonProperties });
+  const track = (
+    event: string,
+    properties: Record<string, unknown> = {},
+    options: TrackOptions = {},
+  ) => {
+    if (!posthog) return;
+
+    const eventProperties = { ...properties, ...commonProperties };
+    if (settings?.user_consents_to_analytics === true) {
+      capture(event, eventProperties, options.dedupeKey);
+      return;
+    }
+
+    const consentIsPending =
+      !settingsQuery.isFetched || settings?.user_consents_to_analytics === null;
+    if (options.deferUntilConsent && consentIsPending) {
+      deferAnalyticsEvent({
+        event,
+        properties: eventProperties,
+        dedupeKey: options.dedupeKey,
+      });
+    }
   };
 
   const trackLoginButtonClick = ({ provider }: { provider: Provider }) => {
@@ -251,16 +324,76 @@ export const useTracking = () => {
     isOpenhandsCloud: boolean;
     isCustomHost: boolean;
     hasApiKey: boolean;
-    source?: "add_backend_modal" | "manage_backends_modal";
+    source?: CloudConnectionSource;
   }) => {
-    track("backend_added", {
-      backend_kind: backendKind,
-      connection_method: connectionMethod,
-      is_openhands_cloud: isOpenhandsCloud,
-      is_custom_host: isCustomHost,
-      has_api_key: hasApiKey,
-      source,
-    });
+    track(
+      "backend_added",
+      {
+        backend_kind: backendKind,
+        connection_method: connectionMethod,
+        is_openhands_cloud: isOpenhandsCloud,
+        is_custom_host: isCustomHost,
+        has_api_key: hasApiKey,
+        source,
+      },
+      { deferUntilConsent: true },
+    );
+  };
+
+  const trackCloudDeviceAuthorizationStarted = ({
+    isOpenhandsCloud,
+    source,
+  }: {
+    isOpenhandsCloud: boolean;
+    source?: CloudConnectionSource;
+  }) => {
+    track(
+      "cloud_device_authorization_started",
+      {
+        is_openhands_cloud: isOpenhandsCloud,
+        is_custom_host: !isOpenhandsCloud,
+        source,
+      },
+      { deferUntilConsent: true },
+    );
+  };
+
+  const trackCloudDeviceAuthorizationSucceeded = ({
+    isOpenhandsCloud,
+    source,
+  }: {
+    isOpenhandsCloud: boolean;
+    source?: CloudConnectionSource;
+  }) => {
+    track(
+      "cloud_device_authorization_succeeded",
+      {
+        is_openhands_cloud: isOpenhandsCloud,
+        is_custom_host: !isOpenhandsCloud,
+        source,
+      },
+      { deferUntilConsent: true },
+    );
+  };
+
+  const trackCloudConversationReady = ({
+    taskId,
+    conversationId,
+  }: {
+    taskId: string;
+    conversationId: string;
+  }) => {
+    track(
+      "cloud_conversation_ready",
+      {
+        task_id: taskId,
+        conversation_id: conversationId,
+      },
+      {
+        deferUntilConsent: true,
+        dedupeKey: `cloud_conversation_ready:${taskId}`,
+      },
+    );
   };
 
   const trackOnboardingStarted = () => {
@@ -332,6 +465,9 @@ export const useTracking = () => {
     trackAutomationExported,
     trackAutomationImported,
     trackBackendAdded,
+    trackCloudDeviceAuthorizationStarted,
+    trackCloudDeviceAuthorizationSucceeded,
+    trackCloudConversationReady,
     trackOnboardingStarted,
     trackOnboardingStepViewed,
     trackOnboardingCompleted,

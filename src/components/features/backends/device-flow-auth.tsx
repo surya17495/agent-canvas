@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
+import { isOpenHandsCloudHost } from "#/api/device-flow-client";
 import { useDeviceFlow, type DeviceFlowStatus } from "#/hooks/use-device-flow";
+import { useTracking, type CloudConnectionSource } from "#/hooks/use-tracking";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
@@ -35,6 +37,8 @@ interface DeviceFlowAuthProps {
   buttonVariant?: DeviceFlowButtonVariant;
   /** Whether in-progress auth content should render inline or in a modal. */
   statusDisplay?: DeviceFlowStatusDisplay;
+  /** Product surface that initiated this authorization attempt. */
+  analyticsSource?: CloudConnectionSource;
 }
 
 /**
@@ -68,9 +72,14 @@ export function DeviceFlowAuth({
   buttonClassName,
   buttonVariant = "primary",
   statusDisplay = "inline",
+  analyticsSource,
 }: DeviceFlowAuthProps) {
   const { t } = useTranslation("openhands");
   const deviceFlow = useDeviceFlow();
+  const {
+    trackCloudDeviceAuthorizationStarted,
+    trackCloudDeviceAuthorizationSucceeded,
+  } = useTracking();
   const popupRef = React.useRef<Window | null>(null);
 
   // Close popup on unmount or when auth completes/errors
@@ -111,13 +120,25 @@ export function DeviceFlowAuth({
   React.useEffect(() => {
     if (deviceFlow.status === "success" && deviceFlow.apiKey) {
       try {
+        trackCloudDeviceAuthorizationSucceeded({
+          isOpenhandsCloud: isOpenHandsCloudHost(host),
+          source: analyticsSource,
+        });
         onSuccess(deviceFlow.apiKey);
       } finally {
         deviceFlow.reset();
         popupRef.current?.close();
       }
     }
-  }, [deviceFlow.status, deviceFlow.apiKey, deviceFlow.reset, onSuccess]);
+  }, [
+    analyticsSource,
+    deviceFlow.status,
+    deviceFlow.apiKey,
+    deviceFlow.reset,
+    host,
+    onSuccess,
+    trackCloudDeviceAuthorizationSucceeded,
+  ]);
 
   const handleStartAuth = () => {
     // Normalize and validate the host URL
@@ -136,6 +157,11 @@ export function DeviceFlowAuth({
     } catch {
       return; // Invalid URL, don't proceed
     }
+
+    trackCloudDeviceAuthorizationStarted({
+      isOpenhandsCloud: isOpenHandsCloudHost(fullHost),
+      source: analyticsSource,
+    });
 
     // Open popup immediately on user click to avoid popup blocker
     // Start with about:blank and update URL once we have verification URL
