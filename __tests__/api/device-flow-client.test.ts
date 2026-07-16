@@ -5,6 +5,7 @@ import {
   isOpenHandsCloudHost,
   DeviceFlowError,
 } from "../../src/api/device-flow-client";
+import { AGENT_CANVAS_CLIENT_HEADERS } from "../../src/api/client-source";
 
 const TEST_HOST_URL = "https://app.all-hands.dev";
 
@@ -86,6 +87,7 @@ describe("device-flow-client", () => {
           method: "POST",
           headers: expect.objectContaining({
             "Content-Type": "application/json",
+            ...AGENT_CANVAS_CLIENT_HEADERS,
           }),
         }),
       );

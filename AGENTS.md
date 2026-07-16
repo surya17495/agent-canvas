@@ -50,7 +50,7 @@ Two distinct PostHog systems exist. **Never mix them at a call site.**
 - **Rule**: Do NOT use raw `usePostHog()` + `posthog.capture()` in components — always go through `useTracking`
 
 ### Cloud funnel observability
-- OAuth device authorization, token polling, and Cloud conversation-start requests include the coarse `X-OpenHands-Client: agent_canvas` and `X-OpenHands-Client-Version` headers from `src/api/client-source.ts`. Never put device codes, API keys, conversation content, raw hosts, or other user data in these headers.
+- OAuth device authorization and Cloud conversation-start requests include the coarse `X-OpenHands-Client: agent_canvas` and `X-OpenHands-Client-Version` headers from `src/api/client-source.ts`. Never put device codes, API keys, conversation content, raw hosts, or other user data in these headers.
 - Production ingress must retain those two headers as structured Datadog facets before source-specific operational queries will work.
 - The consented product funnel uses typed `cloud_device_authorization_started`, `cloud_device_authorization_succeeded`, `backend_added`, and `cloud_conversation_ready` events. `cloud_conversation_ready` is globally deduplicated per start-task ID because `useTaskPolling` can mount in multiple components.
 

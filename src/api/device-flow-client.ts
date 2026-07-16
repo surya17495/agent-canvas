@@ -1,25 +1,14 @@
 import {
   DeviceFlowError,
   isOpenHandsCloudHost as sdkIsOpenHandsCloudHost,
+  pollForToken,
 } from "@openhands/typescript-client/clients";
-import type {
-  DeviceAuthorizationResponse,
-  DeviceTokenResponse,
-  PollDeviceTokenOptions,
-} from "@openhands/typescript-client/clients";
+import type { DeviceAuthorizationResponse } from "@openhands/typescript-client/clients";
 import { AGENT_CANVAS_CLIENT_HEADERS } from "./client-source";
 
-export { DeviceFlowError };
+export { DeviceFlowError, pollForToken };
 
 const OPENHANDS_CLOUD_HOST_SUFFIXES = ["all-hands.dev", "openhands.dev"];
-const DEFAULT_TIMEOUT_MS = 600_000;
-const MAX_INTERVAL_MS = 30_000;
-
-interface DeviceTokenErrorResponse {
-  error: string;
-  error_description?: string;
-  interval?: number;
-}
 
 function isAllowedCloudHostname(hostname: string): boolean {
   return OPENHANDS_CLOUD_HOST_SUFFIXES.some(
@@ -51,36 +40,6 @@ export function isOpenHandsCloudHost(host: string): boolean {
   return fallbackIsOpenHandsCloudHost(host);
 }
 
-function normalizeHost(host: string): string {
-  return host.replace(/\/+$/, "");
-}
-
-async function requestCloudDeviceEndpoint(
-  host: string,
-  path: string,
-  body: unknown,
-  contentType: string,
-  signal?: AbortSignal,
-): Promise<Response> {
-  const requestBody =
-    typeof body === "string" ||
-    body instanceof Blob ||
-    body instanceof FormData ||
-    body instanceof URLSearchParams
-      ? body
-      : JSON.stringify(body);
-
-  return fetch(`${normalizeHost(host)}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": contentType,
-      ...AGENT_CANVAS_CLIENT_HEADERS,
-    },
-    body: requestBody,
-    signal,
-  });
-}
-
 /**
  * Start an OAuth device flow and identify Agent Canvas to Cloud ingress.
  *
@@ -91,11 +50,16 @@ export async function startDeviceFlow(
   host: string,
 ): Promise<DeviceAuthorizationResponse> {
   try {
-    const response = await requestCloudDeviceEndpoint(
-      host,
-      "/oauth/device/authorize",
-      {},
-      "application/json",
+    const response = await fetch(
+      `${host.replace(/\/+$/, "")}/oauth/device/authorize`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...AGENT_CANVAS_CLIENT_HEADERS,
+        },
+        body: "{}",
+      },
     );
 
     if (!response.ok) {
@@ -128,133 +92,6 @@ export async function startDeviceFlow(
       `Failed to start device flow: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-}
-
-/** Poll for a device token while retaining the same Canvas source marker. */
-export async function pollForToken(
-  host: string,
-  deviceCode: string,
-  options: PollDeviceTokenOptions,
-): Promise<DeviceTokenResponse> {
-  const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
-  let interval = Math.max(1, options.interval) * 1000;
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < timeout) {
-    if (options.signal?.aborted) {
-      throw new DeviceFlowError("Authorization cancelled", "cancelled");
-    }
-
-    try {
-      const body = new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-        device_code: deviceCode,
-      });
-      const response = await requestCloudDeviceEndpoint(
-        host,
-        "/oauth/device/token",
-        body,
-        "application/x-www-form-urlencoded",
-        options.signal,
-      );
-
-      if (response.ok) {
-        const data = (await response.json()) as Partial<DeviceTokenResponse>;
-        if (!data.access_token) {
-          throw new DeviceFlowError(
-            "Invalid token response: missing access_token",
-          );
-        }
-        return {
-          access_token: data.access_token,
-          token_type: data.token_type ?? "Bearer",
-          expires_in: data.expires_in,
-        };
-      }
-
-      let errorData: DeviceTokenErrorResponse;
-      try {
-        errorData = (await response.json()) as DeviceTokenErrorResponse;
-      } catch {
-        throw new DeviceFlowError(
-          `Unexpected response from server: ${response.status}`,
-        );
-      }
-
-      switch (errorData.error) {
-        case "authorization_pending":
-          break;
-        case "slow_down":
-          if (
-            typeof errorData.interval === "number" &&
-            Number.isFinite(errorData.interval) &&
-            errorData.interval > 0
-          ) {
-            interval = Math.max(1, Math.min(errorData.interval, 30)) * 1000;
-          } else {
-            interval = Math.min(interval + 5000, MAX_INTERVAL_MS);
-          }
-          break;
-        case "expired_token":
-          throw new DeviceFlowError(
-            "Device code has expired. Please try again.",
-            "expired_token",
-          );
-        case "access_denied":
-          throw new DeviceFlowError(
-            "Authorization request was denied.",
-            "access_denied",
-          );
-        default:
-          throw new DeviceFlowError(
-            `Authorization error: ${errorData.error}${
-              errorData.error_description
-                ? ` - ${errorData.error_description}`
-                : ""
-            }`,
-            errorData.error,
-          );
-      }
-    } catch (error) {
-      if (error instanceof DeviceFlowError) throw error;
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new DeviceFlowError("Authorization cancelled", "cancelled");
-      }
-      console.warn("Network error during polling, retrying:", error);
-    }
-
-    try {
-      await sleep(interval, options.signal);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new DeviceFlowError("Authorization cancelled", "cancelled");
-      }
-      throw error;
-    }
-  }
-
-  throw new DeviceFlowError(
-    "Timeout waiting for authorization. Please try again.",
-    "timeout",
-  );
-}
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-    const timeoutId = window.setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        window.clearTimeout(timeoutId);
-        reject(new DOMException("Aborted", "AbortError"));
-      },
-      { once: true },
-    );
-  });
 }
 export type {
   DeviceAuthorizationResponse,
