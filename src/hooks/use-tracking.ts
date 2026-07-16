@@ -33,9 +33,8 @@ interface TrackOptions {
  * Hook that provides tracking functions with automatic data collection
  * from available hooks (settings, etc.)
  *
- * All events require explicit user consent. Before a backend is connected, the
- * local telemetry choice is authoritative; once settings load, the backend
- * setting is authoritative.
+ * All events require explicit user consent. An explicit local telemetry choice
+ * is authoritative; backend settings are the fallback for existing users.
  * Events are silently dropped when:
  *  - posthog is not initialized (VITE_POSTHOG_CLIENT_KEY not set)
  *  - the authoritative consent source is false
@@ -66,14 +65,12 @@ export const useTracking = () => {
   };
 
   const getAnalyticsConsent = (): boolean | null => {
-    if (settingsQuery.isFetched) {
-      return settings?.user_consents_to_analytics ?? null;
-    }
-
     const localConsent = getTelemetryConsent();
     if (localConsent === "granted") return true;
     if (localConsent === "denied") return false;
-    return null;
+    return settingsQuery.isFetched
+      ? (settings?.user_consents_to_analytics ?? null)
+      : null;
   };
 
   useEffect(() => {

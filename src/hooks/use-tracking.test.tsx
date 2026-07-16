@@ -33,6 +33,8 @@ beforeEach(() => {
 
 describe("useTracking deferred consent", () => {
   it("captures first-run device auth after local telemetry consent", () => {
+    // Canvas already has its isolated local backend settings by this point.
+    mocks.settingsQuery.isFetched = true;
     const { result } = renderHook(() => useTracking());
 
     // The consent banner is a sibling of the auth UI, so granting consent does
