@@ -15,6 +15,20 @@ import { LlmModelPickerMenu } from "./llm-model-picker-menu";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
+/**
+ * Height of the mobile top bar (`SidebarMobileMenuBar`, `h-12` = 48px, shown
+ * below the `md` breakpoint). The popover opens upward from the composer, so its
+ * top must stay below this bar — otherwise it renders behind the header, which
+ * wins hit-testing and visually occludes the search box.
+ */
+const MOBILE_HEADER_HEIGHT = 48;
+/** Tailwind `md` breakpoint (px); below it the mobile header is present. */
+const MOBILE_BREAKPOINT = 768;
+/** Clear gap kept between the popover top and whatever is above it. */
+const POPOVER_SAFE_GAP = 8;
+/** Never shrink the popover below this — scroll within it instead. */
+const POPOVER_MIN_HEIGHT = 160;
+
 function truncateLabel(label: string): string {
   return label.length <= PROFILE_LABEL_MAX_CHARS
     ? label
@@ -111,6 +125,28 @@ export function ChatInputLlmProfilePicker() {
     triggerRef.current?.focus();
   }, []);
 
+  // The popover opens upward (`position="top"`) anchored to the trigger, so the
+  // usable height is the space above the trigger. Cap it to that space (minus a
+  // safe gap, and minus the mobile header so it can't render behind it), letting
+  // the menu scroll within instead of overflowing past the viewport top. Recomputed
+  // on open and on resize/orientation change.
+  const [menuMaxHeight, setMenuMaxHeight] = React.useState<number>();
+  React.useLayoutEffect(() => {
+    if (!isPopoverOpen) return undefined;
+    const recompute = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const triggerTop = trigger.getBoundingClientRect().top;
+      const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
+      const topInset = (isMobile ? MOBILE_HEADER_HEIGHT : 0) + POPOVER_SAFE_GAP;
+      const available = triggerTop - topInset;
+      setMenuMaxHeight(Math.max(POPOVER_MIN_HEIGHT, available));
+    };
+    recompute();
+    window.addEventListener("resize", recompute);
+    return () => window.removeEventListener("resize", recompute);
+  }, [isPopoverOpen]);
+
   // The trigger is always rendered — even while loading, on a fetch error, or
   // with zero profiles — so the current model is always visible next to the
   // composer and the menu's loading/empty/error states stay reachable. No
@@ -140,6 +176,10 @@ export function ChatInputLlmProfilePicker() {
         className={cn(
           chatInputPillButtonClassName,
           "max-w-[200px] sm:max-w-[340px]",
+          // >=44px effective touch target on mobile (the row is items-center, so
+          // siblings stay their size, gap-separated — no overlap); relaxes to
+          // the compact pill height on pointer/desktop.
+          "min-h-[44px] sm:min-h-0",
         )}
         title={busyTitle}
         aria-label={busyTitle}
@@ -193,6 +233,7 @@ export function ChatInputLlmProfilePicker() {
           position="top"
           alignment="left"
           spacing="none"
+          style={menuMaxHeight ? { maxHeight: menuMaxHeight } : undefined}
           className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
         >
           <ChatInputLlmProfileMenuContent onClose={closeAndRestoreFocus} />

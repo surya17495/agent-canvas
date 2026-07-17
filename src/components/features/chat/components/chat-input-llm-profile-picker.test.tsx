@@ -117,6 +117,32 @@ describe("ChatInputLlmProfilePicker (pill trigger)", () => {
     expect(screen.getByText("Anthropic/claude-opus-4-5")).toBeInTheDocument();
   });
 
+  it("gives the trigger a >=44px mobile touch target that relaxes on desktop", () => {
+    mockedState.mockReturnValue(stateOf());
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+
+    // jsdom can't measure layout, so assert the responsive utility that
+    // enforces the 44px mobile target (relaxing to compact on `sm`+). The
+    // pixel-accurate target is verified in the Playwright layout spec.
+    const trigger = screen.getByTestId("chat-input-llm-profile");
+    expect(trigger.className).toContain("min-h-[44px]");
+    expect(trigger.className).toContain("sm:min-h-0");
+  });
+
+  it("caps the popover height so it can't overflow past the viewport top", async () => {
+    const user = userEvent.setup();
+    mockedState.mockReturnValue(stateOf());
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+
+    await user.click(screen.getByTestId("chat-input-llm-profile"));
+    const menu = screen.getByTestId("chat-input-llm-profile-popover");
+    // The upward-opening menu is capped to the space above the trigger (with a
+    // floor) rather than an unbounded height, so it scrolls within instead of
+    // rendering behind the header. Exact px are asserted by the Playwright spec.
+    expect(menu.style.maxHeight).not.toBe("");
+    expect(menu).toHaveClass("overflow-y-auto");
+  });
+
   it("stays reachable on a fetch error so the error state is openable", async () => {
     const user = userEvent.setup();
     mockedState.mockReturnValue(

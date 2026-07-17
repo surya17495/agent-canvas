@@ -174,11 +174,13 @@ test.describe("mock-LLM model-picker pill UI", () => {
         page.getByTestId(`chat-input-llm-profile-option-${PROFILE_B_NAME}`),
       ).toBeVisible({ timeout: 10_000 });
       // The active profile ("mock-llm") is marked as the current selection.
+      // Options are menuitemradio, so the current one carries aria-checked.
       const current = page.getByTestId(
         "chat-input-llm-profile-option-mock-llm",
       );
       await expect(current).toBeVisible();
-      await expect(current).toHaveAttribute("aria-selected", "true");
+      await expect(current).toHaveAttribute("role", "menuitemradio");
+      await expect(current).toHaveAttribute("aria-checked", "true");
     });
 
     await test.step("selecting profile B fires switch_llm with B's model", async () => {
@@ -211,6 +213,97 @@ test.describe("mock-LLM model-picker pill UI", () => {
     await test.step("verify no error banners", async () => {
       const errorBanner = page.getByTestId("error-message-banner");
       await expect(errorBanner).not.toBeVisible({ timeout: 2_000 });
+    });
+  });
+
+  // ── Step 3: mobile (390x844) layout — popover stays below the header ───────
+
+  test("step 3: mobile popover is viewport-safe and the trigger meets 44px", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    // iPhone 12-class portrait viewport (the size main-agent QA screenshotted).
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await dismissAnalyticsModal(page);
+    await waitForTestId(page, "home-chat-launcher");
+
+    await test.step("start a conversation so the composer pill is present", async () => {
+      await setChatInput(page, "Hello, please respond briefly.");
+      await page.getByTestId("submit-button").click();
+      await waitForPath(page, /\/conversations\/.+/, 30_000);
+    });
+
+    const conversationId = getConversationIdFromURL(page);
+    conversationIds.add(conversationId);
+    await waitForNonUserMessageText(page, INITIAL_REPLY_TOKEN, 30_000);
+
+    const pill = page.getByTestId("chat-input-llm-profile");
+    await expect(pill).toBeVisible({ timeout: 10_000 });
+
+    await test.step("trigger has a >=44x44 effective touch target", async () => {
+      const box = await pill.boundingBox();
+      expect(box, "pill should have a bounding box").toBeTruthy();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+    });
+
+    await pill.click();
+    await waitForTestId(page, "chat-input-llm-profile-popover");
+
+    // The mobile header (SidebarMobileMenuBar) is h-12 = 48px at the top.
+    const MOBILE_HEADER_BOTTOM = 48;
+
+    await test.step("popover top clears the mobile header", async () => {
+      const menu = page.getByTestId("chat-input-llm-profile-popover");
+      const box = await menu.boundingBox();
+      expect(box, "popover should have a bounding box").toBeTruthy();
+      expect(
+        box!.y,
+        "popover top must sit below the 48px mobile header",
+      ).toBeGreaterThanOrEqual(MOBILE_HEADER_BOTTOM);
+      // No horizontal overflow past the 390px viewport.
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    });
+
+    await test.step("search box is visible and not occluded by the header", async () => {
+      const search = page.getByTestId("llm-model-picker-search-input");
+      // The search box only renders at >=6 profiles; assert its position only
+      // when present (this suite configures 2 profiles, so it may be absent).
+      if (await search.count()) {
+        const box = await search.boundingBox();
+        expect(box!.y).toBeGreaterThanOrEqual(MOBILE_HEADER_BOTTOM);
+        // The header must not win hit-testing over the search region.
+        const midX = box!.x + box!.width / 2;
+        const midY = box!.y + box!.height / 2;
+        const hit = await page.evaluate(
+          ([x, y]) => {
+            const el = document.elementFromPoint(x, y);
+            return el?.closest("header") ? "HEADER" : "MENU";
+          },
+          [midX, midY],
+        );
+        expect(hit).toBe("MENU");
+      }
+    });
+
+    await test.step("Settings row is reachable via scroll", async () => {
+      const settings = page.getByTestId("llm-model-picker-settings-link");
+      await settings.scrollIntoViewIfNeeded();
+      await expect(settings).toBeVisible();
+      const box = await settings.boundingBox();
+      expect(box!.y).toBeGreaterThanOrEqual(MOBILE_HEADER_BOTTOM);
+    });
+
+    await test.step("keyboard still closes and restores focus to the trigger", async () => {
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByTestId("chat-input-llm-profile-popover"),
+      ).toBeHidden();
+      await expect(pill).toBeFocused();
     });
   });
 });
