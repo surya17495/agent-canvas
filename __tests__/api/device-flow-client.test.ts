@@ -184,6 +184,7 @@ describe("device-flow-client", () => {
           method: "POST",
           headers: expect.objectContaining({
             "Content-Type": "application/x-www-form-urlencoded",
+            ...AGENT_CANVAS_CLIENT_HEADERS,
           }),
         }),
       );
@@ -298,6 +299,18 @@ describe("device-flow-client", () => {
       ).rejects.toThrow(/denied/i);
     });
 
+    it("reports a non-JSON error response instead of retrying it as a network error", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: () => Promise.reject(new SyntaxError("invalid JSON")),
+      });
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
+      ).rejects.toThrow(/Unexpected response from server: 502/);
+    });
+
     it("respects abort signal", async () => {
       vi.useRealTimers(); // Use real timers for this test
       const controller = new AbortController();
@@ -321,6 +334,28 @@ describe("device-flow-client", () => {
           signal: controller.signal,
         }),
       ).rejects.toThrow(/cancelled/i);
+    });
+
+    it("reports cancellation when aborted between polling attempts", async () => {
+      const controller = new AbortController();
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ error: "authorization_pending" }),
+      });
+
+      const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
+        interval: 5,
+        signal: controller.signal,
+      });
+      const rejection = expect(pollPromise).rejects.toMatchObject({
+        code: "cancelled",
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+
+      await rejection;
     });
 
     it("times out after specified duration", async () => {

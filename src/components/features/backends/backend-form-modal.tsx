@@ -15,7 +15,11 @@ import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggl
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
-import { useTracking, type CloudConnectionSource } from "#/hooks/use-tracking";
+import { useTracking } from "#/hooks/use-tracking";
+import {
+  trackCanvasBackendAdded,
+  type CloudConnectionSource,
+} from "#/services/cloud-funnel-analytics";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { isOpenHandsCloudHost } from "#/api/device-flow-client";
@@ -1063,14 +1067,23 @@ function AddBackendConnectionOptions({
       addBackend(payload);
       // Coarse, non-sensitive host classification — never emit the raw host.
       const isOpenHandsCloud = isOpenHandsCloudHost(payload.host);
-      trackBackendAdded({
+      const trackedByCanvas = trackCanvasBackendAdded({
         backendKind: payload.kind,
         connectionMethod,
-        isOpenhandsCloud: isOpenHandsCloud,
-        isCustomHost: !isOpenHandsCloud,
+        host: payload.host,
         hasApiKey: Boolean(payload.apiKey),
         source,
       });
+      if (!trackedByCanvas) {
+        trackBackendAdded({
+          backendKind: payload.kind,
+          connectionMethod,
+          isOpenhandsCloud: isOpenHandsCloud,
+          isCustomHost: !isOpenHandsCloud,
+          hasApiKey: Boolean(payload.apiKey),
+          source,
+        });
+      }
       redirectAfterAdd();
       onClose();
     },

@@ -14,7 +14,7 @@ import {
   setConversationState,
 } from "#/utils/conversation-local-storage";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
-import { useTracking } from "#/hooks/use-tracking";
+import { trackCloudConversationReady } from "#/services/cloud-funnel-analytics";
 import { flushPendingTaskAttachments } from "#/utils/flush-pending-task-attachments";
 import {
   clearPendingTaskMessageLink,
@@ -62,7 +62,6 @@ export const useTaskPolling = () => {
   // simply no-ops when there's no conversation id yet.
   const { conversationId } = useOptionalConversationId();
   const { navigate } = useNavigation();
-  const { trackCloudConversationReady } = useTracking();
 
   // Check if this is a task ID (format: "task-{uuid}")
   const isTask = !!conversationId && conversationId.startsWith("task-");
@@ -130,7 +129,7 @@ export const useTaskPolling = () => {
     }
 
     handledReadyTaskIdRef.current = taskId;
-    trackCloudConversationReady({ taskId, conversationId: appConversationId });
+    trackCloudConversationReady(taskId, appConversationId);
     storeTaskPlugins(task, appConversationId);
 
     void (async () => {
@@ -149,7 +148,7 @@ export const useTaskPolling = () => {
 
       navigate(`/conversations/${appConversationId}`, { replace: true });
     })();
-  }, [taskQuery.data, navigate, taskId, trackCloudConversationReady]);
+  }, [taskQuery.data, navigate, taskId]);
 
   useEffect(() => {
     handledReadyTaskIdRef.current = null;

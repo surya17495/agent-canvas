@@ -16,20 +16,11 @@ vi.mock("#/hooks/query/use-settings", () => ({
 }));
 
 import { useTracking } from "#/hooks/use-tracking";
-import {
-  AGENT_CANVAS_CLIENT_SOURCE,
-  AGENT_CANVAS_CLIENT_VERSION,
-} from "#/api/client-source";
 
 const TEST_EMAIL = "user@example.com";
 // Resolved at test-run time so it matches whatever URL jsdom is configured
 // with in the current environment (varies between local and CI).
-let COMMON: {
-  current_url: string;
-  user_email: string;
-  client_source: string;
-  client_version: string;
-};
+let COMMON: { current_url: string; user_email: string };
 
 describe("useTracking", () => {
   beforeEach(() => {
@@ -41,8 +32,6 @@ describe("useTracking", () => {
     COMMON = {
       current_url: window.location.href,
       user_email: TEST_EMAIL,
-      client_source: AGENT_CANVAS_CLIENT_SOURCE,
-      client_version: AGENT_CANVAS_CLIENT_VERSION,
     };
   });
 
