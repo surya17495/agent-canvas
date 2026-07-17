@@ -105,7 +105,21 @@ The popover is a proper ARIA menu, not an ad-hoc listbox:
   provider/model identity in its accessible name / `title`, while the visible
   provider/model text may be truncated or hidden on small screens.
 - Interactive rows meet the 44×44px mobile touch target (relaxing to a compact
-  desktop height) and carry a visible keyboard focus treatment.
+  desktop height) and carry a visible keyboard focus treatment. The pill trigger
+  itself also meets the 44×44px target on mobile (`min-h-[44px] sm:min-h-0`),
+  without overlapping adjacent composer controls (it sits in an `items-center`
+  row, gap-separated from its siblings).
+
+### Mobile viewport safety
+
+The popover opens upward from the composer, so its usable height is the space
+*above* the trigger. On mobile a 48px header (`SidebarMobileMenuBar`, `h-12`,
+shown below the `md` breakpoint) sits at the top and wins hit-testing, so an
+unbounded upward menu would render behind it and occlude the search box. The
+popover therefore caps its `max-height` to the space above the trigger minus the
+header height and a safe gap (floored at 160px so it always scrolls within
+rather than shrinking to nothing). The cap is recomputed on open and on
+resize/orientation change via `useLayoutEffect` (pre-paint, no flash).
 
 ## Test evidence (executed here)
 
@@ -122,14 +136,19 @@ The popover is a proper ARIA menu, not an ad-hoc listbox:
 - **Pill trigger** — `src/components/features/chat/components/chat-input-llm-profile-picker.test.tsx`:
   `aria-haspopup="menu"` + `aria-controls`/`aria-expanded` wiring, focus return to
   the trigger on Escape, stable busy loading pill (no `return null`), disabled +
-  busy while switching, visible + accessible provider/model identity, and error
-  state reachable from the pill. The state hook is mocked at its boundary.
+  busy while switching, visible + accessible provider/model identity, error
+  state reachable from the pill, the >=44px mobile touch-target utility on the
+  trigger, and the capped popover `max-height` (so it can't overflow past the
+  viewport top). jsdom can't measure layout, so the trigger asserts the
+  responsive utility class and the popover asserts a non-empty inline
+  `max-height` + `overflow-y-auto`; pixel-accurate positions are covered by the
+  Playwright spec below. The state hook is mocked at its boundary.
 - **State hook** — `src/hooks/use-chat-input-llm-profile-state.test.tsx`: proves
   the null-conversation (home) path forwards `conversationId = null` to the switch
   (global activation), the in-conversation path targets that conversation, and no
   switch fires when the current profile is re-selected.
 
-All three suites pass locally (30 tests). `npm run lint` (typecheck + eslint +
+All three suites pass locally (32 tests). `npm run lint` (typecheck + eslint +
 prettier) and `npm run build` are clean. The remaining unit-suite failures
 (`use-app-title`, `use-agent-state`, `record-model-switch-message`) reproduce on
 the branch point with these changes stashed, so they are pre-existing and
@@ -153,7 +172,12 @@ lacks the mock-LLM / agent-server + Python mock stack:
   from the profiles API with the active profile marked selected, switches to a
   second profile, and verifies the real `POST /switch_llm` carried the target
   model plus the in-chat confirmation. Follows the existing mock-LLM spec patterns
-  but has not been executed here.
+  but has not been executed here. A third serial step drives a 390×844
+  (iPhone-12-class portrait) viewport and asserts the mobile layout: the trigger
+  has a >=44×44 effective touch target, the popover top clears the 48px header
+  with no horizontal overflow, the search region (when present) wins hit-testing
+  over the header, the Settings row is reachable via scroll, and Escape restores
+  focus to the trigger.
 - **Visual QA** — desktop + mobile rendering of the pill and popover.
 
 ```
