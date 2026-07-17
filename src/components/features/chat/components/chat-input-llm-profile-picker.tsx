@@ -2,17 +2,12 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
-import SettingsGearIcon from "#/icons/settings-gear.svg?react";
-import CheckIcon from "#/icons/checkmark.svg?react";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
-import { NavigationLink } from "#/components/shared/navigation-link";
 import { ContextMenu } from "#/ui/context-menu";
-import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
-import { Divider } from "#/ui/divider";
-import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
+import { LlmModelPickerMenu } from "./llm-model-picker-menu";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -34,6 +29,10 @@ interface ChatInputLlmProfileMenuContentProps {
  * live-swaps the running conversation's LLM via `/switch_profile` (the ACP
  * analog is {@link ChatInputModelMenuContent}). Shared by the inline pill and
  * the chat-input overflow submenu.
+ *
+ * Delegates rendering to {@link LlmModelPickerMenu} (search, provider grouping,
+ * keyboard navigation, loading/empty/error/pending states); this wrapper only
+ * wires the live profile state + switch mutation to it.
  */
 export function ChatInputLlmProfileMenuContent({
   onClose,
@@ -42,97 +41,36 @@ export function ChatInputLlmProfileMenuContent({
   settingsIconClassName,
 }: ChatInputLlmProfileMenuContentProps) {
   const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, selectProfile } =
-    useChatInputLlmProfileState();
-
-  const handleSelect = (profileName: string) => {
-    selectProfile(profileName);
-    onClose();
-  };
+  const {
+    profiles,
+    currentProfileName,
+    isLoading,
+    isError,
+    isSwitching,
+    selectProfile,
+  } = useChatInputLlmProfileState();
 
   return (
-    <>
-      {profiles.length > 0 && (
-        <>
-          {/* role="presentation" keeps this a valid <li> child of the
-              ContextMenu <ul> without exposing the label as a menu item. */}
-          <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-4">
-              {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
-            </Typography.Text>
-          </li>
-          {profiles.map((profile) => {
-            const isCurrent = profile.name === currentProfileName;
-            return (
-              <ContextMenuListItem
-                key={profile.name}
-                testId={`chat-input-llm-profile-option-${profile.name}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (isCurrent) {
-                    onClose();
-                    return;
-                  }
-                  handleSelect(profile.name);
-                }}
-                className={cn(
-                  "flex flex-col items-stretch gap-0.5",
-                  isCurrent && "bg-[var(--oh-interactive-hover)]",
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <span
-                    className="flex-1 truncate text-sm leading-5"
-                    title={profile.model ?? profile.name}
-                  >
-                    {profile.name}
-                  </span>
-                  {isCurrent && (
-                    <CheckIcon
-                      width={14}
-                      height={14}
-                      className="shrink-0"
-                      aria-hidden
-                    />
-                  )}
-                </span>
-                {profile.model && (
-                  <span className="block truncate text-xs leading-4 text-[var(--oh-muted)]">
-                    {profile.model}
-                  </span>
-                )}
-              </ContextMenuListItem>
-            );
-          })}
-        </>
-      )}
-      {profiles.length > 0 && <Divider inset={dividerInset} />}
-      <li className="text-sm">
-        <NavigationLink
-          to="/settings/llm"
-          onClick={onClose}
-          className={cn(
-            "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",
-            settingsLinkClassName,
-          )}
-        >
-          <SettingsGearIcon
-            width={16}
-            height={16}
-            className={cn("shrink-0", settingsIconClassName)}
-            aria-hidden
-          />
-          <span>{t(I18nKey.SETTINGS$LLM_PROFILES)}</span>
-        </NavigationLink>
-      </li>
-    </>
+    <LlmModelPickerMenu
+      profiles={profiles}
+      currentProfileName={currentProfileName}
+      isLoading={isLoading}
+      isError={isError}
+      isSwitching={isSwitching}
+      onSelect={selectProfile}
+      onClose={onClose}
+      settingsPath="/settings/llm"
+      settingsLabel={t(I18nKey.SETTINGS$LLM_PROFILES)}
+      dividerInset={dividerInset}
+      settingsLinkClassName={settingsLinkClassName}
+      settingsIconClassName={settingsIconClassName}
+    />
   );
 }
 
 export function ChatInputLlmProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, isLoading, isSwitching } =
+  const { currentProfileName, isLoading, isError, isSwitching } =
     useChatInputLlmProfileState();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -141,13 +79,19 @@ export function ChatInputLlmProfilePicker() {
     triggerRef,
   );
 
-  // No LLM profiles yet (or the agent-server lacks the surface): stay out of
-  // the way, exactly like the ACP/AgentProfile pickers.
-  if (isLoading || profiles.length === 0) {
+  // While the profiles list is loading, stay out of the way (avoids a flash of
+  // the empty-state placeholder before data lands). Once settled we always show
+  // the pill — even with zero profiles or a fetch error — so the picker can
+  // surface the empty/error state and its deep link into LLM Settings.
+  if (isLoading) {
     return null;
   }
 
-  const label = currentProfileName ?? t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER);
+  const label =
+    currentProfileName ??
+    (isError
+      ? t(I18nKey.MODEL$LIST_FAILED)
+      : t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER));
 
   return (
     <div className="relative min-w-0">

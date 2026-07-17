@@ -34610,5 +34610,22 @@
     "de": "Kein API-Schlüssel erforderlich. Der Server übernimmt den OAuth-Fluss automatisch.",
     "uk": "Ключ API не потрібен. Сервер автоматично обробляє процес OAuth.",
     "ca": "No cal cap clau d'API. El servidor gestiona el flux d'OAuth automàticament."
+  },
+  "MODEL$SEARCH_PLACEHOLDER": {
+    "ar": "بحث عن النماذج",
+    "ca": "Cerca models",
+    "de": "Modelle suchen",
+    "en": "Search models",
+    "es": "Buscar modelos",
+    "fr": "Rechercher des modèles",
+    "it": "Cerca modelli",
+    "ja": "モデルを検索",
+    "ko-KR": "모델 검색",
+    "no": "Søk etter modeller",
+    "pt": "Pesquisar modelos",
+    "tr": "Model ara",
+    "uk": "Пошук моделей",
+    "zh-CN": "搜索模型",
+    "zh-TW": "搜尋模型"
   }
 }

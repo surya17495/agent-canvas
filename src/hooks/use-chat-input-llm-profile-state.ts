@@ -15,6 +15,8 @@ export interface ChatInputLlmProfileState {
   /** That profile's model id (for the tooltip / subtitle). */
   currentProfileModel: string | null;
   isLoading: boolean;
+  /** The profiles list query failed (auth/network) — surfaced in the picker. */
+  isError: boolean;
   isSwitching: boolean;
   /**
    * Live-switch the running conversation's LLM profile via `/switch_profile`.
@@ -33,7 +35,7 @@ export interface ChatInputLlmProfileState {
 export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
-  const { data, isLoading } = useLlmProfiles();
+  const { data, isLoading, isError } = useLlmProfiles();
   const { switchAndLog } = useSwitchLlmProfileAndLog();
   // Read the switch's pending state globally by mutation key: the pill button
   // and the menu that fires the switch are separate hook instances, so a
@@ -85,6 +87,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     currentProfileName,
     currentProfileModel,
     isLoading,
+    isError,
     isSwitching,
     selectProfile,
   };
