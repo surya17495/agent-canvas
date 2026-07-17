@@ -162,24 +162,48 @@ npm run test -- src/components/features/chat/components/chat-input-llm-profile-p
 npm run test -- src/hooks/use-chat-input-llm-profile-state.test.tsx
 ```
 
-## Not yet executed (pending main-agent VM QA)
+## Manual QA (executed by main agent)
 
-These are written but **not run** in this environment, which has no display and
-lacks the mock-LLM / agent-server + Python mock stack:
+Manual Playwright-driven QA passed at both target viewports — desktop
+**1440×1000** and mobile **390×844** (iPhone-12-class portrait). Verified:
 
-- **E2E** — `tests/e2e/mock-llm/settings/mock-llm-model-picker-ui.spec.ts`: opens
-  the picker pill against the real agent-server, asserts the list is populated
-  from the profiles API with the active profile marked selected, switches to a
-  second profile, and verifies the real `POST /switch_llm` carried the target
-  model plus the in-chat confirmation. Follows the existing mock-LLM spec patterns
-  but has not been executed here. A third serial step drives a 390×844
-  (iPhone-12-class portrait) viewport and asserts the mobile layout: the trigger
-  has a >=44×44 effective touch target, the popover top clears the 48px header
-  with no horizontal overflow, the search region (when present) wins hit-testing
-  over the header, the Settings row is reachable via scroll, and Escape restores
-  focus to the trigger.
-- **Visual QA** — desktop + mobile rendering of the pill and popover.
+- Search + filter, grouped profiles, and current-selection indication.
+- Settings deep-link, valid ARIA menu semantics, Escape behavior + focus return
+  to the trigger.
+- Empty / loading / error / pending states render as designed.
+- 44px mobile trigger touch target; no horizontal overflow and no header
+  occlusion of the popover/search at 390×844.
+
+## Still pending
+
+- **Real live Agent Server E2E** — `tests/e2e/mock-llm/settings/mock-llm-model-picker-ui.spec.ts`
+  against a live agent-server (real `GET /api/profiles` + real
+  `POST /api/conversations/{id}/switch_llm` with the in-chat confirmation) is
+  **not yet run**. This environment has no display and lacks the mock-LLM /
+  agent-server + Python mock stack.
+- **Production rollout** — not started; this slice is behind ordinary review and
+  has not shipped.
+- **GitHub Actions CI** — **unavailable/unregistered on the fork**, not a passing
+  or failing signal. The Actions API lists 0 registered workflows and 0 runs for
+  `centri-model-picker`, so no CI acceptance is claimed (see the fork note below).
 
 ```
 npm run test:e2e:mock-llm -- mock-llm-model-picker-ui
 ```
+
+## Centri UI integration roadmap
+
+This model picker is the first vertical slice. The intended sequence, kept
+scaffold-free (nothing below is stubbed or implied to exist until its slice
+lands):
+
+1. **Model picker foundation** *(this slice)* — production LLM picker wired to
+   real profile listing + `switch_llm`.
+2. **Centri Settings** — a dedicated settings surface for Centri configuration,
+   reusing the existing settings shell rather than a parallel one.
+3. **Memory engine / frame integration** — wire the memory engine and frame
+   plumbing into the conversation lifecycle.
+4. **Memory UI** — a Memory page to view/manage stored memory, built only once
+   the engine integration (step 3) is real.
+5. **Recall / audit UI + MCP** — recall and audit surfaces, exposed over MCP,
+   layered on top of the Memory UI.
