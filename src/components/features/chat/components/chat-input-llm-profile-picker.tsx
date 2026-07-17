@@ -2,10 +2,14 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { ContextMenu } from "#/ui/context-menu";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { mapProvider } from "#/utils/map-provider";
+import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
+import { formatNativeModelName } from "#/utils/format-model-name";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import { LlmModelPickerMenu } from "./llm-model-picker-menu";
 
@@ -17,6 +21,20 @@ function truncateLabel(label: string): string {
     : `${label.slice(0, PROFILE_LABEL_MAX_CHARS)}…`;
 }
 
+/**
+ * Compact "Provider/model" identity string for a profile's model id, using the
+ * existing provider-mapping utilities (no hardcoded provider list). Returns null
+ * for a profile with no model so the caller can fall back to the profile name.
+ */
+function formatModelIdentity(model: string | null): string | null {
+  if (!model) return null;
+  const { provider } = extractModelAndProvider(model);
+  const modelName = formatNativeModelName(model);
+  const providerLabel = provider ? mapProvider(provider) : null;
+  if (providerLabel && modelName) return `${providerLabel}/${modelName}`;
+  return modelName ?? model;
+}
+
 interface ChatInputLlmProfileMenuContentProps {
   onClose: () => void;
   dividerInset?: "menu";
@@ -26,9 +44,10 @@ interface ChatInputLlmProfileMenuContentProps {
 
 /**
  * The in-conversation OpenHands LLM-profile switcher list. Selecting a profile
- * live-swaps the running conversation's LLM via `/switch_profile` (the ACP
- * analog is {@link ChatInputModelMenuContent}). Shared by the inline pill and
- * the chat-input overflow submenu.
+ * live-swaps the running conversation's LLM (local: POST /switch_llm; cloud:
+ * POST /switch_profile) or, with no conversation, activates it as the default
+ * (the ACP analog is {@link ChatInputModelMenuContent}). Shared by the inline
+ * pill and the chat-input overflow submenu.
  *
  * Delegates rendering to {@link LlmModelPickerMenu} (search, provider grouping,
  * keyboard navigation, loading/empty/error/pending states); this wrapper only
@@ -70,22 +89,33 @@ export function ChatInputLlmProfileMenuContent({
 
 export function ChatInputLlmProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { currentProfileName, isLoading, isError, isSwitching } =
-    useChatInputLlmProfileState();
+  const {
+    currentProfileName,
+    currentProfileModel,
+    isLoading,
+    isError,
+    isSwitching,
+  } = useChatInputLlmProfileState();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const menuId = React.useId();
   const popoverRef = useClickOutsideElement<HTMLUListElement>(
+    // Click-outside closes without stealing focus back to the trigger; Escape
+    // and selection restore focus explicitly via `closeAndRestoreFocus`.
     () => setIsPopoverOpen(false),
     triggerRef,
   );
 
-  // While the profiles list is loading, stay out of the way (avoids a flash of
-  // the empty-state placeholder before data lands). Once settled we always show
-  // the pill — even with zero profiles or a fetch error — so the picker can
-  // surface the empty/error state and its deep link into LLM Settings.
-  if (isLoading) {
-    return null;
-  }
+  const closeAndRestoreFocus = React.useCallback(() => {
+    setIsPopoverOpen(false);
+    triggerRef.current?.focus();
+  }, []);
+
+  // The trigger is always rendered — even while loading, on a fetch error, or
+  // with zero profiles — so the current model is always visible next to the
+  // composer and the menu's loading/empty/error states stay reachable. No
+  // `return null`, which would hide the current model and orphan those states.
+  const modelIdentity = formatModelIdentity(currentProfileModel);
 
   const label =
     currentProfileName ??
@@ -93,41 +123,79 @@ export function ChatInputLlmProfilePicker() {
       ? t(I18nKey.MODEL$LIST_FAILED)
       : t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER));
 
+  // Full profile + provider/model identity for the accessible name/title, so a
+  // mobile pill that visually truncates still exposes the complete context.
+  const accessibleName = currentProfileName
+    ? modelIdentity
+      ? `${currentProfileName} — ${modelIdentity}`
+      : currentProfileName
+    : label;
+  const busyTitle = isLoading ? t(I18nKey.HOME$LOADING) : accessibleName;
+
   return (
     <div className="relative min-w-0">
       <button
         ref={triggerRef}
         type="button"
-        className={cn(chatInputPillButtonClassName, "max-w-[200px]")}
-        title={currentProfileName ?? undefined}
+        className={cn(
+          chatInputPillButtonClassName,
+          "max-w-[200px] sm:max-w-[340px]",
+        )}
+        title={busyTitle}
+        aria-label={busyTitle}
         data-testid="chat-input-llm-profile"
+        aria-haspopup="menu"
         aria-expanded={isPopoverOpen}
-        aria-haspopup="dialog"
-        // Disabled mid-switch so re-opening can't fire a second /switch_profile.
+        aria-controls={isPopoverOpen ? menuId : undefined}
+        // Disabled mid-switch so re-opening can't fire a second switch request.
         disabled={isSwitching}
-        aria-busy={isSwitching}
+        aria-busy={isSwitching || isLoading}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
           setIsPopoverOpen((open) => !open);
         }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && isPopoverOpen) {
+            event.preventDefault();
+            closeAndRestoreFocus();
+          }
+        }}
       >
-        <span className="truncate">{truncateLabel(label)}</span>
+        {isLoading ? (
+          <>
+            <LoadingSpinner size="small" />
+            <span className="truncate">{t(I18nKey.HOME$LOADING)}</span>
+          </>
+        ) : (
+          <>
+            <span className="truncate">{truncateLabel(label)}</span>
+            {modelIdentity && (
+              <span
+                className="hidden min-w-0 truncate text-xs text-[var(--oh-muted)] sm:inline"
+                aria-hidden
+              >
+                {modelIdentity}
+              </span>
+            )}
+          </>
+        )}
         <ComboboxCaretInline isOpen={isPopoverOpen} />
       </button>
 
       {isPopoverOpen && (
         <ContextMenu
           ref={popoverRef}
+          id={menuId}
+          role="menu"
+          aria-label={t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER)}
           testId="chat-input-llm-profile-popover"
           position="top"
           alignment="left"
           spacing="none"
           className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
         >
-          <ChatInputLlmProfileMenuContent
-            onClose={() => setIsPopoverOpen(false)}
-          />
+          <ChatInputLlmProfileMenuContent onClose={closeAndRestoreFocus} />
         </ContextMenu>
       )}
     </div>

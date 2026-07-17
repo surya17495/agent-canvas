@@ -19,9 +19,9 @@ export interface ChatInputLlmProfileState {
   isError: boolean;
   isSwitching: boolean;
   /**
-   * Live-switch the running conversation's LLM profile via `/switch_profile`.
-   * This surface is only mounted inside a conversation, so a switch always
-   * targets that conversation (no home-page activate path here).
+   * Live-switch the running conversation's LLM (local: POST `/switch_llm`;
+   * cloud: POST `/switch_profile`), or activate the profile as the default when
+   * there is no conversation.
    */
   selectProfile: (profileName: string) => void;
 }

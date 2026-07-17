@@ -64,6 +64,12 @@ interface ContextMenuProps {
   position?: VariantProps<typeof contextMenuVariants>["position"];
   spacing?: VariantProps<typeof contextMenuVariants>["spacing"];
   alignment?: VariantProps<typeof contextMenuVariants>["alignment"];
+  /** ARIA role for the list, e.g. "menu" for an actionable menu popover. */
+  role?: React.AriaRole;
+  /** DOM id so a trigger can point `aria-controls` at this list. */
+  id?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
 }
 
 export function ContextMenu({
@@ -78,6 +84,10 @@ export function ContextMenu({
   position,
   spacing,
   alignment,
+  role,
+  id,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledby,
 }: ContextMenuProps) {
   return (
     <ul
@@ -85,6 +95,10 @@ export function ContextMenu({
       data-position={position}
       ref={ref}
       style={style}
+      role={role}
+      id={id}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledby}
       className={cn(
         contextMenuVariants({
           theme,

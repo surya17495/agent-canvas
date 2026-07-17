@@ -41,9 +41,11 @@ function renderMenu(overrides: Partial<LlmModelPickerMenuProps> = {}) {
     settingsLabel: "LLM Profiles",
     ...overrides,
   };
-  // The menu renders <li>/<button> fragments that belong inside a <ul>.
+  // The menu renders <li>/<button> fragments that belong inside a
+  // role="menu" <ul> (the ContextMenu owns that role in production).
   const utils = renderWithProviders(
-    <ul>
+    // eslint-disable-next-line i18next/no-literal-string
+    <ul role="menu" aria-label="Select a model">
       <LlmModelPickerMenu {...props} />
     </ul>,
   );
@@ -92,15 +94,49 @@ describe("LlmModelPickerMenu", () => {
     ).toBeInTheDocument();
   });
 
-  it("marks the current profile as selected", () => {
+  it("marks the current profile with menuitemradio + aria-checked", () => {
     renderMenu({ currentProfileName: "gpt" });
     const current = screen.getByTestId("chat-input-llm-profile-option-gpt");
-    expect(current).toHaveAttribute("aria-selected", "true");
+    expect(current).toHaveAttribute("role", "menuitemradio");
+    expect(current).toHaveAttribute("aria-checked", "true");
     expect(
       screen.getByTestId("llm-model-picker-current-gpt"),
     ).toBeInTheDocument();
     const other = screen.getByTestId("chat-input-llm-profile-option-opus");
-    expect(other).toHaveAttribute("aria-selected", "false");
+    expect(other).toHaveAttribute("role", "menuitemradio");
+    expect(other).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("renders valid menu DOM: every option button is wrapped in <li role=none>", () => {
+    renderMenu();
+    for (const name of ["opus", "sonnet", "gpt", "gemini", "local"]) {
+      const button = screen.getByTestId(
+        `chat-input-llm-profile-option-${name}`,
+      );
+      // menuitemradio buttons must not sit directly under role="menu"; each is
+      // wrapped in an <li role="none"> so the menu exposes only actionable items.
+      const li = button.closest("li");
+      expect(li).not.toBeNull();
+      expect(li).toHaveAttribute("role", "none");
+    }
+  });
+
+  it("exposes the Settings deep link as a menuitem", () => {
+    renderMenu();
+    const link = screen.getByTestId("llm-model-picker-settings-link");
+    expect(link).toHaveAttribute("role", "menuitem");
+    const li = link.closest("li");
+    expect(li).toHaveAttribute("role", "none");
+  });
+
+  it("exposes exactly the actionable items (menuitemradio options + settings menuitem)", () => {
+    renderMenu();
+    // 5 profile options as menuitemradio.
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(5);
+    // 1 settings menuitem; no stray role=option / listbox.
+    expect(screen.getAllByRole("menuitem")).toHaveLength(1);
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
   it("calls onSelect + onClose when a non-current profile is chosen", async () => {
@@ -234,5 +270,49 @@ describe("LlmModelPickerMenu", () => {
     renderMenu();
     const link = screen.getByTestId("llm-model-picker-settings-link");
     expect(within(link).getByText("LLM Profiles")).toBeInTheDocument();
+  });
+
+  it("closes on Escape from an option row", async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderMenu({ currentProfileName: "opus" });
+    const option = screen.getByTestId("chat-input-llm-profile-option-gpt");
+    option.focus();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("closes on Escape from the Settings row", async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderMenu();
+    const link = screen.getByTestId("llm-model-picker-settings-link");
+    link.focus();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("clears the query on Escape from the search box before closing", async () => {
+    const user = userEvent.setup();
+    const six = [
+      profile("alpha", "anthropic/a"),
+      profile("beta", "anthropic/b"),
+      profile("gamma", "openai/c"),
+      profile("delta", "openai/d"),
+      profile("epsilon", "gemini/e"),
+      profile("zeta", "gemini/f"),
+    ];
+    const { onClose } = renderMenu({
+      profiles: six,
+      currentProfileName: "alpha",
+    });
+    const input = screen.getByTestId("llm-model-picker-search-input");
+    await user.type(input, "gpt");
+    input.focus();
+    // First Escape clears the query (does not close)...
+    await user.keyboard("{Escape}");
+    expect(input).toHaveValue("");
+    expect(onClose).not.toHaveBeenCalled();
+    // ...second Escape (empty query) closes the menu.
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
   });
 });

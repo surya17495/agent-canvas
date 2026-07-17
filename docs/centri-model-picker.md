@@ -84,25 +84,78 @@ short list is faster to scan than to filter). Provider group headings appear onl
 when more than one provider is present; otherwise the list is flat under a single
 generic heading.
 
-## Test evidence
+## Accessibility
 
-- **Component/unit** — `src/components/features/chat/components/llm-model-picker-menu.test.tsx`
-  (15 tests): provider grouping + label sort, single-provider flat list,
-  current-selection marking, `onSelect`/`onClose` behavior, no re-select of the
-  current profile, no switch while pending, search visibility threshold, search
-  filtering + no-results, ArrowDown/ArrowUp keyboard navigation, and the
-  loading / error / empty states + settings deep link. Uses adapter-boundary
+The popover is a proper ARIA menu, not an ad-hoc listbox:
+
+- The owning `<ul>` (the `ContextMenu`) carries `role="menu"` with an accessible
+  label.
+- Each profile is a `<button role="menuitemradio">` (with `aria-checked` marking
+  the current profile) wrapped in an `<li role="none">`; the Settings deep link is
+  a `role="menuitem"`. Headings, dividers, and the search box are
+  presentation-only, so the menu exposes exactly the actionable items — no stray
+  `role="option"` and no unparented `listbox`.
+- The pill trigger declares `aria-haspopup="menu"`, reflects `aria-expanded`, and
+  points `aria-controls` at the open menu. Escape (from the search box, any
+  profile row, or the Settings row) closes the menu and returns focus to the
+  trigger.
+- The trigger stays mounted while the profiles list is loading (a busy,
+  `aria-busy` pill — no `return null` / layout jump) and remains reachable on a
+  fetch error so the error state is openable. It surfaces the full profile +
+  provider/model identity in its accessible name / `title`, while the visible
+  provider/model text may be truncated or hidden on small screens.
+- Interactive rows meet the 44×44px mobile touch target (relaxing to a compact
+  desktop height) and carry a visible keyboard focus treatment.
+
+## Test evidence (executed here)
+
+- **Component/unit** — `src/components/features/chat/components/llm-model-picker-menu.test.tsx`:
+  provider grouping + label sort, single-provider flat list, current-selection
+  marking via `menuitemradio` + `aria-checked`, valid menu DOM (each option in an
+  `<li role="none">`; Settings as `menuitem`; exactly-actionable-items with no
+  `option`/`listbox`), `onSelect`/`onClose` behavior, no re-select of the current
+  profile, no switch while pending, search visibility threshold, search filtering
+  + no-results, ArrowDown/ArrowUp keyboard navigation, Escape-to-close from an
+  option row and the Settings row, Escape-clears-then-closes from the search box,
+  and the loading / error / empty states + settings deep link. Adapter-boundary
   `ProfileInfo` fixtures only.
-- **E2E** — `tests/e2e/mock-llm/settings/mock-llm-model-picker-ui.spec.ts`: opens
-  the picker pill against the real agent-server, asserts the list is populated
-  from the profiles API with the active profile marked selected, switches to a
-  second profile, and verifies the real `POST /switch_llm` carried the target
-  model plus the in-chat confirmation. The `/model` slash-command path is covered
-  separately by `mock-llm-model-switch.spec.ts`.
+- **Pill trigger** — `src/components/features/chat/components/chat-input-llm-profile-picker.test.tsx`:
+  `aria-haspopup="menu"` + `aria-controls`/`aria-expanded` wiring, focus return to
+  the trigger on Escape, stable busy loading pill (no `return null`), disabled +
+  busy while switching, visible + accessible provider/model identity, and error
+  state reachable from the pill. The state hook is mocked at its boundary.
+- **State hook** — `src/hooks/use-chat-input-llm-profile-state.test.tsx`: proves
+  the null-conversation (home) path forwards `conversationId = null` to the switch
+  (global activation), the in-conversation path targets that conversation, and no
+  switch fires when the current profile is re-selected.
+
+All three suites pass locally (30 tests). `npm run lint` (typecheck + eslint +
+prettier) and `npm run build` are clean. The remaining unit-suite failures
+(`use-app-title`, `use-agent-state`, `record-model-switch-message`) reproduce on
+the branch point with these changes stashed, so they are pre-existing and
+unrelated.
 
 Run locally:
 
 ```
 npm run test -- src/components/features/chat/components/llm-model-picker-menu.test.tsx
+npm run test -- src/components/features/chat/components/chat-input-llm-profile-picker.test.tsx
+npm run test -- src/hooks/use-chat-input-llm-profile-state.test.tsx
+```
+
+## Not yet executed (pending main-agent VM QA)
+
+These are written but **not run** in this environment, which has no display and
+lacks the mock-LLM / agent-server + Python mock stack:
+
+- **E2E** — `tests/e2e/mock-llm/settings/mock-llm-model-picker-ui.spec.ts`: opens
+  the picker pill against the real agent-server, asserts the list is populated
+  from the profiles API with the active profile marked selected, switches to a
+  second profile, and verifies the real `POST /switch_llm` carried the target
+  model plus the in-chat confirmation. Follows the existing mock-LLM spec patterns
+  but has not been executed here.
+- **Visual QA** — desktop + mobile rendering of the pill and popover.
+
+```
 npm run test:e2e:mock-llm -- mock-llm-model-picker-ui
 ```

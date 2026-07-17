@@ -20,6 +20,19 @@ import { dropdownMenuRowForegroundClassName } from "#/utils/dropdown-classes";
  */
 const SEARCH_VISIBILITY_THRESHOLD = 6;
 
+/**
+ * Meets the mobile 44x44px touch target on small screens, then relaxes to the
+ * compact desktop height so the menu doesn't grow excessively tall with a
+ * pointer. Applied to the interactive rows the picker adds.
+ */
+const menuRowTouchTargetClassName = "min-h-[44px] sm:min-h-0";
+
+/** Visible keyboard-focus treatment for the picker's interactive rows. */
+const menuRowFocusVisibleClassName = cn(
+  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset",
+  "focus-visible:ring-white/40 focus-visible:bg-[var(--oh-interactive-hover)]",
+);
+
 interface ProfileGroup {
   /** Provider id used for the group key (e.g. "anthropic", or "" for custom). */
   providerId: string;
@@ -62,7 +75,7 @@ export interface LlmModelPickerMenuProps {
   currentProfileName: string | null;
   isLoading: boolean;
   isError: boolean;
-  /** True while a /switch_profile mutation is in flight. */
+  /** True while a switch mutation is in flight. */
   isSwitching: boolean;
   onSelect: (profileName: string) => void;
   onClose: () => void;
@@ -75,12 +88,20 @@ export interface LlmModelPickerMenuProps {
 }
 
 /**
- * Production LLM model picker rendered inside a ContextMenu popover. Populated
- * only from the real LLM-profile list (no hardcoded models). Provides search,
- * provider grouping, keyboard navigation, current-selection indication, and
- * explicit loading / empty / error / mutation-pending states. Selecting a
- * profile live-swaps the running conversation's LLM (or sets the pre-conversation
- * default on the home surface) via the caller-supplied `onSelect`.
+ * Production LLM model picker rendered inside a ContextMenu popover whose owning
+ * `<ul>` carries `role="menu"`. Populated only from the real LLM-profile list
+ * (no hardcoded models). Provides search, provider grouping, keyboard
+ * navigation, current-selection indication, and explicit loading / empty /
+ * error / mutation-pending states. Selecting a profile live-swaps the running
+ * conversation's LLM (local: POST /switch_llm; cloud: POST /switch_profile) or,
+ * with no conversation, activates it as the pre-conversation default — all via
+ * the caller-supplied `onSelect`.
+ *
+ * Accessibility: each profile is a `menuitemradio` (`aria-checked` marks the
+ * current profile) wrapped in an `<li role="none">`, and the Settings deep link
+ * is a `menuitem`; headings/dividers/search are presentation-only so the menu
+ * exposes exactly the actionable items. Escape closes the menu from the search
+ * box, any profile row, and the Settings row.
  *
  * Presentational by design: all data + mutations arrive as props so it can be
  * unit-tested against adapter-boundary fixtures.
@@ -215,13 +236,22 @@ export function LlmModelPickerMenu({
   };
 
   const settingsLink = (
-    <li className="text-sm">
+    <li role="none" className="text-sm">
       <NavigationLink
         to={settingsPath}
+        role="menuitem"
         onClick={onClose}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
         data-testid="llm-model-picker-settings-link"
         className={cn(
-          "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",
+          "flex min-h-[44px] items-center gap-2 rounded p-2 leading-5 sm:min-h-[30px]",
+          "text-[var(--oh-foreground)] transition-colors hover:bg-[var(--oh-interactive-hover)]",
+          menuRowFocusVisibleClassName,
           settingsLinkClassName,
         )}
       >
@@ -233,6 +263,12 @@ export function LlmModelPickerMenu({
         />
         <span>{settingsLabel}</span>
       </NavigationLink>
+    </li>
+  );
+
+  const menuDivider = (
+    <li role="presentation">
+      <Divider inset={dividerInset} />
     </li>
   );
 
@@ -259,7 +295,7 @@ export function LlmModelPickerMenu({
         >
           {t(I18nKey.MODEL$LIST_FAILED)}
         </li>
-        <Divider inset={dividerInset} />
+        {menuDivider}
         {settingsLink}
       </>
     );
@@ -282,7 +318,7 @@ export function LlmModelPickerMenu({
             {t(I18nKey.MODEL$NO_PROFILES_HINT)}
           </span>
         </li>
-        <Divider inset={dividerInset} />
+        {menuDivider}
         {settingsLink}
       </>
     );
@@ -334,7 +370,12 @@ export function LlmModelPickerMenu({
                   setQuery("");
                   searchInputRef.current?.focus();
                 }}
-                className="mr-1.5 rounded p-0.5 text-[var(--oh-muted)] hover:text-[var(--oh-foreground)]"
+                className={cn(
+                  "mr-1 flex min-h-[44px] min-w-[44px] items-center justify-center rounded",
+                  "sm:min-h-0 sm:min-w-0 sm:p-0.5",
+                  "text-[var(--oh-muted)] hover:text-[var(--oh-foreground)]",
+                  menuRowFocusVisibleClassName,
+                )}
               >
                 <X className="h-3.5 w-3.5" aria-hidden />
               </button>
@@ -355,9 +396,9 @@ export function LlmModelPickerMenu({
         groups.map((group) => (
           <React.Fragment key={group.providerId || "custom"}>
             {/* role="presentation" keeps the section label a valid <li> child
-                of the ContextMenu <ul> without exposing it as a menu item. */}
+                of the role="menu" <ul> without exposing it as a menu item. */}
             <li role="presentation" className="px-2 pt-1 pb-0.5">
-              <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-4">
+              <Typography.Text className="text-xs font-medium uppercase leading-4 tracking-wide text-[var(--oh-text-dim)]">
                 {isGrouped
                   ? group.label
                   : t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
@@ -367,57 +408,62 @@ export function LlmModelPickerMenu({
               const optionIndex = optionIndexByName.get(profile.name) ?? 0;
               const isCurrent = profile.name === currentProfileName;
               return (
-                <button
-                  key={profile.name}
-                  type="button"
-                  role="option"
-                  aria-selected={isCurrent}
-                  ref={(node) => {
-                    optionRefs.current[optionIndex] = node;
-                  }}
-                  data-testid={`chat-input-llm-profile-option-${profile.name}`}
-                  onKeyDown={(event) => handleOptionKeyDown(event, optionIndex)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    handleSelect(profile.name, isCurrent);
-                  }}
-                  className={cn(
-                    dropdownMenuRowForegroundClassName,
-                    "flex flex-col items-stretch gap-0.5",
-                    isCurrent && "bg-[var(--oh-interactive-hover)]",
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="flex-1 truncate text-sm leading-5"
-                      title={profile.model ?? profile.name}
-                    >
-                      {profile.name}
-                    </span>
-                    {isCurrent && (
-                      <CheckIcon
-                        width={14}
-                        height={14}
-                        className="shrink-0"
-                        aria-hidden
-                        data-testid={`llm-model-picker-current-${profile.name}`}
-                      />
+                <li role="none" key={profile.name}>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isCurrent}
+                    ref={(node) => {
+                      optionRefs.current[optionIndex] = node;
+                    }}
+                    data-testid={`chat-input-llm-profile-option-${profile.name}`}
+                    onKeyDown={(event) =>
+                      handleOptionKeyDown(event, optionIndex)
+                    }
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleSelect(profile.name, isCurrent);
+                    }}
+                    className={cn(
+                      dropdownMenuRowForegroundClassName,
+                      "flex flex-col items-stretch justify-center gap-0.5",
+                      menuRowTouchTargetClassName,
+                      menuRowFocusVisibleClassName,
+                      isCurrent && "bg-[var(--oh-interactive-hover)]",
                     )}
-                  </span>
-                  {profile.model && (
-                    <span className="block truncate text-xs leading-4 text-[var(--oh-muted)]">
-                      {profile.model}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="flex-1 truncate text-sm leading-5"
+                        title={profile.model ?? profile.name}
+                      >
+                        {profile.name}
+                      </span>
+                      {isCurrent && (
+                        <CheckIcon
+                          width={14}
+                          height={14}
+                          className="shrink-0"
+                          aria-hidden
+                          data-testid={`llm-model-picker-current-${profile.name}`}
+                        />
+                      )}
                     </span>
-                  )}
-                </button>
+                    {profile.model && (
+                      <span className="block truncate text-xs leading-4 text-[var(--oh-muted)]">
+                        {profile.model}
+                      </span>
+                    )}
+                  </button>
+                </li>
               );
             })}
           </React.Fragment>
         ))
       )}
 
-      <Divider inset={dividerInset} />
+      {menuDivider}
       {settingsLink}
     </>
   );
