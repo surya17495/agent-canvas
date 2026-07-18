@@ -406,6 +406,16 @@ export function ChatInputActions({
                 + Settings link. Revisit if floating children are added here. */}
             <ContextMenu
               testId="overflow-model-submenu"
+              // The LLM-profile picker renders menuitemradio rows, so its owning
+              // list must be role="menu" for valid ARIA; the ACP model /
+              // agent-profile pickers render plain buttons and keep the default
+              // list role.
+              role={pickerKind === "llm-profile" ? "menu" : undefined}
+              aria-label={
+                pickerKind === "llm-profile"
+                  ? t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER)
+                  : undefined
+              }
               className="min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto gap-0"
             >
               {pickerKind === "model" ? (

@@ -6,3 +6,4 @@ This directory contains the project documentation.
 - [Using ACP agents](./ACP_AGENTS.md): onboard and configure external agents (Claude Code, Codex, Gemini CLI).
 - [Development guide](./DEVELOPMENT.md)
 - [Self-hosting guide](./SELF_HOSTING.md)
+- [Centri model picker](./centri-model-picker.md): the in-conversation LLM model-picker UI and its Agent Server contract.
