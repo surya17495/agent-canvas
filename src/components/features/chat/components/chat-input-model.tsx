@@ -15,7 +15,10 @@ import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
+import {
+  chatInputPillButtonClassName,
+  chatInputPillReadonlyClassName,
+} from "#/utils/form-control-classes";
 import React from "react";
 
 const MODEL_LABEL_MAX_CHARS = 10;
@@ -156,6 +159,29 @@ export function ChatInputModel() {
     model.displayModel,
     model.isAcpContext ? ACP_MODEL_LABEL_MAX_CHARS : MODEL_LABEL_MAX_CHARS,
   );
+
+  // An active ACP conversation whose provider exposes no switchable model list
+  // (e.g. a custom/unregistered ACP server) can't switch models at runtime. The
+  // model is still real and must stay visible, but an interactive trigger would
+  // open a picker with nothing to pick — so render a read-only label instead of
+  // a button with popup semantics/chevron. (Home-page ACP and native
+  // conversations keep the interactive menu with its settings link.)
+  const isNonSwitchableAcpConversation =
+    model.isActiveAcpConversation && !model.showAcpPicker;
+
+  if (isNonSwitchableAcpConversation) {
+    return (
+      <div className="relative min-w-0">
+        <span
+          className={chatInputPillReadonlyClassName}
+          title={model.displayModel}
+          data-testid="chat-input-llm-model"
+        >
+          {truncatedModelLabel}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-w-0">

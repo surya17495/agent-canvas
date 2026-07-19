@@ -308,6 +308,65 @@ describe("ChatInputModel", () => {
     });
   });
 
+  it("renders a read-only model label (no interactive picker) for an ACP conversation whose provider can't switch models at runtime", () => {
+    // Cursor-style custom ACP: the conversation reports a real current model
+    // ("auto") but the provider isn't in Canvas's registry, so there are no
+    // switchable model rows. The old UI still rendered a clickable button with
+    // a chevron whose popover had nothing to pick — an empty interactive
+    // control. The model must stay visible, but as a read-only label.
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "cursor",
+        llm_model: "auto",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    // Current model stays visible and accurate (no `return null`).
+    expect(model).toBeInTheDocument();
+    expect(model).toHaveTextContent("auto");
+    expect(model).toHaveAttribute("title", "auto");
+    // Not an interactive picker: not a button, no popup semantics.
+    expect(model.tagName).not.toBe("BUTTON");
+    expect(model).not.toHaveAttribute("aria-haspopup");
+    expect(model).not.toHaveAttribute("aria-expanded");
+
+    // Clicking opens no popover (no empty picker).
+    fireEvent.click(model);
+    expect(
+      screen.queryByTestId("chat-input-llm-model-popover"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an interactive picker (button with popup semantics) for a switchable ACP conversation", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    // Switchable provider → still an interactive trigger with popup semantics.
+    expect(model.tagName).toBe("BUTTON");
+    expect(model).toHaveAttribute("aria-haspopup", "dialog");
+    expect(model).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(model);
+    expect(model).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-sonnet"),
+    ).toBeInTheDocument();
+  });
+
   it("offers selectable rows on a cloud backend for ACP conversations (mid-conversation model switching is supported)", () => {
     useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
     useActiveConversationMock.mockReturnValue({

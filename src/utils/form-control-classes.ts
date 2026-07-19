@@ -53,6 +53,18 @@ export const chatInputPillButtonClassName = cn(
   formControlMutedHoverClassName,
 );
 
+/**
+ * Read-only variant of {@link chatInputPillButtonClassName}: same pill layout
+ * and muted foreground, but no pointer cursor and no hover chrome. For model
+ * affordances that must show the current model without offering an interactive
+ * picker (e.g. an ACP conversation whose provider doesn't support runtime model
+ * switching).
+ */
+export const chatInputPillReadonlyClassName = cn(
+  "inline-flex items-center gap-1 rounded-[100px] border border-transparent px-1.5",
+  "text-sm font-normal leading-5 text-[var(--oh-muted)] whitespace-nowrap min-w-0",
+);
+
 /** Circular icon triggers in the chat input actions row. */
 export const chatInputIconButtonClassName = cn(
   "flex items-center justify-center rounded-full text-[var(--oh-muted)] cursor-pointer",

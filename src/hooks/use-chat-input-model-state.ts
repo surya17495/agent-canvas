@@ -15,6 +15,8 @@ import {
 
 export interface ChatInputModelState {
   isAcpContext: boolean;
+  /** The active conversation runs an ACP agent (vs. home-page ACP defaults). */
+  isActiveAcpConversation: boolean;
   displayModel: string | null;
   currentModelId: string | null;
   availableAcpModels: ACPModelOption[];
@@ -84,6 +86,7 @@ export function useChatInputModelState(): ChatInputModelState {
 
   return {
     isAcpContext,
+    isActiveAcpConversation,
     displayModel,
     currentModelId,
     availableAcpModels,
