@@ -221,6 +221,9 @@ describe("useChatInputModelState", () => {
 
     expect(result.current.availableAcpModels).toEqual([]);
     expect(result.current.showAcpPicker).toBe(false);
+    // Active ACP conversation with no picker → the chat input renders this as a
+    // read-only label (not an interactive empty picker).
+    expect(result.current.isActiveAcpConversation).toBe(true);
     // Unknown model id has no registry label → falls back to the raw id.
     expect(result.current.displayModel).toBe("custom-model");
   });
