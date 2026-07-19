@@ -563,4 +563,104 @@ describe("useCreateConversation", () => {
       ).toBe("claude"),
     );
   });
+
+  it("degrades a fresh-install seeded `default` profile to agent_settings when its llm_profile_ref dangles (the U1 404 blocker)", async () => {
+    // Live-blocker reproduction: the agent-server seeds a `default` openhands
+    // profile whose `llm_profile_ref` is `"default"`, but a fresh store has no
+    // LLM profile named `default`. Launching from that profile 404s server-side
+    // ("LLM profile 'default' not found"). The seeded `default` is the enriched
+    // baseline, so it must launch via agent_settings (which carries the active
+    // LLM inline, never an llm_profile_ref) and never send `agent_profile_id`.
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-default",
+          name: "default",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "default",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-default",
+    });
+    // Clean start: no LLM profiles at all, so the ref cannot resolve.
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    // No profile tail — stays on the agent_settings launch, so the server never
+    // resolves the dangling ref and the 404 can't happen.
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[9]).toBeUndefined();
+  });
+
+  it("degrades to agent_settings when a launched openhands profile references a missing LLM profile", async () => {
+    // A named (non-default) openhands profile pointing at an LLM profile that
+    // was never created (or has since been deleted) must not launch via the
+    // profile path — the server would 404 on the missing ref. The launch path
+    // validates the ref against the live LLM-profile list and, when it doesn't
+    // resolve, drops `agent_profile_id` and launches from agent_settings.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-custom",
+          name: "My Profile",
+          agent_kind: "openhands",
+          revision: 2,
+          llm_profile_ref: "claude",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-custom",
+    });
+    // The live list has a different profile — `claude` is missing.
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "gpt" }],
+      active_profile: "gpt",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[9]).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('LLM profile "claude"'),
+    );
+    warnSpy.mockRestore();
+  });
 });

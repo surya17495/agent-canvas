@@ -47,12 +47,19 @@ describe("ChatInputLlmProfilePicker", () => {
     useChatInputLlmProfileStateMock.mockReturnValue(state());
   });
 
-  it("renders nothing while loading or when there are no profiles", () => {
+  it("still renders the trigger when there are no profiles", () => {
     useChatInputLlmProfileStateMock.mockReturnValue(
-      state({ profiles: [], isLoading: false }),
+      state({
+        profiles: [],
+        currentProfileName: null,
+        currentProfileModel: null,
+        isLoading: false,
+      }),
     );
-    const { container } = renderWithProviders(<ChatInputLlmProfilePicker />);
-    expect(container).toBeEmptyDOMElement();
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    // The trigger is always rendered so the menu's empty state stays reachable
+    // and the current model stays visible next to the composer.
+    expect(screen.getByTestId("chat-input-llm-profile")).toBeInTheDocument();
   });
 
   it("labels the pill with the current profile name", () => {
