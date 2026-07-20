@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BACKENDS_STORAGE_KEY } from "#/api/backend-registry/storage";
+import { DEFAULT_LOCAL_BACKEND_NAME } from "#/api/backend-registry/default-backend";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import ApiKeyEntryScreen from "#/components/features/backends/api-key-entry-screen";
@@ -53,6 +54,8 @@ async function fillRequiredFields(
   user: ReturnType<typeof userEvent.setup>,
   { name = "My Server", apiKey = "some-key" } = {},
 ) {
+  // Name is pre-filled with a default; clear it before typing a specific value.
+  await user.clear(screen.getByTestId("api-key-entry-name"));
   await user.type(screen.getByTestId("api-key-entry-name"), name);
   await user.type(screen.getByTestId("api-key-entry-api-key"), apiKey);
 }
@@ -93,13 +96,14 @@ afterEach(() => {
 
 describe("ApiKeyEntryScreen", () => {
   // @spec — UI: name + host (disabled) + api key + connect
-  it("renders name, host (disabled), api key, and connect button", () => {
+  it("renders name (pre-filled), host (disabled), api key, and connect button", () => {
     renderScreen();
 
-    // Name field
+    // Name field — pre-filled with the default so the paste flow only
+    // requires entering the key.
     const nameInput = screen.getByTestId("api-key-entry-name");
     expect(nameInput).toBeInTheDocument();
-    expect(nameInput).toHaveValue("");
+    expect(nameInput).toHaveValue(DEFAULT_LOCAL_BACKEND_NAME);
 
     // Host field — pre-filled from window.location.origin, disabled
     const hostInput = screen.getByTestId("api-key-entry-host");
@@ -135,22 +139,36 @@ describe("ApiKeyEntryScreen", () => {
     expect(screen.getByTestId("api-key-entry-api-key")).toHaveValue("");
   });
 
-  // @spec — Connect button requires both name and api key
-  it("disables Connect when name or api key is empty", async () => {
+  // @spec — Paste flow is usable: name is pre-filled, so pasting only the
+  // key enables Connect (no need to invent a backend name).
+  it("enables Connect after only pasting a key (name pre-filled)", async () => {
     renderScreen();
     const user = userEvent.setup();
     const submit = screen.getByTestId("api-key-entry-submit");
 
-    // Both empty
+    // Name pre-filled, key empty → still disabled.
+    expect(screen.getByTestId("api-key-entry-name")).toHaveValue(
+      DEFAULT_LOCAL_BACKEND_NAME,
+    );
     expect(submit).toBeDisabled();
 
-    // Only api key filled → still disabled
+    // Paste only the key → enabled (no name entry required).
     await user.type(screen.getByTestId("api-key-entry-api-key"), "key");
-    expect(submit).toBeDisabled();
-
-    // Name also filled → enabled
-    await user.type(screen.getByTestId("api-key-entry-name"), "Server");
     expect(submit).not.toBeDisabled();
+  });
+
+  // @spec — Connect still requires a name: clearing the pre-filled name disables it
+  it("disables Connect when the name is cleared", async () => {
+    renderScreen();
+    const user = userEvent.setup();
+    const submit = screen.getByTestId("api-key-entry-submit");
+
+    await user.type(screen.getByTestId("api-key-entry-api-key"), "key");
+    expect(submit).not.toBeDisabled();
+
+    // Clearing the pre-filled name disables submission again.
+    await user.clear(screen.getByTestId("api-key-entry-name"));
+    expect(submit).toBeDisabled();
   });
 
   // @spec — Valid key: validates against GET /api/settings, persists, reloads
