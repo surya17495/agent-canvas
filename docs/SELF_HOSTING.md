@@ -49,6 +49,17 @@ The `--public` flag enables **public mode**: the API key is _not_ baked into
 the frontend. Instead, users see an API key entry screen when they first load
 the UI and must paste the `LOCAL_BACKEND_API_KEY` to proceed.
 
+> [!NOTE]
+> **Private beta — key handling scope.** For the private beta, public-mode key
+> handling is **user-pasted only**: the operator generates `LOCAL_BACKEND_API_KEY`
+> out-of-band (step 3) and each user pastes it into the API key entry screen.
+> No key is generated, defaulted, or injected into the public-mode bundle —
+> `--auth-required` and `--session-api-key` are mutually exclusive, so a
+> public-mode deployment can never carry a baked key. An injected /
+> secret-managed key path for public deployments (where the key is provisioned
+> without a manual paste) is **deferred to pre-launch** and intentionally not
+> available in the beta.
+
 The defenses layered on top of this:
 
 1. **Cloud / network firewall (step 2)** — by default nothing inbound is

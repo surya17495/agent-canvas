@@ -2,7 +2,7 @@ import type { Server } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseArgs, startStaticServer } from "../../scripts/static-server.mjs";
 
@@ -60,6 +60,33 @@ describe("static-server.mjs", () => {
     it("treats empty string as null for session key", () => {
       const config = parseArgs(["--session-api-key", ""]);
       expect(config.sessionApiKey).toBeNull();
+    });
+
+    // Private-beta owner decision: public-mode key handling is user-pasted
+    // only. `--auth-required` must never carry a baked/injected session key —
+    // the frontend shows the API key entry screen and the user pastes the key.
+    it("parses --auth-required as public mode with no injected key", () => {
+      const config = parseArgs(["--auth-required"]);
+      expect(config.authRequired).toBe(true);
+      expect(config.sessionApiKey).toBeNull();
+    });
+
+    // The injected/secret-managed key path (`--session-api-key`) is deferred
+    // to pre-launch for public deployments, so combining it with public mode
+    // is a misconfiguration that must be rejected — never silently exposing a
+    // key in a public-mode bundle.
+    it("rejects combining --session-api-key with --auth-required", () => {
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      parseArgs(["--session-api-key", "k", "--auth-required"]);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
     });
 
     it("defaults runtimeServicesInfo to null", () => {
@@ -380,6 +407,28 @@ describe("static-server.mjs", () => {
       const body = await response.text();
       expect(body).not.toContain("openhands-agent-server-config");
       expect(body).not.toContain("__AGENT_CANVAS_SESSION_API_KEY__");
+    });
+
+    // Public-mode (private beta): the served index.html must set the
+    // auth-required flag so the frontend shows the API key entry screen, and
+    // must NOT expose any session key — the user pastes it. This is the
+    // production-truthful guarantee behind the user-pasted key decision.
+    it("injects auth-required flag but no session key in public mode", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, { authRequired: true });
+      const response = await fetch(`${origin}/`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("__AGENT_CANVAS_AUTH_REQUIRED__");
+      expect(body).not.toContain("__AGENT_CANVAS_SESSION_API_KEY__");
+      expect(body).not.toContain("openhands-agent-server-config");
     });
 
     it("injects session key into HTML without </head> tag (falls back to </body>)", async () => {
