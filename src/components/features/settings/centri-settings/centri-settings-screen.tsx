@@ -1,3 +1,4 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useCentriSettings } from "#/hooks/query/use-centri-settings";
@@ -195,20 +196,75 @@ function DeploySection({ settings }: { settings: CentriSettings }) {
   );
 }
 
+/** The pump target awaiting confirmation: a specific session, or all pending. */
+type PumpConfirm = { sessionId?: string };
+
+function ConfirmPrompt({
+  onConfirm,
+  onCancel,
+  isPumping,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  isPumping: boolean;
+}) {
+  const { t } = useTranslation("openhands");
+  return (
+    <div
+      data-testid="centri-sync-confirm"
+      role="alertdialog"
+      aria-live="polite"
+      className="mt-2 flex flex-col gap-2 rounded-md border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-sm"
+    >
+      <span>{t(I18nKey.CENTRI$SYNC_CONFIRM)}</span>
+      <div className="flex gap-2">
+        <BrandButton
+          testId="centri-sync-confirm-yes"
+          variant="primary"
+          type="button"
+          isDisabled={isPumping}
+          aria-busy={isPumping}
+          onClick={onConfirm}
+        >
+          {isPumping
+            ? t(I18nKey.CENTRI$SYNC_RUNNING)
+            : t(I18nKey.BUTTON$CONFIRM)}
+        </BrandButton>
+        <BrandButton
+          testId="centri-sync-confirm-no"
+          variant="secondary"
+          type="button"
+          isDisabled={isPumping}
+          onClick={onCancel}
+        >
+          {t(I18nKey.BUTTON$CANCEL)}
+        </BrandButton>
+      </div>
+    </div>
+  );
+}
+
 function SyncSection({
   settings,
-  onPump,
+  confirm,
+  onRequestPump,
+  onConfirmPump,
+  onCancelPump,
   isPumping,
   pumpingSessionId,
 }: {
   settings: CentriSettings;
-  onPump: (sessionId?: string) => void;
+  confirm: PumpConfirm | null;
+  onRequestPump: (sessionId?: string) => void;
+  onConfirmPump: () => void;
+  onCancelPump: () => void;
   isPumping: boolean;
   pumpingSessionId: string | null;
 }) {
   const { t } = useTranslation("openhands");
   const { sync } = settings;
   const tokenPresent = hasCentriPanelToken();
+  const confirmingAll = confirm !== null && confirm.sessionId === undefined;
 
   return (
     <Section
@@ -234,19 +290,26 @@ function SyncSection({
         </p>
       ) : null}
 
-      <div className="flex justify-start pt-3">
+      <div className="flex flex-col items-start gap-2 pt-3">
         <BrandButton
           testId="centri-sync-now"
           variant="primary"
           type="button"
-          isDisabled={!tokenPresent || isPumping}
+          isDisabled={!tokenPresent || confirm !== null || isPumping}
           aria-busy={isPumping && pumpingSessionId === null}
-          onClick={() => onPump(undefined)}
+          onClick={() => onRequestPump(undefined)}
         >
           {isPumping && pumpingSessionId === null
             ? t(I18nKey.CENTRI$SYNC_RUNNING)
             : t(I18nKey.CENTRI$SYNC_NOW)}
         </BrandButton>
+        {confirmingAll ? (
+          <ConfirmPrompt
+            onConfirm={onConfirmPump}
+            onCancel={onCancelPump}
+            isPumping={isPumping}
+          />
+        ) : null}
       </div>
 
       <div className="pt-3">
@@ -265,30 +328,45 @@ function SyncSection({
             data-testid="centri-pending-list"
             className="mt-1 flex flex-col gap-2"
           >
-            {sync.pending.map((session: CentriPendingSession) => (
-              <li
-                key={session.session_id}
-                className="flex items-center justify-between gap-4 text-sm"
-              >
-                <span className="font-mono break-all">
-                  {session.session_id}
-                </span>
-                <BrandButton
-                  testId={`centri-sync-session-${session.session_id}`}
-                  variant="secondary"
-                  type="button"
-                  isDisabled={!tokenPresent || isPumping}
-                  aria-busy={
-                    isPumping && pumpingSessionId === session.session_id
-                  }
-                  onClick={() => onPump(session.session_id)}
+            {sync.pending.map((session: CentriPendingSession) => {
+              const confirmingThis =
+                confirm !== null && confirm.sessionId === session.session_id;
+              return (
+                <li
+                  key={session.session_id}
+                  className="flex flex-col gap-2 text-sm"
                 >
-                  {isPumping && pumpingSessionId === session.session_id
-                    ? t(I18nKey.CENTRI$SYNC_RUNNING)
-                    : t(I18nKey.CENTRI$SYNC_SESSION)}
-                </BrandButton>
-              </li>
-            ))}
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-mono break-all">
+                      {session.session_id}
+                    </span>
+                    <BrandButton
+                      testId={`centri-sync-session-${session.session_id}`}
+                      variant="secondary"
+                      type="button"
+                      isDisabled={
+                        !tokenPresent || confirm !== null || isPumping
+                      }
+                      aria-busy={
+                        isPumping && pumpingSessionId === session.session_id
+                      }
+                      onClick={() => onRequestPump(session.session_id)}
+                    >
+                      {isPumping && pumpingSessionId === session.session_id
+                        ? t(I18nKey.CENTRI$SYNC_RUNNING)
+                        : t(I18nKey.CENTRI$SYNC_SESSION)}
+                    </BrandButton>
+                  </div>
+                  {confirmingThis ? (
+                    <ConfirmPrompt
+                      onConfirm={onConfirmPump}
+                      onCancel={onCancelPump}
+                      isPumping={isPumping}
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -308,13 +386,17 @@ export function CentriSettingsScreen() {
   } = useCentriSettings();
   const { mutate: pump, isPending: isPumping, variables } = useCentriPump();
   const pumpingSessionId = isPumping ? (variables?.sessionId ?? null) : null;
+  const [confirm, setConfirm] = React.useState<PumpConfirm | null>(null);
 
-  const onPump = (sessionId?: string) => {
+  const onConfirmPump = () => {
+    if (confirm === null) return;
+    const { sessionId } = confirm;
     pump(
       { sessionId },
       {
         onSuccess: (response) => pumpSummaryToast(t, response),
         onError: (err) => displayErrorToast(t(centriErrorMessageKey(err))),
+        onSettled: () => setConfirm(null),
       },
     );
   };
@@ -388,7 +470,10 @@ export function CentriSettingsScreen() {
       <KeysSection settings={settings} />
       <SyncSection
         settings={settings}
-        onPump={onPump}
+        confirm={confirm}
+        onRequestPump={(sessionId) => setConfirm({ sessionId })}
+        onConfirmPump={onConfirmPump}
+        onCancelPump={() => setConfirm(null)}
         isPumping={isPumping}
         pumpingSessionId={pumpingSessionId}
       />
