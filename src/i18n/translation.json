@@ -35325,6 +35325,23 @@
     "zh-CN": "已泵送 {{pumped}}，无操作 {{noop}}，失败 {{failed}}。",
     "zh-TW": "已泵送 {{pumped}}，無操作 {{noop}}，失敗 {{failed}}。"
   },
+  "CENTRI$SYNC_CONFIRM": {
+    "en": "Sync memory to the engine now? This runs the pump for pending sessions.",
+    "ar": "مزامنة الذاكرة إلى المحرك الآن؟ سيؤدي هذا إلى تشغيل المضخة للجلسات المعلّقة.",
+    "ca": "Vols sincronitzar la memòria amb el motor ara? Això executarà la bomba per a les sessions pendents.",
+    "de": "Speicher jetzt mit der Engine synchronisieren? Dadurch wird die Pump-Funktion für ausstehende Sitzungen ausgeführt.",
+    "es": "¿Sincronizar la memoria con el motor ahora? Esto ejecuta la bomba para las sesiones pendientes.",
+    "fr": "Synchroniser la mémoire avec le moteur maintenant ? Cela exécute la pompe pour les sessions en attente.",
+    "it": "Sincronizzare la memoria con il motore ora? Verrà eseguita la pompa per le sessioni in sospeso.",
+    "ja": "メモリを今すぐエンジンに同期しますか？保留中のセッションに対してポンプを実行します。",
+    "ko-KR": "지금 메모리를 엔진에 동기화할까요? 대기 중인 세션에 대해 펌프를 실행합니다.",
+    "no": "Synkronisere minnet til motoren nå? Dette kjører pumpen for ventende økter.",
+    "pt": "Sincronizar a memória com o mecanismo agora? Isso executa a bomba para as sessões pendentes.",
+    "tr": "Bellek şimdi motora eşitlensin mi? Bu, bekleyen oturumlar için pompayı çalıştırır.",
+    "uk": "Синхронізувати пам'ять із рушієм зараз? Це запустить помпу для сесій, що очікують.",
+    "zh-CN": "现在将记忆同步到引擎吗？这将对待处理的会话运行泵。",
+    "zh-TW": "現在要將記憶同步到引擎嗎？這會對待處理的工作階段執行泵。"
+  },
   "CENTRI$DEPLOY_LOCK_VALID": {
     "en": "Lock valid",
     "ar": "القفل صالح",

@@ -131,9 +131,31 @@ describe("CentriSettingsScreen", () => {
     const syncButton = await screen.findByTestId("centri-sync-now");
     await user.click(syncButton);
 
+    // Confirmation is required before the mutation fires.
+    const confirmButton = await screen.findByTestId("centri-sync-confirm-yes");
+    expect(pumpSpy).not.toHaveBeenCalled();
+    await user.click(confirmButton);
+
     await waitFor(() => expect(pumpSpy).toHaveBeenCalledWith(undefined));
     await waitFor(() => expect(successToast).toHaveBeenCalledTimes(1));
     expect(errorToast).not.toHaveBeenCalled();
+  });
+
+  it("cancels the pump when the confirmation is dismissed", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(CentriService, "getSettings").mockResolvedValue(makeSettings());
+    const pumpSpy = vi.spyOn(CentriService, "pump");
+
+    renderWithProviders(<CentriSettingsScreen />);
+
+    const syncButton = await screen.findByTestId("centri-sync-now");
+    await user.click(syncButton);
+    await user.click(await screen.findByTestId("centri-sync-confirm-no"));
+
+    expect(
+      screen.queryByTestId("centri-sync-confirm"),
+    ).not.toBeInTheDocument();
+    expect(pumpSpy).not.toHaveBeenCalled();
   });
 
   it("pumps a single pending session by id", async () => {
@@ -148,6 +170,7 @@ describe("CentriSettingsScreen", () => {
 
     const rowButton = await screen.findByTestId("centri-sync-session-sess-1");
     await user.click(rowButton);
+    await user.click(await screen.findByTestId("centri-sync-confirm-yes"));
 
     await waitFor(() => expect(pumpSpy).toHaveBeenCalledWith("sess-1"));
   });
@@ -163,6 +186,7 @@ describe("CentriSettingsScreen", () => {
 
     const syncButton = await screen.findByTestId("centri-sync-now");
     await user.click(syncButton);
+    await user.click(await screen.findByTestId("centri-sync-confirm-yes"));
 
     await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
     expect(errorToast).toHaveBeenCalledWith("CENTRI$ERROR_UNREACHABLE");
