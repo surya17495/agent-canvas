@@ -28,6 +28,7 @@ export default [
       route("verification", "routes/verification-settings.tsx"),
       route("app", "routes/app-settings.tsx"),
       route("centri", "routes/centri-settings.tsx"),
+      route("memory", "routes/centri-memory.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
     ]),
     route("oauth/device/verify", "routes/device-verify.tsx"),

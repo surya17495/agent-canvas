@@ -48,6 +48,9 @@ export const LOCAL_WORKSPACES_QUERY_KEYS = {
 /** Centri panel daemon (`centrid`) queries. */
 export const CENTRI_QUERY_KEYS = {
   settings: ["centri", "settings"] as const,
+  memoryStores: ["centri", "memory", "stores"] as const,
+  memoryStore: (role: string, kind: string) =>
+    ["centri", "memory", "store", role, kind] as const,
 } as const;
 
 export const PLUGINS_QUERY_KEYS = {

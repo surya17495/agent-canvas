@@ -131,3 +131,101 @@ describe("CentriService.pump", () => {
     );
   });
 });
+
+describe("CentriService memory stores", () => {
+  it("lists stores via an unauthenticated GET", async () => {
+    const payload = { frames_dir: "/frames", roles: [], engine_sections: [] };
+    fetchMock.mockResolvedValueOnce(jsonResponse(payload));
+
+    await expect(CentriService.listMemoryStores()).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:6789/api/memory/stores",
+      undefined,
+    );
+  });
+
+  it("reads one store, percent-encoding role and kind in the path", async () => {
+    const payload = {
+      store: { role: "a:b", kind: "rules" },
+      content: "hi",
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(payload));
+
+    await expect(
+      CentriService.readMemoryStore("a:b", "rules"),
+    ).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:6789/api/memory/stores/a%3Ab/rules",
+      undefined,
+    );
+  });
+
+  it("read maps a not-found to CentriNotFoundError", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ detail: "bad kind" }, { ok: false, status: 422 }),
+    );
+    await expect(
+      CentriService.readMemoryStore("writer", "rules"),
+    ).rejects.toBeInstanceOf(CentriInvalidRequestError);
+  });
+
+  it("edits a store with a bearer token and JSON body", async () => {
+    const payload = { store: { role: "writer", kind: "rules" }, content: "x" };
+    fetchMock.mockResolvedValueOnce(jsonResponse(payload));
+
+    await CentriService.editMemoryStore("writer", "rules", "x");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:6789/api/memory/stores/writer/rules");
+    expect(init.method).toBe("PUT");
+    expect(init.headers.Authorization).toBe("Bearer panel-token");
+    expect(init.body).toBe(JSON.stringify({ content: "x" }));
+  });
+
+  it("edit fails closed with no network call when no token is configured", async () => {
+    getTokenMock.mockReturnValue(null);
+    await expect(
+      CentriService.editMemoryStore("writer", "rules", "x"),
+    ).rejects.toBeInstanceOf(CentriUnauthorizedError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("edit maps 422 to CentriInvalidRequestError", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ detail: "too big" }, { ok: false, status: 422 }),
+    );
+    await expect(
+      CentriService.editMemoryStore("writer", "rules", "x"),
+    ).rejects.toBeInstanceOf(CentriInvalidRequestError);
+  });
+
+  it("forgets a store with a bearer token via DELETE", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ role: "writer", kind: "rules", forgotten: true }),
+    );
+
+    await CentriService.forgetMemoryStore("writer", "rules");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:6789/api/memory/stores/writer/rules");
+    expect(init.method).toBe("DELETE");
+    expect(init.headers.Authorization).toBe("Bearer panel-token");
+  });
+
+  it("forget fails closed with no network call when no token is configured", async () => {
+    getTokenMock.mockReturnValue(null);
+    await expect(
+      CentriService.forgetMemoryStore("writer", "rules"),
+    ).rejects.toBeInstanceOf(CentriUnauthorizedError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("forget maps 404 (already gone) to CentriNotFoundError", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ detail: "nothing to forget" }, { ok: false, status: 404 }),
+    );
+    await expect(
+      CentriService.forgetMemoryStore("writer", "rules"),
+    ).rejects.toBeInstanceOf(CentriNotFoundError);
+  });
+});

@@ -90,3 +90,60 @@ export interface CentriPumpResponse {
   results: CentriPumpResult[];
   summary: CentriPumpSummary;
 }
+
+// -- memory (U3): authored frame stores browse/edit/forget — SPEC §3.14 ------
+//
+// These mirror the `centrid` Memory API models. The stores are the SAME
+// spine-side authored files M3's renderer injects at turn zero (rules.md /
+// identity.md / working_notes.md per role); editing one changes the next
+// injected frame, forgetting one drops it from the next fetch (§3.14 matrix).
+
+/** The authored store kinds, one per authored file (SPEC §3.14). */
+export type CentriMemoryKind = "rules" | "identity" | "working_notes";
+
+/** Presence + size metadata for one authored store (no content). */
+export interface CentriMemoryStore {
+  role: string;
+  kind: CentriMemoryKind;
+  filename: string;
+  /** Frame section this store feeds ("Rules" | "Role Identity"). */
+  section: string;
+  present: boolean;
+  bytes: number;
+  chars: number;
+  lines: number;
+}
+
+export interface CentriMemoryRole {
+  role: string;
+  stores: CentriMemoryStore[];
+}
+
+/**
+ * An engine-derived frame section that is omitted (never mocked) until its
+ * §9 route is proven. Surfaced so the UI shows *why* a section is absent.
+ */
+export interface CentriEngineSection {
+  name: string;
+  reason: string;
+}
+
+/** Response of `GET /api/memory/stores`. */
+export interface CentriMemoryListResponse {
+  frames_dir: string;
+  roles: CentriMemoryRole[];
+  engine_sections: CentriEngineSection[];
+}
+
+/** Response of `GET`/`PUT /api/memory/stores/{role}/{kind}`. */
+export interface CentriMemoryStoreContent {
+  store: CentriMemoryStore;
+  content: string;
+}
+
+/** Response of `DELETE /api/memory/stores/{role}/{kind}`. */
+export interface CentriMemoryForgetResponse {
+  role: string;
+  kind: CentriMemoryKind;
+  forgotten: boolean;
+}
