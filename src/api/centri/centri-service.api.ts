@@ -10,6 +10,10 @@
 import { getCentridBaseUrl, getCentriPanelToken } from "./centri-config";
 import type {
   CentriHealth,
+  CentriMemoryForgetResponse,
+  CentriMemoryKind,
+  CentriMemoryListResponse,
+  CentriMemoryStoreContent,
   CentriPumpResponse,
   CentriSettings,
 } from "./centri.types";
@@ -109,6 +113,24 @@ async function centriFetch(
   }
 }
 
+/**
+ * Authorization header for a mutation. Fails closed *before* the network when
+ * no panel token is configured — `centrid` would return 401 anyway, so the UI
+ * short-circuits and explains why instead of issuing a guaranteed-401 request.
+ */
+function mutationHeaders(): Record<string, string> {
+  const token = getCentriPanelToken();
+  if (!token) {
+    throw new CentriUnauthorizedError("No panel token configured.");
+  }
+  return { [AUTHORIZATION_HEADER]: `Bearer ${token}` };
+}
+
+/** Path to one authored store, with role + kind percent-encoded as segments. */
+function memoryStorePath(role: string, kind: CentriMemoryKind): string {
+  return `/api/memory/stores/${encodeURIComponent(role)}/${encodeURIComponent(kind)}`;
+}
+
 const CentriService = {
   /** `GET /api/health` — daemon liveness (distinct from engine reachability). */
   async getHealth(): Promise<CentriHealth> {
@@ -150,6 +172,72 @@ const CentriService = {
     });
     if (!response.ok) await throwForStatus(response);
     return (await response.json()) as CentriPumpResponse;
+  },
+
+  /**
+   * `GET /api/memory/stores` — browse the authored frame stores per role plus
+   * the omitted-never-mocked engine sections (SPEC §3.14). Unauthenticated
+   * (loopback read surface).
+   */
+  async listMemoryStores(): Promise<CentriMemoryListResponse> {
+    const response = await centriFetch("/api/memory/stores");
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriMemoryListResponse;
+  },
+
+  /**
+   * `GET /api/memory/stores/{role}/{kind}` — read one authored store. A
+   * not-yet-authored store is a valid empty state (`present:false`,
+   * `content:""`), not an error. Unauthenticated.
+   */
+  async readMemoryStore(
+    role: string,
+    kind: CentriMemoryKind,
+  ): Promise<CentriMemoryStoreContent> {
+    const response = await centriFetch(memoryStorePath(role, kind));
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriMemoryStoreContent;
+  },
+
+  /**
+   * `PUT /api/memory/stores/{role}/{kind}` — create/overwrite one authored
+   * store (the edit path). Token-gated: throws {@link CentriUnauthorizedError}
+   * up front when no token is configured. The next rendered frame reflects the
+   * edit immediately (§3.14 edit matrix).
+   */
+  async editMemoryStore(
+    role: string,
+    kind: CentriMemoryKind,
+    content: string,
+  ): Promise<CentriMemoryStoreContent> {
+    const response = await centriFetch(memoryStorePath(role, kind), {
+      method: "PUT",
+      headers: {
+        [CONTENT_TYPE_HEADER]: JSON_CONTENT_TYPE,
+        ...mutationHeaders(),
+      },
+      body: JSON.stringify({ content }),
+    });
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriMemoryStoreContent;
+  },
+
+  /**
+   * `DELETE /api/memory/stores/{role}/{kind}` — forget one authored store.
+   * Token-gated (fail-closed). A 404 (nothing to forget) maps to
+   * {@link CentriNotFoundError}. The store is gone from the next fetch and the
+   * next rendered frame (§3.14).
+   */
+  async forgetMemoryStore(
+    role: string,
+    kind: CentriMemoryKind,
+  ): Promise<CentriMemoryForgetResponse> {
+    const response = await centriFetch(memoryStorePath(role, kind), {
+      method: "DELETE",
+      headers: { ...mutationHeaders() },
+    });
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriMemoryForgetResponse;
   },
 };
 
