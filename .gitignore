@@ -17,11 +17,13 @@ __pycache__
 /test-results-live/
 /test-results-mock-llm/
 /test-results-mock-llm-docker/
+/test-results-centri-live/
 /.mock-llm-markers/
 /playwright-report/
 /playwright-report-live/
 /playwright-report-mock-llm/
 /playwright-report-mock-llm-docker/
+/playwright-report-centri-live/
 /blob-report/
 /playwright/.cache/
 .react-router/

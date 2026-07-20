@@ -45,6 +45,11 @@ export const LOCAL_WORKSPACES_QUERY_KEYS = {
   all: ["local-workspaces"] as const,
 } as const;
 
+/** Centri panel daemon (`centrid`) queries. */
+export const CENTRI_QUERY_KEYS = {
+  settings: ["centri", "settings"] as const,
+} as const;
+
 export const PLUGINS_QUERY_KEYS = {
   /** Dynamic marketplace catalog (used by `use-plugins-marketplace`). */
   marketplace: ["plugins-marketplace"] as const,
