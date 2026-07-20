@@ -1,4 +1,4 @@
-import { AppWindow, Shield } from "lucide-react";
+import { AppWindow, RefreshCw, Shield } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -56,6 +56,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/app",
     text: "SETTINGS$NAV_APPLICATION",
     subtitle: "SETTINGS$PAGE_APPLICATION_SUBLINE",
+  },
+  {
+    icon: <RefreshCw className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/centri",
+    text: "SETTINGS$NAV_CENTRI",
+    subtitle: "SETTINGS$PAGE_CENTRI_SUBLINE",
   },
   {
     icon: <KeyIcon width={16} height={16} />,
