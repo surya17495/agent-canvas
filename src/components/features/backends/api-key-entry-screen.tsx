@@ -5,6 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isNoBackend } from "#/api/backend-registry/active-store";
+import { DEFAULT_LOCAL_BACKEND_NAME } from "#/api/backend-registry/default-backend";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
@@ -32,6 +33,14 @@ export default function ApiKeyEntryScreen() {
   const { active, addBackend, updateBackend } = useActiveBackendContext();
 
   const host = window.location.origin;
+
+  // Public mode hands the user a session key to paste; requiring them to also
+  // invent a backend name is friction. Seed a sensible default (the existing
+  // backend's name on key rotation, else "Local") so Connect is enabled as
+  // soon as the key is pasted. The field stays editable.
+  const initialName = isNoBackend(active.backend)
+    ? DEFAULT_LOCAL_BACKEND_NAME
+    : active.backend.name;
 
   const [isValidating, setIsValidating] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
@@ -101,7 +110,7 @@ export default function ApiKeyEntryScreen() {
         <div className="px-6 pb-6 pt-2">
           <BackendForm
             mode="add"
-            backend={{ ...active.backend, host, apiKey: "", name: "" }}
+            backend={{ ...active.backend, host, apiKey: "", name: initialName }}
             onSubmitted={() => {}}
             testIdRoot="api-key-entry"
             hostReadOnly
