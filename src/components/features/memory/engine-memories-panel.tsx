@@ -150,7 +150,9 @@ function MemoryRowView({
               onClick={save}
             >
               {t(
-                isSaving ? I18nKey.CENTRI_MEMORY$SAVING : I18nKey.CENTRI_MEMORY$SAVE,
+                isSaving
+                  ? I18nKey.CENTRI_MEMORY$SAVING
+                  : I18nKey.CENTRI_MEMORY$SAVE,
               )}
             </BrandButton>
             <BrandButton

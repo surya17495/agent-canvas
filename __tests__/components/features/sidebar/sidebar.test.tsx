@@ -231,7 +231,7 @@ describe("Sidebar", () => {
     useSidebarStore.setState({ collapsed: false });
   });
 
-  it("shows a Memory nav item that routes to the Memory settings page", () => {
+  it("shows a Memory nav item that routes to the Memory page", () => {
     const { navigate } = renderSidebar("/conversations");
 
     const memoryLink = screen.getByTestId("sidebar-memory-link");
@@ -239,7 +239,7 @@ describe("Sidebar", () => {
     expect(within(memoryLink).getByText("Memory")).toBeInTheDocument();
 
     fireEvent.click(memoryLink);
-    expect(navigate).toHaveBeenCalledWith("/settings/memory", {
+    expect(navigate).toHaveBeenCalledWith("/memory", {
       replace: false,
     });
   });
