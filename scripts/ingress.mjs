@@ -17,6 +17,10 @@
  * Route matching:
  *   - Routes are matched by longest prefix first
  *   - More specific routes take precedence (e.g., /api/automation before /api)
+ *   - A backend URL may carry the `;strip-prefix` flag (e.g.
+ *     "/centri=http://127.0.0.1:6789;strip-prefix") to remove the matched
+ *     prefix from the URL before proxying, so backends that serve absolute
+ *     paths can be mounted under a non-colliding public prefix.
  */
 
 import { createServer } from "node:http";
@@ -25,7 +29,7 @@ import { pathToFileURL } from "node:url";
 
 import {
   createProxyHandlers,
-  createRouter,
+  createRewriteRouter,
   isBenignSocketError,
 } from "./proxy-utils.mjs";
 
@@ -49,7 +53,7 @@ function parseArgs() {
         break;
       case "-r":
       case "--route":
-        // Format: "/path=http://host:port"
+        // Format: "/path=http://host:port" (optionally ";strip-prefix")
         const [path, url] = args[++i].split("=");
         config.routes[path] = url;
         break;
@@ -105,6 +109,11 @@ EXAMPLES:
 ROUTE MATCHING:
   Routes are sorted by path length (longest first), so more specific
   routes like /api/automation will match before /api.
+
+  A backend URL may end with ";strip-prefix" to remove the matched route
+  prefix from the request URL before proxying:
+    --route "/centri=http://127.0.0.1:6789;strip-prefix"
+  proxies /centri/api/health to http://127.0.0.1:6789/api/health.
 `);
 }
 
@@ -133,32 +142,34 @@ function buildConfig(args, env = process.env) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function startIngress(config) {
-  const route = createRouter(config.routes, config.defaultBackend);
+  const route = createRewriteRouter(config.routes, config.defaultBackend);
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
-    const backend = route(req.url ?? "/");
+    const match = route(req.url ?? "/");
 
-    if (!backend) {
+    if (!match) {
       res.writeHead(503);
       res.end("No backend configured for this route");
       return;
     }
 
-    proxy.proxyHttp(req, res, backend);
+    req.url = match.url;
+    proxy.proxyHttp(req, res, match.backend);
   });
 
   // Handle WebSocket upgrades
   server.on("upgrade", (req, socket, head) => {
-    const backend = route(req.url ?? "/");
+    const match = route(req.url ?? "/");
 
-    if (!backend) {
+    if (!match) {
       socket.destroy();
       return;
     }
 
-    proxy.proxyWebSocket(req, socket, head, backend);
+    req.url = match.url;
+    proxy.proxyWebSocket(req, socket, head, match.backend);
   });
 
   // Built-in protection against malformed client requests that can otherwise

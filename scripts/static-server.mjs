@@ -36,7 +36,7 @@ import sirv from "sirv";
 
 import {
   createProxyHandlers,
-  createRouter,
+  createRewriteRouter,
   matchesPathPrefix,
 } from "./proxy-utils.mjs";
 
@@ -87,6 +87,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     runtimeServicesInfo: null,
     lockToCloud: null,
     basePath: "/",
+    centridBaseUrl: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -127,6 +128,9 @@ export function parseArgs(argv = process.argv.slice(2)) {
         break;
       case "--lock-to-cloud":
         config.lockToCloud = argv[++i] || null;
+        break;
+      case "--centrid-base-url":
+        config.centridBaseUrl = argv[++i] || null;
         break;
       case "--base-path":
         config.basePath = normalizeBasePath(argv[++i]);
@@ -191,6 +195,9 @@ OPTIONS:
   -d, --dir   <dir>            Directory to serve (default: build)
   -r, --route <prefix=url>     Proxy <prefix> (and subpaths) to <url>;
                                may be repeated. WebSockets supported.
+                               <url> may end with ";strip-prefix" to remove
+                               the matched prefix from the request URL before
+                               proxying (e.g. /centri/api/x -> /api/x).
   --session-api-key <key>      Inject session API key into index.html so the
                                pre-built frontend authenticates to agent-server
                                without needing VITE_SESSION_API_KEY baked in.
@@ -206,6 +213,12 @@ OPTIONS:
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
+  --centrid-base-url <url-or-path>
+                               Inject the Centri panel daemon base URL into
+                               index.html (window.__CENTRI_CENTRID_BASE_URL__)
+                               so the pre-built frontend reaches centrid
+                               through a same-origin path (e.g. /centri)
+                               instead of the loopback default.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -266,6 +279,13 @@ ROUTING:
  * - `basePath`: the path prefix the SPA is mounted under, exposed as
  *   `window.__AGENT_CANVAS_BASE_PATH__` so runtime static assets like locale
  *   files can resolve through the same subpath as the built bundle.
+ *
+ * - `centridBaseUrl`: the Centri panel daemon base URL (absolute, or a
+ *   same-origin path like `/centri`), exposed as
+ *   `window.__CENTRI_CENTRID_BASE_URL__`. Read by `getCentridBaseUrl()` in
+ *   `src/api/centri/centri-config.ts` as a fallback when
+ *   `VITE_CENTRID_BASE_URL` is empty, so a deployment can point the
+ *   pre-built frontend at a proxied centrid without rebuilding.
  */
 function makeConfigInjectionScript(
   sessionApiKey,
@@ -273,6 +293,7 @@ function makeConfigInjectionScript(
   runtimeServicesInfo,
   lockToCloud,
   basePath,
+  centridBaseUrl,
 ) {
   const parts = [];
 
@@ -322,6 +343,12 @@ function makeConfigInjectionScript(
     );
   }
 
+  if (centridBaseUrl) {
+    parts.push(
+      `window.__CENTRI_CENTRID_BASE_URL__=${JSON.stringify(centridBaseUrl)};`,
+    );
+  }
+
   if (parts.length === 0) return "";
 
   return `<script>(function(){${parts.join("")}}());</script>`;
@@ -341,6 +368,7 @@ async function serveInjectedIndexHtml(
     runtimeServicesInfo,
     lockToCloud,
     basePath,
+    centridBaseUrl,
   } = {},
 ) {
   let content;
@@ -356,6 +384,7 @@ async function serveInjectedIndexHtml(
     runtimeServicesInfo,
     lockToCloud,
     basePath,
+    centridBaseUrl,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -404,6 +433,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.authRequired ||
     injectionOpts.runtimeServicesInfo ||
     injectionOpts.lockToCloud ||
+    injectionOpts.centridBaseUrl ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -539,7 +569,8 @@ async function handleStatic(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function startStaticServer(config) {
-  const route = createRouter(config.routes);
+  // No default backend: the static handler below is the fallback.
+  const route = createRewriteRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
   const injectionOpts = {
@@ -548,6 +579,7 @@ export function startStaticServer(config) {
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),
+    centridBaseUrl: config.centridBaseUrl || null,
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];
@@ -556,9 +588,10 @@ export function startStaticServer(config) {
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
-    const backend = route(req.url ?? "/");
-    if (backend) {
-      proxy.proxyHttp(req, res, backend);
+    const match = route(req.url ?? "/");
+    if (match) {
+      req.url = match.url;
+      proxy.proxyHttp(req, res, match.backend);
       return;
     }
     handleStatic(
@@ -579,9 +612,10 @@ export function startStaticServer(config) {
   });
 
   server.on("upgrade", (req, socket, head) => {
-    const backend = route(req.url ?? "/");
-    if (backend) {
-      proxy.proxyWebSocket(req, socket, head, backend);
+    const match = route(req.url ?? "/");
+    if (match) {
+      req.url = match.url;
+      proxy.proxyWebSocket(req, socket, head, match.backend);
       return;
     }
     socket.destroy();

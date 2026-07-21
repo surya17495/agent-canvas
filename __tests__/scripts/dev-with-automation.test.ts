@@ -361,7 +361,7 @@ describe("stack mode routing", () => {
     };
   }
 
-  it("uses only a frontend default route in frontend-only mode", async () => {
+  it("routes only the external centrid in frontend-only mode", async () => {
     const config = await buildConfig(
       { frontendOnly: true },
       envWithIsolatedKeyPath(),
@@ -370,11 +370,42 @@ describe("stack mode routing", () => {
     expect(config.launchFrontend).toBe(true);
     expect(config.launchAgentServer).toBe(false);
     expect(config.launchAutomation).toBe(false);
-    expect(getLocalServiceRoutes(config)).toEqual([]);
+    // centrid is an external daemon (`centri up`), not launched by this
+    // script, so its same-origin mount is present in every launch mode.
+    expect(getLocalServiceRoutes(config)).toEqual([
+      ["/centri", "http://127.0.0.1:6789;strip-prefix"],
+    ]);
     expect(getFrontendBackend(config)).toBe(
       `http://localhost:${config.vitePort}`,
     );
-    expect(buildRouteArgs(getLocalServiceRoutes(config))).toEqual([]);
+    expect(buildRouteArgs(getLocalServiceRoutes(config))).toEqual([
+      "--route",
+      "/centri=http://127.0.0.1:6789;strip-prefix",
+    ]);
+  });
+
+  it("honors a CENTRID_URL override for the /centri route", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ CENTRID_URL: "http://127.0.0.1:7000" }),
+    );
+
+    expect(config.centridUrl).toBe("http://127.0.0.1:7000");
+    expect(getLocalServiceRoutes(config)).toContainEqual([
+      "/centri",
+      "http://127.0.0.1:7000;strip-prefix",
+    ]);
+  });
+
+  it("disables the /centri route when CENTRID_URL is empty", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ CENTRID_URL: "" }),
+    );
+
+    expect(config.centridUrl).toBeNull();
+    const routes = getLocalServiceRoutes(config);
+    expect(routes.map(([prefix]) => prefix)).not.toContain("/centri");
   });
 
   it("does not bake a host workspace path in frontend-only mode by default", async () => {
@@ -459,6 +490,10 @@ describe("stack mode routing", () => {
     expect(routes).toContainEqual([
       "/api",
       `http://localhost:${config.agentServerPort}`,
+    ]);
+    expect(routes).toContainEqual([
+      "/centri",
+      "http://127.0.0.1:6789;strip-prefix",
     ]);
 
     const routeArgs = buildRouteArgs(routes);

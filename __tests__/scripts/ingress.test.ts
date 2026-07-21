@@ -415,6 +415,140 @@ describe("ingress route matching", () => {
   });
 });
 
+describe("ingress strip-prefix routing", () => {
+  // Coverage for the `;strip-prefix` route flag used to mount the Centri
+  // panel daemon (centrid) under /centri: the matched prefix must be
+  // removed before proxying so centrid sees its own absolute paths.
+  let centridBackend: Server;
+  let plainBackend: Server;
+  let ingressProcess: ChildProcess;
+  let centridPort: number;
+  let plainPort: number;
+  let ingressPort: number;
+
+  beforeAll(async () => {
+    // Mock centrid: echoes the URL it receives.
+    centridBackend = createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ backend: "centrid", path: req.url }));
+    });
+    centridPort = await listenOnLoopback(centridBackend);
+
+    plainBackend = createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ backend: "plain", path: req.url }));
+    });
+    plainPort = await listenOnLoopback(plainBackend);
+
+    ingressPort = await getFreePort();
+    ingressProcess = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        ingressPort.toString(),
+        "--route",
+        `/centri=${originForPort(centridPort)};strip-prefix`,
+        // Longer, non-stripping route must still win over /centri.
+        "--route",
+        `/centri/passthrough=${originForPort(plainPort)}`,
+        "--default",
+        originForPort(plainPort),
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    await waitForPort(ingressPort, ingressProcess);
+  });
+
+  afterAll(async () => {
+    await stopChild(ingressProcess);
+    await closeServer(centridBackend);
+    await closeServer(plainBackend);
+  });
+
+  it("strips the matched prefix before proxying", async () => {
+    const response = await fetch(
+      `${originForPort(ingressPort)}/centri/api/settings`,
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.backend).toBe("centrid");
+    expect(data.path).toBe("/api/settings");
+  });
+
+  it("preserves query strings when stripping", async () => {
+    const response = await fetch(
+      `${originForPort(ingressPort)}/centri/api/memory/search?q=alpha&limit=5`,
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.backend).toBe("centrid");
+    expect(data.path).toBe("/api/memory/search?q=alpha&limit=5");
+  });
+
+  it("rewrites an exact prefix match to the backend root", async () => {
+    const response = await fetch(`${originForPort(ingressPort)}/centri`);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.backend).toBe("centrid");
+    expect(data.path).toBe("/");
+  });
+
+  it("lets a longer non-stripping route win over the stripping one", async () => {
+    const response = await fetch(
+      `${originForPort(ingressPort)}/centri/passthrough/x`,
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.backend).toBe("plain");
+    expect(data.path).toBe("/centri/passthrough/x");
+  });
+
+  it("never strips for the default backend", async () => {
+    const response = await fetch(`${originForPort(ingressPort)}/other/path`);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.backend).toBe("plain");
+    expect(data.path).toBe("/other/path");
+  });
+
+  it("rejects unknown route flags at startup", async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        (await getFreePort()).toString(),
+        "--route",
+        "/x=http://localhost:9999;bogus-flag",
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    const [code] = await once(child, "exit");
+
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("Unknown route flag");
+  });
+});
+
 describe("ingress socket-error resilience", () => {
   // Regression coverage for crashes like:
   //   Error: read ECONNRESET ... Emitted 'error' event on Socket instance

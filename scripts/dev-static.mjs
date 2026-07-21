@@ -415,6 +415,18 @@ function startStaticServer(config) {
       `/redoc=http://localhost:${config.agentServerPort}`,
       "--route",
       `/openapi.json=http://localhost:${config.agentServerPort}`,
+      // Same-origin mount for the Centri panel daemon (prefix stripped
+      // before proxying), plus the injected base URL so the pre-built
+      // frontend reaches centrid without CORS. Mirrors
+      // dev-with-automation.mjs getLocalServiceRoutes/startStaticFrontend.
+      ...(config.centridUrl
+        ? [
+            "--route",
+            `/centri=${config.centridUrl};strip-prefix`,
+            "--centrid-base-url",
+            "/centri",
+          ]
+        : []),
     ],
     {
       cwd: config.canvasPath,
@@ -455,6 +467,9 @@ function startIngress(config) {
       `/redoc=http://localhost:${config.agentServerPort}`,
       "--route",
       `/openapi.json=http://localhost:${config.agentServerPort}`,
+      ...(config.centridUrl
+        ? ["--route", `/centri=${config.centridUrl};strip-prefix`]
+        : []),
       "--default",
       `http://localhost:${config.vitePort}`,
     ],

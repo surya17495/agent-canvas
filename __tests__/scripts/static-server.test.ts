@@ -1,10 +1,21 @@
-import type { Server } from "node:http";
+import { createServer, type Server } from "node:http";
+import { spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
+import { connect as netConnect } from "node:net";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseArgs, startStaticServer } from "../../scripts/static-server.mjs";
+
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+const staticServerScript = path.join(repoRoot, "scripts", "static-server.mjs");
 
 describe("static-server.mjs", () => {
   const servers: Server[] = [];
@@ -109,6 +120,177 @@ describe("static-server.mjs", () => {
     it("treats empty string as null for runtime services info", () => {
       const config = parseArgs(["--runtime-services-info", ""]);
       expect(config.runtimeServicesInfo).toBeNull();
+    });
+
+    it("defaults centridBaseUrl to null", () => {
+      const config = parseArgs([]);
+      expect(config.centridBaseUrl).toBeNull();
+    });
+
+    it("parses --centrid-base-url", () => {
+      const config = parseArgs(["--centrid-base-url", "/centri"]);
+      expect(config.centridBaseUrl).toBe("/centri");
+    });
+
+    it("treats empty string as null for centridBaseUrl", () => {
+      const config = parseArgs(["--centrid-base-url", ""]);
+      expect(config.centridBaseUrl).toBeNull();
+    });
+  });
+
+  describe("centrid base URL injection", () => {
+    // The deployed stack mounts centrid at /centri on the same origin (see
+    // dev-with-automation.mjs). The pre-built frontend learns about it via
+    // this injected window global, read by `getCentridBaseUrl()` in
+    // src/api/centri/centri-config.ts.
+    it("exposes the base URL on window.__CENTRI_CENTRID_BASE_URL__", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, {
+        centridBaseUrl: "/centri",
+      });
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__CENTRI_CENTRID_BASE_URL__");
+      expect(body).toContain('"/centri"');
+    });
+
+    it("injects into SPA fallback index.html", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, {
+        centridBaseUrl: "/centri",
+      });
+      const response = await fetch(`${origin}/settings/memory`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("__CENTRI_CENTRID_BASE_URL__");
+    });
+
+    it("does not inject when centridBaseUrl is null", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, { centridBaseUrl: null });
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).not.toContain("__CENTRI_CENTRID_BASE_URL__");
+    });
+  });
+
+  describe("strip-prefix proxy routes", () => {
+    // Runs the static server as a child process: msw's request interceptor
+    // (vitest.setup.ts) wraps in-process http.ClientRequest and stalls the
+    // proxy's piped upstream request, so an in-process startStaticServer
+    // cannot exercise the proxy path under vitest.
+    async function getFreePort() {
+      const probe = createServer();
+      await new Promise<void>((resolve) =>
+        probe.listen(0, "127.0.0.1", () => resolve()),
+      );
+      const address = probe.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Probe server did not bind to a TCP port");
+      }
+      const { port } = address;
+      await new Promise<void>((resolve) => probe.close(() => resolve()));
+      return port;
+    }
+
+    async function waitForPort(port: number, child: ChildProcess) {
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        if (child.exitCode !== null) {
+          throw new Error(`Static server exited early: ${child.exitCode}`);
+        }
+        const connected = await new Promise<boolean>((resolve) => {
+          const socket = netConnect({ host: "127.0.0.1", port });
+          socket.setTimeout(500);
+          socket.once("connect", () => {
+            socket.destroy();
+            resolve(true);
+          });
+          socket.once("error", () => resolve(false));
+          socket.once("timeout", () => {
+            socket.destroy();
+            resolve(false);
+          });
+        });
+        if (connected) return;
+        await delay(50);
+      }
+      throw new Error(`Timed out waiting for port ${port}`);
+    }
+
+    it("strips the matched prefix before proxying to the backend", async () => {
+      const backend = createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ path: req.url }));
+      });
+      servers.push(backend);
+      await new Promise<void>((resolve) =>
+        backend.listen(0, "127.0.0.1", () => resolve()),
+      );
+      const backendAddress = backend.address();
+      if (!backendAddress || typeof backendAddress === "string") {
+        throw new Error("Backend did not bind to a TCP port");
+      }
+
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+      const port = await getFreePort();
+      const child = spawn(
+        process.execPath,
+        [
+          staticServerScript,
+          "--port",
+          port.toString(),
+          "--host",
+          "127.0.0.1",
+          "--dir",
+          buildDir,
+          "--route",
+          `/centri=http://127.0.0.1:${backendAddress.port};strip-prefix`,
+        ],
+        { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+      );
+
+      try {
+        await waitForPort(port, child);
+        const origin = `http://127.0.0.1:${port}`;
+
+        const response = await fetch(`${origin}/centri/api/settings?x=1`);
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(data.path).toBe("/api/settings?x=1");
+
+        // Non-matching paths still fall through to the static handler.
+        const staticResponse = await fetch(`${origin}/`);
+        expect(staticResponse.status).toBe(200);
+        await expect(staticResponse.text()).resolves.toContain("app");
+      } finally {
+        child.kill("SIGTERM");
+        await Promise.race([once(child, "exit"), delay(2000)]);
+        if (child.exitCode === null) child.kill("SIGKILL");
+      }
     });
   });
 
