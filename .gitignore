@@ -4,6 +4,7 @@ src/i18n/declaration.ts
 .env
 .envrc
 node_modules/
+node_modules
 build/
 logs/
 /.tmp/live-e2e-state/
