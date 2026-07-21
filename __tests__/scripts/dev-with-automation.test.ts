@@ -281,8 +281,11 @@ describe("buildConfig", () => {
   it("uses correct state directory path", async () => {
     const config = await buildConfig({}, envWithIsolatedKeyPath());
 
+    // Centri fork: default state lives under the Centri-owned root
+    // (~/.centri/canvas), never upstream's ~/.openhands — see
+    // scripts/state-paths.mjs (state-dir collision, centri SPEC §10).
     expect(config.stateDir).toBe(
-      path.join(homedir(), ".openhands", "agent-canvas"),
+      path.join(homedir(), ".centri", "canvas", "agent-canvas"),
     );
   });
 

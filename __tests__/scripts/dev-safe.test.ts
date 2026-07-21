@@ -598,8 +598,11 @@ describe("buildSafeDevConfig", () => {
     expect(config.backendBaseUrl).toBe("http://127.0.0.1:18000");
     expect(config.backendHost).toBe("127.0.0.1:18000");
     expect(config.workingDir).toBe(config.workspacesPath);
+    // Centri fork: default state lives under the Centri-owned root
+    // (~/.centri/canvas), never upstream's ~/.openhands — see
+    // scripts/state-paths.mjs (state-dir collision, centri SPEC §10).
     expect(config.stateDir).toBe(
-      path.join(homedir(), ".openhands", "agent-canvas"),
+      path.join(homedir(), ".centri", "canvas", "agent-canvas"),
     );
     expect(config.tmuxTmpDir).toBe(path.join(config.stateDir, "tmux"));
     expect(config.conversationsPath).toBe(

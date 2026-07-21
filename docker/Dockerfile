@@ -62,6 +62,7 @@ RUN node -e " \
     'CONFIG_AGENT_SERVER_PORT=' + c.ports.agentServer, \
     'CONFIG_AUTOMATION_PORT=' + c.ports.automation, \
     'CONFIG_PROXY_PORT=' + c.ports.proxy, \
+    'CONFIG_STATE_ROOT=' + c.paths.stateRoot, \
     'CONFIG_STATE_SUBDIR=' + c.paths.stateSubdir, \
     'CONFIG_CONVERSATIONS=' + c.paths.conversations, \
     'CONFIG_BASH_EVENTS=' + c.paths.bashEvents, \
@@ -148,20 +149,22 @@ RUN chmod +x /opt/agent-canvas/entrypoint.sh
 # Pre-create persistence directories with correct ownership so the
 # openhands user can write to them even when Docker creates anonymous
 # volumes (which default to root).
-RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
-             /home/openhands/.openhands/agent-canvas/bash_events \
-             /home/openhands/.openhands/automation \
+RUN mkdir -p /home/openhands/.centri/canvas/agent-canvas/conversations \
+             /home/openhands/.centri/canvas/agent-canvas/bash_events \
+             /home/openhands/.centri/canvas/automation \
              /projects && \
-    chown -R openhands:openhands /home/openhands/.openhands /projects
+    chown -R openhands:openhands /home/openhands/.centri /projects
 
 USER openhands
 
 # Persistence volumes:
-#   /home/openhands/.openhands — settings, secrets, conversations, automation DB
-#   /projects                  — user code the agent can read/edit
+#   /home/openhands/.centri/canvas — settings, secrets, conversations, automation DB
+#                                    (Centri-owned state root; see config/defaults.json
+#                                    paths.stateRoot and scripts/state-paths.mjs)
+#   /projects                      — user code the agent can read/edit
 # Bind-mount these for data to survive container restarts:
-#   docker run -v ~/.openhands:/home/openhands/.openhands -v ~/projects:/projects ...
-VOLUME ["/home/openhands/.openhands", "/projects"]
+#   docker run -v ~/.centri/canvas:/home/openhands/.centri/canvas -v ~/projects:/projects ...
+VOLUME ["/home/openhands/.centri/canvas", "/projects"]
 
 # The entrypoint starts all services and the ingress proxy.
 # Port 8000 is the unified entry point.

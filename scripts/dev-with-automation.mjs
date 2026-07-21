@@ -48,7 +48,6 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import process from "node:process";
 
@@ -71,6 +70,7 @@ import {
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+import { defaultStateDir } from "./state-paths.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -393,9 +393,7 @@ async function buildConfig(args, env = process.env) {
   // Both validate it via the `X-Session-API-Key` header.
   // LOCAL_BACKEND_API_KEY is the single user-facing env var: if set it's
   // used directly; otherwise one is auto-generated and persisted.
-  const stateDir =
-    env.OH_CANVAS_SAFE_STATE_DIR ||
-    join(homedir(), ".openhands", "agent-canvas");
+  const stateDir = env.OH_CANVAS_SAFE_STATE_DIR || defaultStateDir();
 
   const safeConfig = buildSafeDevConfig(projectRoot, {
     ...env,
@@ -833,7 +831,8 @@ function startAutomationBackend(config) {
             }
           : {}),
         AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
-        // ~/.openhands/automation/automations.db — matches docker/entrypoint.sh.
+        // <stateRoot>/automation/automations.db (e.g. ~/.centri/canvas/…)
+        // — matches docker/entrypoint.sh.
         AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(dirname(config.stateDir), SHARED_DEFAULTS.paths.automationDb)}`,
         // The automation backend uses this as its publicly-reachable base
         // URL: it's appended to callback URLs and injected into each
