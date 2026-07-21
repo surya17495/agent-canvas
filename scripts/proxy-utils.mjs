@@ -31,6 +31,66 @@ export function createRouter(routes, defaultBackend = null) {
   };
 }
 
+/**
+ * Parse a route target value into `{ url, strip }`.
+ *
+ * A target is a backend URL optionally followed by `;strip-prefix`, e.g.
+ * `http://127.0.0.1:6789;strip-prefix`. With `strip-prefix`, the matched
+ * route prefix is removed from the request URL before proxying, so a
+ * backend that serves its API at `/api/...` can be mounted under a
+ * non-colliding public prefix (e.g. `/centri/api/...` -> `/api/...`).
+ * Unknown flags are rejected so typos fail fast instead of silently
+ * proxying with the prefix intact.
+ */
+export function parseRouteTarget(value) {
+  const [url, ...flags] = String(value).split(";");
+  let strip = false;
+  for (const flag of flags) {
+    if (flag === "strip-prefix") {
+      strip = true;
+    } else {
+      throw new Error(`Unknown route flag: ${JSON.stringify(flag)}`);
+    }
+  }
+  return { url, strip };
+}
+
+/**
+ * Remove a matched route prefix from a request URL, preserving the query
+ * string and always returning a path that starts with "/".
+ */
+export function stripPathPrefix(url, prefix) {
+  const rest = url.slice(prefix.length);
+  if (rest === "") return "/";
+  if (rest.startsWith("?")) return `/${rest}`;
+  return rest;
+}
+
+/**
+ * Like {@link createRouter}, but returns `{ backend, url }` where `url` is
+ * the (possibly prefix-stripped) request URL to forward. Route values may
+ * carry the `;strip-prefix` flag (see {@link parseRouteTarget}). Matching
+ * semantics are identical: longest prefix wins, then the default backend
+ * (which never strips). Returns null when nothing matches.
+ */
+export function createRewriteRouter(routes, defaultBackend = null) {
+  const sortedRoutes = Object.entries(routes)
+    .map(([prefix, value]) => [prefix, parseRouteTarget(value)])
+    .sort(([a], [b]) => b.length - a.length);
+
+  return function route(url) {
+    for (const [prefix, target] of sortedRoutes) {
+      if (matchesPathPrefix(url, prefix)) {
+        return {
+          backend: target.url,
+          url: target.strip ? stripPathPrefix(url, prefix) : url,
+        };
+      }
+    }
+    return defaultBackend ? { backend: defaultBackend, url } : null;
+  };
+}
+
 export function isBenignSocketError(err) {
   return Boolean(err && BENIGN_SOCKET_ERRORS.has(err.code));
 }
