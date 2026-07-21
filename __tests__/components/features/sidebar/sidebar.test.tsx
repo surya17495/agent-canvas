@@ -72,9 +72,8 @@ vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
   StyledTooltip: ({ children }: { children: unknown }) => children,
 }));
 
-vi.mock("#/components/shared/buttons/openhands-logo-button", () => ({
-  OpenHandsLogoButton: () => <div data-testid="logo-button" />,
-}));
+// The Centri brand mark (CentriLogoButton) is deliberately NOT mocked —
+// the wordmark/monogram tests below assert its real rendering.
 
 vi.mock("#/components/features/sidebar/user-actions", () => ({
   UserActions: () => <div data-testid="user-actions" />,
@@ -230,6 +229,37 @@ describe("Sidebar", () => {
   afterEach(() => {
     window.localStorage.clear();
     useSidebarStore.setState({ collapsed: false });
+  });
+
+  it("shows a Memory nav item that routes to the Memory settings page", () => {
+    const { navigate } = renderSidebar("/conversations");
+
+    const memoryLink = screen.getByTestId("sidebar-memory-link");
+    expect(memoryLink).toBeInTheDocument();
+    expect(within(memoryLink).getByText("Memory")).toBeInTheDocument();
+
+    fireEvent.click(memoryLink);
+    expect(navigate).toHaveBeenCalledWith("/settings/memory", {
+      replace: false,
+    });
+  });
+
+  it("renders the Centri wordmark instead of the OpenHands logo", () => {
+    renderSidebar("/conversations");
+
+    const brandLink = screen.getByLabelText("Centri Logo");
+    expect(brandLink).toBeInTheDocument();
+    expect(within(brandLink).getByText("Centri")).toBeInTheDocument();
+    expect(screen.queryByLabelText("OpenHands Logo")).not.toBeInTheDocument();
+  });
+
+  it("renders the compact Centri monogram when collapsed", () => {
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    const brandLink = screen.getByLabelText("Centri Logo");
+    expect(within(brandLink).getByText("C")).toBeInTheDocument();
+    expect(within(brandLink).queryByText("Centri")).not.toBeInTheDocument();
   });
 
   it("opens and closes the mobile navigation drawer from the menu button", async () => {

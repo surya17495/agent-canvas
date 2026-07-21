@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
+  Library,
   Plus,
   Server,
   Settings,
 } from "lucide-react";
-import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
+import { CentriLogoButton } from "#/components/shared/buttons/centri-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
@@ -31,8 +32,6 @@ import {
 } from "./sidebar-layout";
 
 const ICON_SIZE = 18;
-const SIDEBAR_LOGO_WIDTH = 34;
-const SIDEBAR_LOGO_HEIGHT = Math.round((SIDEBAR_LOGO_WIDTH * 30) / 46);
 
 export interface SidebarRailBodyProps {
   collapsed: boolean;
@@ -96,11 +95,9 @@ export function SidebarRailBody({
               collapsed && showCollapsedExpandButton && "opacity-0",
             )}
           >
-            <OpenHandsLogoButton
-              logoWidth={SIDEBAR_LOGO_WIDTH}
-              logoHeight={SIDEBAR_LOGO_HEIGHT}
-              logoClassName="max-w-none"
-              className={cn(SIDEBAR_ICON_SLOT_CLASS, "overflow-visible")}
+            <CentriLogoButton
+              compact={collapsed}
+              className={cn(collapsed && SIDEBAR_ICON_SLOT_CLASS, "h-9")}
             />
           </div>
           {collapsed && showCollapseToggle ? (
@@ -204,6 +201,13 @@ export function SidebarRailBody({
           testId="sidebar-automations-link"
           collapsed={collapsed}
           icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
+        />
+        <SidebarNavLink
+          to="/settings/memory"
+          label={t(I18nKey.SIDEBAR$MEMORY)}
+          testId="sidebar-memory-link"
+          collapsed={collapsed}
+          icon={<Library width={ICON_SIZE} height={ICON_SIZE} />}
         />
       </nav>
 

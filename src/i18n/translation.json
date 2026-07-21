@@ -7190,6 +7190,23 @@
     "uk": "OpenHands лого",
     "ca": "Logotip d'OpenHands"
   },
+  "BRANDING$CENTRI_LOGO": {
+    "en": "Centri Logo",
+    "ja": "Centriロゴ",
+    "zh-CN": "Centri标志",
+    "zh-TW": "Centri標誌",
+    "ko-KR": "Centri 로고",
+    "de": "Centri Logo",
+    "no": "Centri Logo",
+    "it": "Logo Centri",
+    "pt": "Logo Centri",
+    "es": "Logo de Centri",
+    "ar": "شعار Centri",
+    "fr": "Logo Centri",
+    "tr": "Centri Logosu",
+    "uk": "Centri лого",
+    "ca": "Logotip de Centri"
+  },
   "ERROR$GENERIC": {
     "en": "An error occurred",
     "ja": "エラーが発生しました",
@@ -12510,6 +12527,23 @@
     "ja": "自動化",
     "uk": "Автоматизація",
     "ca": "Automatitza"
+  },
+  "SIDEBAR$MEMORY": {
+    "en": "Memory",
+    "ar": "الذاكرة",
+    "ca": "Memòria",
+    "de": "Speicher",
+    "es": "Memoria",
+    "fr": "Mémoire",
+    "it": "Memoria",
+    "ja": "メモリ",
+    "ko-KR": "메모리",
+    "no": "Minne",
+    "pt": "Memória",
+    "tr": "Bellek",
+    "uk": "Пам'ять",
+    "zh-CN": "记忆",
+    "zh-TW": "記憶"
   },
   "AUTOMATIONS$TITLE": {
     "en": "Automations",
