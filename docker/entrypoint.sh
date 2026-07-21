@@ -32,13 +32,13 @@
 #   FILE_STORE             – Storage backend for automation tarballs (default: local).
 #                          Without this the automation backend may fall back to
 #                          S3/GCS which fails without cloud credentials.
-#   LOCAL_STORAGE_PATH     – Directory for local file storage (default: ~/.openhands/storage)
+#   LOCAL_STORAGE_PATH     – Directory for local file storage (default: ~/.centri/canvas/storage)
 #   AUTOMATION_BASE_URL    – Publicly-reachable base URL for the automation
 #                          service, used in callback URLs and injected into
 #                          sandboxes (default: http://127.0.0.1:$PORT).
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
-#                          (default: ~/.openhands/workspaces)
+#                          (default: ~/.centri/canvas/workspaces)
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -60,11 +60,16 @@ AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/ca
 
 # Persistence paths — keep settings, conversations, bash history under a
 # single well-known directory that the VOLUME directive exposes.
-OPENHANDS_DIR="${HOME}/.openhands"
-STATE_DIR="${OPENHANDS_DIR}/${CONFIG_STATE_SUBDIR:-agent-canvas}"
-export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${OPENHANDS_DIR}}"
-export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
-export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
+# Centri fork: the state root is Centri-owned (~/.centri/canvas, from
+# config/defaults.json paths.stateRoot via defaults.env) — NOT upstream's
+# ~/.openhands, which may belong to a vanilla OpenHands install on the same
+# host (state-dir collision, centri SPEC §10). The directory shape below the
+# root is identical to upstream's shape below ~/.openhands.
+STATE_ROOT_DIR="${HOME}/${CONFIG_STATE_ROOT:-.centri/canvas}"
+STATE_DIR="${STATE_ROOT_DIR}/${CONFIG_STATE_SUBDIR:-agent-canvas}"
+export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${STATE_ROOT_DIR}}"
+export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${STATE_ROOT_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
+export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${STATE_ROOT_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
 
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
@@ -169,7 +174,7 @@ export AUTOMATION_FRONTEND_DIR=""
 # to a cloud provider (S3/GCS) which will fail without credentials, causing
 # tarball-based presets (preset/prompt, preset/plugin) to silently error.
 export FILE_STORE="${FILE_STORE:-local}"
-export LOCAL_STORAGE_PATH="${LOCAL_STORAGE_PATH:-${OPENHANDS_DIR}/storage}"
+export LOCAL_STORAGE_PATH="${LOCAL_STORAGE_PATH:-${STATE_ROOT_DIR}/storage}"
 mkdir -p "$LOCAL_STORAGE_PATH"
 
 # AUTOMATION_BASE_URL — the publicly-reachable base URL for the automation
@@ -178,14 +183,14 @@ mkdir -p "$LOCAL_STORAGE_PATH"
 export AUTOMATION_BASE_URL="${AUTOMATION_BASE_URL:-http://127.0.0.1:${PORT}}"
 
 # AUTOMATION_WORKSPACE_BASE — where automation runs unpack tarballs.
-export AUTOMATION_WORKSPACE_BASE="${AUTOMATION_WORKSPACE_BASE:-${OPENHANDS_DIR}/workspaces}"
+export AUTOMATION_WORKSPACE_BASE="${AUTOMATION_WORKSPACE_BASE:-${STATE_ROOT_DIR}/workspaces}"
 mkdir -p "$AUTOMATION_WORKSPACE_BASE"
 
 # Default to SQLite so the automation server works out of the box without
 # an external PostgreSQL instance. Users can override AUTOMATION_DB_URL to
 # point at a real Postgres for production deployments.
 if [ -z "${AUTOMATION_DB_URL:-}" ]; then
-  AUTOMATION_DB_FILE="${OPENHANDS_DIR}/${CONFIG_AUTOMATION_DB:-automation/automations.db}"
+  AUTOMATION_DB_FILE="${STATE_ROOT_DIR}/${CONFIG_AUTOMATION_DB:-automation/automations.db}"
   mkdir -p "$(dirname "$AUTOMATION_DB_FILE")"
   export AUTOMATION_DB_URL="sqlite+aiosqlite:///${AUTOMATION_DB_FILE}"
   log "Using SQLite database: $AUTOMATION_DB_URL"

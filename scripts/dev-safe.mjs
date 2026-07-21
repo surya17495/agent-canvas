@@ -10,7 +10,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import net from "node:net";
-import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -26,6 +25,9 @@ import {
 // (dev-with-automation.mjs and tests still import it from here).
 import { buildRuntimeServicesInfo } from "./runtime-services-info.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+// Centri fork: all default state paths live under the Centri-owned root
+// (~/.centri/canvas), never upstream's ~/.openhands — see state-paths.mjs.
+import { defaultStateDir, legacyStateNotice } from "./state-paths.mjs";
 
 // ── Centralized config (single source of truth for versions, ports, etc.) ───
 const __dev_safe_dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,27 +73,21 @@ export function generateRandomApiKey() {
 //
 // To rotate the key, delete this file. To pin a key explicitly, export
 // LOCAL_BACKEND_API_KEY — it takes precedence over the persisted file.
-export const DEFAULT_API_KEY_PATH = path.join(
-  homedir(),
-  ".openhands",
-  "agent-canvas",
-  "api-key.txt",
-);
+export const DEFAULT_API_KEY_PATH = path.join(defaultStateDir(), "api-key.txt");
 
 /** @deprecated Use DEFAULT_API_KEY_PATH */
 export const DEFAULT_SESSION_API_KEY_PATH = DEFAULT_API_KEY_PATH;
 
 // Where the OH_SECRET_KEY is persisted so dev mode and Docker mode share the
-// same encryption key when both use ~/.openhands as their state directory.
-// docker/entrypoint.sh reads and writes this same file, so whichever mode runs
-// first generates the key and the other picks it up automatically.
+// same encryption key when both use the Centri state root (~/.centri/canvas)
+// as their state directory. docker/entrypoint.sh reads and writes this same
+// file, so whichever mode runs first generates the key and the other picks it
+// up automatically.
 //
 // To rotate the key, delete this file and restart both modes. To pin a key
 // explicitly, export OH_SECRET_KEY — that takes precedence over the file.
 export const DEFAULT_SECRET_KEY_PATH = path.join(
-  homedir(),
-  ".openhands",
-  "agent-canvas",
+  defaultStateDir(),
   "secret-key.txt",
 );
 
@@ -610,21 +606,19 @@ function buildConfigFromPorts(ports, cwd, env) {
   const { backendPort, vscodePort } = ports;
   const stateDir = path.resolve(
     cwd,
-    env.OH_CANVAS_SAFE_STATE_DIR ||
-      path.join(homedir(), ".openhands", "agent-canvas"),
+    env.OH_CANVAS_SAFE_STATE_DIR || defaultStateDir(),
   );
   const conversationsPath = path.join(stateDir, "dev_conversations");
   const workspacesPath = path.join(stateDir, "workspaces");
   // Use provided secret key, or read/generate one persisted to
-  // ~/.openhands/agent-canvas/secret-key.txt. Persisting ensures dev mode
+  // <stateRoot>/agent-canvas/secret-key.txt. Persisting ensures dev mode
   // and Docker mode share the same encryption key when they mount the same
-  // ~/.openhands directory (docker/entrypoint.sh reads/writes the same file).
-  const secretKeyPath =
-    env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
+  // state root (docker/entrypoint.sh reads/writes the same file).
+  const secretKeyPath = env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
   const secretKey =
     env.OH_SECRET_KEY || getOrCreatePersistedApiKey(secretKeyPath, "secret");
   // Use the user-provided LOCAL_BACKEND_API_KEY or fall back to a key
-  // persisted to ~/.openhands/agent-canvas/api-key.txt. Persisting on disk
+  // persisted to <stateRoot>/agent-canvas/api-key.txt. Persisting on disk
   // keeps the agent-server, the Vite-baked VITE_SESSION_API_KEY, and any
   // `openhands-backends` localStorage entries the frontend has cached all
   // pointing at the same value across dev restarts.
@@ -646,8 +640,8 @@ function buildConfigFromPorts(ports, cwd, env) {
     backendPort,
     vscodePort,
     stateDir,
-    // tmux socket directory. Defaults to <stateDir>/tmux (under
-    // ~/.openhands/agent-canvas), matching where the rest of dev state lives
+    // tmux socket directory. Defaults to <stateDir>/tmux (under the Centri
+    // state root), matching where the rest of dev state lives
     // and persisting across restarts.
     //
     // Do NOT use os.tmpdir() here: on macOS it resolves to the per-user
@@ -698,7 +692,9 @@ export function buildAgentServerEnv(config) {
     // This is a no-op on Linux/macOS where the locale is already UTF-8.
     PYTHONUTF8: "1",
     TMUX_TMPDIR: config.tmuxTmpDir,
-    // Parent of stateDir (= ~/.openhands) so settings/secrets match Docker.
+    // Parent of stateDir (= the Centri state root, ~/.centri/canvas) so
+    // settings/secrets match Docker — and never vanilla OpenHands'
+    // ~/.openhands (state-dir collision, centri SPEC §10).
     OH_PERSISTENCE_DIR: path.dirname(config.stateDir),
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
@@ -871,6 +867,10 @@ async function main() {
   console.log(`- vscode port: ${config.vscodePort}`);
   console.log(`- working dir: ${config.workingDir}`);
   console.log(`- isolated state dir: ${config.stateDir}`);
+  const migrationNotice = legacyStateNotice();
+  if (migrationNotice && !process.env.OH_CANVAS_SAFE_STATE_DIR) {
+    console.log(`- ${migrationNotice}`);
+  }
   console.log(`- secret key: ${secretKeySource}`);
   console.log(`- session API key: ${sessionKeySource}`);
   console.log("");

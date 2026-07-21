@@ -22,6 +22,8 @@
     "proxy": 8000
   },
   "paths": {
+    "_comment": "stateRoot is the HOME-relative, Centri-owned root for ALL runtime state (analogue of upstream's ~/.openhands; POSIX-style, consumed by scripts/state-paths.mjs and docker/entrypoint.sh via defaults.env). The fork must never share ~/.openhands with vanilla OpenHands — that collision happened live on the U1 dev VM (centri SPEC §10). All other entries are relative to stateRoot and keep upstream's exact shape.",
+    "stateRoot": ".centri/canvas",
     "stateSubdir": "agent-canvas",
     "conversations": "agent-canvas/conversations",
     "bashEvents": "agent-canvas/bash_events",

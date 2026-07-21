@@ -90,11 +90,11 @@ agent-canvas --backend-only   # agent server + automation backend + ingress only
 
 ```sh
 export PROJECTS_PATH="$HOME/projects"  # directory containing your project folders
-mkdir -p "$PROJECTS_PATH" "$HOME/.openhands"
+mkdir -p "$PROJECTS_PATH" "$HOME/.centri/canvas"
 
 docker run -it --rm \
   -p 8000:8000 \
-  -v "$HOME/.openhands:/home/openhands/.openhands" \
+  -v "$HOME/.centri/canvas:/home/openhands/.centri/canvas" \
   -v "${PROJECTS_PATH}:/projects" \
   ghcr.io/openhands/agent-canvas:1.4.0 # x-release-please-version
 ```

@@ -61,6 +61,7 @@ import {
   buildAutomationCommand,
   buildConfig,
 } from "./dev-with-automation.mjs";
+import { legacyStateNotice } from "./state-paths.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -526,6 +527,10 @@ function printBanner(config) {
   );
   console.log("");
   console.log(`${c.dim}State directory: ${config.stateDir}${c.reset}`);
+  const migrationNotice = legacyStateNotice();
+  if (migrationNotice && !process.env.OH_CANVAS_SAFE_STATE_DIR) {
+    console.log(`${c.yellow}${migrationNotice}${c.reset}`);
+  }
   console.log(
     `${c.dim}Frontend served from: ${join(config.canvasPath, "build")}${c.reset}`,
   );
