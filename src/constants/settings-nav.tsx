@@ -65,7 +65,7 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
   },
   {
     icon: <Library className="size-4" strokeWidth={2} aria-hidden />,
-    to: "/settings/memory",
+    to: "/memory",
     text: "SETTINGS$NAV_MEMORY",
     subtitle: "SETTINGS$PAGE_MEMORY_SUBLINE",
   },

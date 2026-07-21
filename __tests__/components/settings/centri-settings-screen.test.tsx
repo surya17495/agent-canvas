@@ -11,7 +11,7 @@ import type { CentriSettings } from "#/api/centri/centri.types";
 
 const hasTokenMock = vi.hoisted(() => vi.fn<() => boolean>());
 vi.mock("#/api/centri/centri-config", () => ({
-  hasCentriPanelToken: hasTokenMock,
+  hasCentriMutationPath: hasTokenMock,
 }));
 
 const successToast = vi.hoisted(() => vi.fn());

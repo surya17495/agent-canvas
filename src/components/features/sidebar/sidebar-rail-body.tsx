@@ -203,7 +203,7 @@ export function SidebarRailBody({
           icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
         />
         <SidebarNavLink
-          to="/settings/memory"
+          to="/memory"
           label={t(I18nKey.SIDEBAR$MEMORY)}
           testId="sidebar-memory-link"
           collapsed={collapsed}

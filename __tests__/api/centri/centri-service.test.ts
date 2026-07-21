@@ -12,6 +12,7 @@ const getTokenMock = vi.hoisted(() => vi.fn<() => string | null>());
 vi.mock("#/api/centri/centri-config", () => ({
   getCentridBaseUrl: () => "http://127.0.0.1:6789",
   getCentriPanelToken: getTokenMock,
+  hasCentriProxyAuth: () => false,
 }));
 
 function jsonResponse(body: unknown, init?: { ok?: boolean; status?: number }) {

@@ -88,6 +88,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     lockToCloud: null,
     basePath: "/",
     centridBaseUrl: null,
+    proxyBearer: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -132,6 +133,31 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "--centrid-base-url":
         config.centridBaseUrl = argv[++i] || null;
         break;
+      case "--proxy-bearer": {
+        // <prefix>=<ENV_NAME> — inject `Authorization: Bearer $ENV_NAME` into
+        // proxied MUTATION requests under <prefix> (server-side, SPEC §3.12).
+        // The token is read from the environment, NEVER from argv, so it
+        // can't leak via `ps` — and it never reaches the browser: only the
+        // boolean `window.__CENTRI_PANEL_PROXY_AUTH__` is injected into
+        // index.html so the UI knows mutations are authorized.
+        const value = argv[++i];
+        const eq = value?.indexOf("=") ?? -1;
+        if (eq < 0) {
+          throw new Error(
+            `Invalid --proxy-bearer (expected /prefix=ENV_NAME): ${value}`,
+          );
+        }
+        const prefix = value.slice(0, eq);
+        const envName = value.slice(eq + 1);
+        if (!prefix.startsWith("/")) {
+          throw new Error(`--proxy-bearer prefix must start with '/': ${prefix}`);
+        }
+        if (!envName) {
+          throw new Error(`--proxy-bearer is missing the env var name: ${value}`);
+        }
+        config.proxyBearer = { prefix, envName };
+        break;
+      }
       case "--base-path":
         config.basePath = normalizeBasePath(argv[++i]);
         break;
@@ -219,6 +245,15 @@ OPTIONS:
                                so the pre-built frontend reaches centrid
                                through a same-origin path (e.g. /centri)
                                instead of the loopback default.
+  --proxy-bearer <prefix>=<ENV_NAME>
+                               Inject "Authorization: Bearer $ENV_NAME" into
+                               proxied POST/PUT/PATCH/DELETE requests under
+                               <prefix> when the client sent no Authorization
+                               header. The token is read from the environment
+                               (never argv) and never reaches the browser —
+                               only window.__CENTRI_PANEL_PROXY_AUTH__=true is
+                               injected into index.html so the UI offers
+                               mutations. Exits if the env var is unset.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -294,6 +329,7 @@ function makeConfigInjectionScript(
   lockToCloud,
   basePath,
   centridBaseUrl,
+  centriProxyAuth,
 ) {
   const parts = [];
 
@@ -349,6 +385,11 @@ function makeConfigInjectionScript(
     );
   }
 
+  if (centriProxyAuth) {
+    // Boolean ONLY — the token itself stays server-side (SPEC §3.12).
+    parts.push(`window.__CENTRI_PANEL_PROXY_AUTH__=true;`);
+  }
+
   if (parts.length === 0) return "";
 
   return `<script>(function(){${parts.join("")}}());</script>`;
@@ -369,6 +410,7 @@ async function serveInjectedIndexHtml(
     lockToCloud,
     basePath,
     centridBaseUrl,
+    centriProxyAuth,
   } = {},
 ) {
   let content;
@@ -385,6 +427,7 @@ async function serveInjectedIndexHtml(
     lockToCloud,
     basePath,
     centridBaseUrl,
+    centriProxyAuth,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -434,6 +477,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.runtimeServicesInfo ||
     injectionOpts.lockToCloud ||
     injectionOpts.centridBaseUrl ||
+    injectionOpts.centriProxyAuth ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -568,11 +612,41 @@ async function handleStatic(
 // Server
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Methods that need the injected bearer; reads stay unauthenticated. */
+const PROXY_BEARER_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** True when `url`'s path falls under `prefix` (segment-aware, query-safe). */
+function underPathPrefix(url, prefix) {
+  if (!url.startsWith(prefix)) return false;
+  const next = url.charAt(prefix.length);
+  return next === "" || next === "/" || next === "?";
+}
+
+/**
+ * Resolves --proxy-bearer into `{ prefix, token }`, reading the token from
+ * the environment. Fail-closed: a configured flag with a missing/empty env
+ * var is a deploy misconfiguration — exit loudly instead of silently serving
+ * a UI whose mutations would all 401.
+ */
+function resolveProxyBearer(proxyBearer) {
+  if (!proxyBearer) return null;
+  const token = (process.env[proxyBearer.envName] ?? "").trim();
+  if (!token) {
+    console.error(
+      `ERROR: --proxy-bearer names env var ${proxyBearer.envName}, ` +
+        `but it is not set (or empty).`,
+    );
+    process.exit(1);
+  }
+  return { prefix: proxyBearer.prefix, token };
+}
+
 export function startStaticServer(config) {
   // No default backend: the static handler below is the fallback.
   const route = createRewriteRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
+  const proxyBearer = resolveProxyBearer(config.proxyBearer);
   const injectionOpts = {
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
@@ -580,6 +654,7 @@ export function startStaticServer(config) {
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),
     centridBaseUrl: config.centridBaseUrl || null,
+    centriProxyAuth: Boolean(proxyBearer),
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];
@@ -588,8 +663,21 @@ export function startStaticServer(config) {
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
-    const match = route(req.url ?? "/");
+    const originalUrl = req.url ?? "/";
+    const match = route(originalUrl);
     if (match) {
+      // Server-side bearer injection (SPEC §3.12): mutation requests under
+      // the configured prefix get the token added HERE, at the same-origin
+      // proxy — the browser never holds it. An explicit client header (the
+      // browser-token dev seam) always wins; reads pass through untouched.
+      if (
+        proxyBearer &&
+        underPathPrefix(originalUrl, proxyBearer.prefix) &&
+        PROXY_BEARER_METHODS.has(req.method ?? "") &&
+        !req.headers.authorization
+      ) {
+        req.headers.authorization = `Bearer ${proxyBearer.token}`;
+      }
       req.url = match.url;
       proxy.proxyHttp(req, res, match.backend);
       return;

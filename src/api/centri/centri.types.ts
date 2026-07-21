@@ -147,3 +147,90 @@ export interface CentriMemoryForgetResponse {
   kind: CentriMemoryKind;
   forgotten: boolean;
 }
+
+// -- memory graph + engine-memory mutations (C8, SPEC §3.10/§9 2026-07-21) ---
+//
+// The graph feed passes the engine's `DocumentWithMemories` objects through
+// UNTOUCHED (centrid does not normalize them) because the upstream
+// `@supermemory/memory-graph` component consumes that exact shape. Only the
+// fields our own list/edit UI reads are typed here; everything else is
+// carried along via the index signature.
+
+/**
+ * One memory entry inside a document's `memoryEntries` version chain
+ * (live-accepted shape at pin `server-v0.0.5`, SPEC §9 update 2026-07-21).
+ */
+export interface CentriEngineMemoryEntry {
+  id: string;
+  memory: string;
+  version: number;
+  isLatest: boolean;
+  isForgotten: boolean;
+  parentMemoryId: string | null;
+  rootMemoryId: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  [extra: string]: unknown;
+}
+
+/** One raw `DocumentWithMemories` from the graph feed (passthrough). */
+export interface CentriGraphDocument {
+  id: string;
+  title?: string | null;
+  containerTags?: string[];
+  memoryEntries: CentriEngineMemoryEntry[];
+  [extra: string]: unknown;
+}
+
+/** Engine pagination passthrough (per-role page/limit; totals merged). */
+export interface CentriGraphPagination {
+  currentPage?: number;
+  limit?: number;
+  totalItems?: number;
+  totalPages?: number;
+  [extra: string]: unknown;
+}
+
+/** Response of `GET /api/memory/graph`. */
+export interface CentriMemoryGraphResponse {
+  user: string;
+  roles: string[];
+  container_tags: string[];
+  documents: CentriGraphDocument[];
+  pagination: CentriGraphPagination;
+}
+
+/** One memory to create via `POST /api/memory/engine/{role}`. */
+export interface CentriEngineMemorySpec {
+  content: string;
+  is_static?: boolean;
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Response of `POST /api/memory/engine/{role}` (201). */
+export interface CentriEngineMemoryCreateResponse {
+  role: string;
+  container_tag: string;
+  /** Spine intent event id — the mutation's audit anchor (§3.10). */
+  spine_event_id: number;
+  document_id: string | null;
+  memories: Array<Record<string, unknown>>;
+}
+
+/** Response of `PATCH /api/memory/engine/{role}/{memory_id}`. */
+export interface CentriEngineMemoryUpdateResponse {
+  role: string;
+  container_tag: string;
+  spine_event_id: number;
+  /** The NEW engine version object; the old version stays, `isLatest:false`. */
+  memory: CentriEngineMemoryEntry;
+}
+
+/** Response of `DELETE /api/memory/engine/{role}/{memory_id}` (soft forget). */
+export interface CentriEngineMemoryForgetResponse {
+  role: string;
+  container_tag: string;
+  spine_event_id: number;
+  id: string;
+  forgotten: boolean;
+}

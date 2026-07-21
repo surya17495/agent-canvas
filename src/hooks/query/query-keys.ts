@@ -51,6 +51,9 @@ export const CENTRI_QUERY_KEYS = {
   memoryStores: ["centri", "memory", "stores"] as const,
   memoryStore: (role: string, kind: string) =>
     ["centri", "memory", "store", role, kind] as const,
+  /** Graph feed; keyed by role filter ("" = all roles merged). */
+  memoryGraph: (role: string) => ["centri", "memory", "graph", role] as const,
+  memoryGraphAll: ["centri", "memory", "graph"] as const,
 } as const;
 
 export const PLUGINS_QUERY_KEYS = {

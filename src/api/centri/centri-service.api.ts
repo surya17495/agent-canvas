@@ -7,10 +7,19 @@
  * the UI can render distinct states (unauthorized / engine-unavailable /
  * not-found / invalid / unreachable) rather than a generic failure.
  */
-import { getCentridBaseUrl, getCentriPanelToken } from "./centri-config";
+import {
+  getCentridBaseUrl,
+  getCentriPanelToken,
+  hasCentriProxyAuth,
+} from "./centri-config";
 import type {
+  CentriEngineMemoryCreateResponse,
+  CentriEngineMemoryForgetResponse,
+  CentriEngineMemorySpec,
+  CentriEngineMemoryUpdateResponse,
   CentriHealth,
   CentriMemoryForgetResponse,
+  CentriMemoryGraphResponse,
   CentriMemoryKind,
   CentriMemoryListResponse,
   CentriMemoryStoreContent,
@@ -114,16 +123,23 @@ async function centriFetch(
 }
 
 /**
- * Authorization header for a mutation. Fails closed *before* the network when
- * no panel token is configured — `centrid` would return 401 anyway, so the UI
- * short-circuits and explains why instead of issuing a guaranteed-401 request.
+ * Authorization header for a mutation. Two authorized paths (SPEC §3.12):
+ * a browser-held token (dev seam) yields an explicit Bearer header; the
+ * server-side proxy-injection posture yields NO header — the same-origin
+ * static server adds it before forwarding, so the token never exists in the
+ * browser. With neither, fails closed *before* the network — `centrid` would
+ * return 401 anyway, so the UI short-circuits and explains why instead of
+ * issuing a guaranteed-401 request.
  */
 function mutationHeaders(): Record<string, string> {
   const token = getCentriPanelToken();
-  if (!token) {
-    throw new CentriUnauthorizedError("No panel token configured.");
+  if (token) {
+    return { [AUTHORIZATION_HEADER]: `Bearer ${token}` };
   }
-  return { [AUTHORIZATION_HEADER]: `Bearer ${token}` };
+  if (hasCentriProxyAuth()) {
+    return {};
+  }
+  throw new CentriUnauthorizedError("No panel token configured.");
 }
 
 /** Path to one authored store, with role + kind percent-encoded as segments. */
@@ -157,16 +173,11 @@ const CentriService = {
    * single session, or omit it to pump all pending sessions.
    */
   async pump(sessionId?: string): Promise<CentriPumpResponse> {
-    const token = getCentriPanelToken();
-    if (!token) {
-      throw new CentriUnauthorizedError("No panel token configured.");
-    }
-
     const response = await centriFetch("/api/pump", {
       method: "POST",
       headers: {
         [CONTENT_TYPE_HEADER]: JSON_CONTENT_TYPE,
-        [AUTHORIZATION_HEADER]: `Bearer ${token}`,
+        ...mutationHeaders(),
       },
       body: JSON.stringify(sessionId ? { session_id: sessionId } : {}),
     });
@@ -238,6 +249,96 @@ const CentriService = {
     });
     if (!response.ok) await throwForStatus(response);
     return (await response.json()) as CentriMemoryForgetResponse;
+  },
+
+  /**
+   * `GET /api/memory/graph` — the graph feed: raw `DocumentWithMemories`
+   * passthrough for `@supermemory/memory-graph` (C8). Omit `role` to merge
+   * every known role's container. Unauthenticated (loopback read surface);
+   * engine-down maps to {@link CentriEngineUnavailableError} (502).
+   */
+  async getMemoryGraph(
+    role?: string,
+    page = 1,
+    limit = 100,
+  ): Promise<CentriMemoryGraphResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (role) params.set("role", role);
+    const response = await centriFetch(`/api/memory/graph?${params}`);
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriMemoryGraphResponse;
+  },
+
+  /**
+   * `POST /api/memory/engine/{role}` — add engine memories (spine-first,
+   * §3.10: centrid records the intent event BEFORE calling the engine).
+   * Auth-gated (fail-closed); engine-down maps to 502.
+   */
+  async createEngineMemories(
+    role: string,
+    memories: CentriEngineMemorySpec[],
+  ): Promise<CentriEngineMemoryCreateResponse> {
+    const response = await centriFetch(
+      `/api/memory/engine/${encodeURIComponent(role)}`,
+      {
+        method: "POST",
+        headers: {
+          [CONTENT_TYPE_HEADER]: JSON_CONTENT_TYPE,
+          ...mutationHeaders(),
+        },
+        body: JSON.stringify({ memories }),
+      },
+    );
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriEngineMemoryCreateResponse;
+  },
+
+  /**
+   * `PATCH /api/memory/engine/{role}/{memory_id}` — revise one engine memory.
+   * The engine creates a NEW version (old stays, `isLatest:false`); spine
+   * intent event recorded first (§3.10). Auth-gated (fail-closed).
+   */
+  async updateEngineMemory(
+    role: string,
+    memoryId: string,
+    newContent: string,
+  ): Promise<CentriEngineMemoryUpdateResponse> {
+    const response = await centriFetch(
+      `/api/memory/engine/${encodeURIComponent(role)}/${encodeURIComponent(memoryId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          [CONTENT_TYPE_HEADER]: JSON_CONTENT_TYPE,
+          ...mutationHeaders(),
+        },
+        body: JSON.stringify({ new_content: newContent }),
+      },
+    );
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriEngineMemoryUpdateResponse;
+  },
+
+  /**
+   * `DELETE /api/memory/engine/{role}/{memory_id}` — soft-forget one engine
+   * memory (`isForgotten:true`, excluded from recall; §3.14 forget matrix).
+   * Spine intent event recorded first (§3.10). Auth-gated (fail-closed).
+   */
+  async forgetEngineMemory(
+    role: string,
+    memoryId: string,
+  ): Promise<CentriEngineMemoryForgetResponse> {
+    const response = await centriFetch(
+      `/api/memory/engine/${encodeURIComponent(role)}/${encodeURIComponent(memoryId)}`,
+      {
+        method: "DELETE",
+        headers: { ...mutationHeaders() },
+      },
+    );
+    if (!response.ok) await throwForStatus(response);
+    return (await response.json()) as CentriEngineMemoryForgetResponse;
   },
 };
 
