@@ -5,7 +5,10 @@
  * see `centri/config.py` `CENTRI_PANEL_HOST` / `CENTRI_PANEL_PORT`). The
  * Settings UI needs two pieces of deployment-supplied config to talk to it:
  *
- *   1. Base URL — where `centrid` is listening.
+ *   1. Base URL — where `centrid` is reachable from the browser: an
+ *      absolute `http(s)://` URL, or a same-origin path like `/centri`
+ *      when the deployment proxies centrid under the app's own origin
+ *      (the ingress strips the prefix before forwarding).
  *   2. Panel token — the bearer token that authorizes *mutations*
  *      (`POST /api/pump`). Reads are unauthenticated (loopback surface).
  *
@@ -34,6 +37,10 @@ function normalizeBaseUrl(value?: string | null): string | null {
   if (!value) return null;
   const trimmed = value.trim().replace(/\/+$/, "");
   if (!trimmed) return null;
+  // Path-relative base (e.g. "/centri"): same-origin proxy mount. Kept
+  // as-is so `${base}${path}` concatenation stays same-origin. A bare "/"
+  // has already normalized to "" (null) above.
+  if (trimmed.startsWith("/")) return trimmed;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `http://${trimmed}`;
 }

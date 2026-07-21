@@ -1,7 +1,11 @@
-# HANDOFF: Remote centrid access + Centri identity (WIP)
+# HANDOFF: Remote centrid access + Centri identity
 
-Status: **IN PROGRESS — do not merge.** Branch `centri/remote-centrid`, worktree on VM at
-`/tmp/remote-centrid` (node_modules symlinked to `~/u1-live/agent-canvas/node_modules`).
+Status: **PR A implementation complete — awaiting owner review.** Branch
+`centri/remote-centrid`, worktree on VM at `/tmp/remote-centrid` (node_modules symlinked
+to `~/u1-live/agent-canvas/node_modules`). Verified on the VM: `npm run typecheck` clean,
+targeted vitest suites green (`__tests__/scripts/{ingress,static-server,
+dev-with-automation,dev-static}.test.ts`, `__tests__/api/centri/`), `npm run build` OK.
+PR B (Centri identity) is not started — see below.
 Owner protocol: never touch the `HUMAN:` section of PR templates; no merge without owner
 approval; squash-merge + delete branch.
 
@@ -44,57 +48,33 @@ posture decision.
   strips; returns null on no match). `createRouter` untouched (other callers).
 - `scripts/ingress.mjs`: switched to `createRewriteRouter`; HTTP + WebSocket handlers set
   `req.url = match.url` before proxying; help/docs updated.
+- `scripts/static-server.mjs`: routes now go through `createRewriteRouter` (static
+  handler stays the fallback; HTTP + upgrade handlers rewrite `req.url`); new
+  `--centrid-base-url` arg → injected `window.__CENTRI_CENTRID_BASE_URL__` (wired
+  through `makeConfigInjectionScript`, `serveInjectedIndexHtml`,
+  `needsRuntimeInjection`); help text updated.
+- `src/api/centri/centri-config.ts`: `normalizeBaseUrl` accepts path-relative values
+  (`/centri`); doc comment updated.
+- `scripts/dev-with-automation.mjs`: `buildConfig` gains `centridUrl` (CENTRID_URL env
+  override, empty string disables, default loopback :6789); `CENTRI_ROUTE_PREFIX`
+  constant; `getLocalServiceRoutes` pushes the strip-prefix `/centri` route (feeds both
+  ingress and static-server); `startStaticFrontend` passes `--centrid-base-url /centri`.
+- `scripts/dev-static.mjs`: same `/centri` route added by hand to its static-server and
+  ingress args, plus `--centrid-base-url /centri`.
+- Tests: `ingress.test.ts` strip-prefix suite (strip, query preservation, exact-match →
+  `/`, longest-prefix precedence, no-strip default, unknown flag rejection);
+  `static-server.test.ts` `--centrid-base-url` parse/injection suite + child-process
+  strip-prefix proxy test (in-process proxying stalls under msw's interceptor — see
+  comment in the test); new `centri-config.test.ts` (path-relative base URLs, env
+  precedence, token seam); `dev-with-automation.test.ts` route-table assertions updated
+  (`/centri` present in every launch mode, CENTRID_URL override/disable).
 
-### TODO (in order)
+### Remaining (after owner approval + squash-merge)
 
-1. `scripts/static-server.mjs`:
-   - `startStaticServer` (~line 541): switch `createRouter(config.routes)` →
-     `createRewriteRouter(config.routes)` (no default arg — static handler is the
-     fallback); in both the request handler and `upgrade` handler, when match non-null set
-     `req.url = match.url` then proxy to `match.backend`.
-   - New arg `--centrid-base-url <url-or-path>` → `config.centridBaseUrl` (default null)
-     → `injectionOpts.centridBaseUrl` → `makeConfigInjectionScript` emits
-     `window.__CENTRI_CENTRID_BASE_URL__=<JSON.stringify(value)>;` → include in
-     `needsRuntimeInjection`. Update help text. Note: `makeConfigInjectionScript` takes
-     positional args; `serveInjectedIndexHtml` destructures an opts object — add the new
-     field to both.
-2. `src/api/centri/centri-config.ts` `normalizeBaseUrl`: accept path-relative values —
-   after trimming trailing slashes, `if (trimmed.startsWith("/")) return trimmed;` before
-   the `https?://` test ("/" alone already normalizes to null). Update file doc comment.
-   `centri-service.api.ts` concatenates `${getCentridBaseUrl()}${path}` so `/centri` works
-   as-is.
-3. `scripts/dev-with-automation.mjs` (THE production path — `bin/agent-canvas.mjs` calls
-   its `main({staticMode:true})`):
-   - `buildConfig` (~line 328, return ~419): add `centridUrl`: `env.CENTRID_URL === undefined
-     ? "http://127.0.0.1:6789" : (env.CENTRID_URL.trim() || null)` (empty string disables).
-   - `getLocalServiceRoutes` (~line 653): when `config.centridUrl`, push
-     `["/centri", `${config.centridUrl};strip-prefix`]`. This feeds BOTH `startIngress`
-     (~line 915) and the static-server `--route` args (~line 1395) automatically.
-   - `startStaticFrontend` (~line 1357): add `...(config.centridUrl ?
-     ["--centrid-base-url", "/centri"] : [])`.
-   - Define `const CENTRI_ROUTE_PREFIX = "/centri"` next to `AUTOMATION_ROUTE_PREFIX`.
-4. `scripts/dev-static.mjs`: mirrors the route tables by hand — add the same `/centri`
-   route to `startStaticServer` args (~line 384) and `startIngress` args (~line 431), plus
-   `--centrid-base-url /centri`. It imports `buildConfig` from dev-with-automation so
-   `config.centridUrl` is available.
-5. Tests (existing files):
-   - `__tests__/scripts/ingress.test.ts` — add strip-prefix routing cases (match/strip,
-     query preservation, `/centri` exact → `/`, longest-prefix still wins, unknown flag
-     throws).
-   - `__tests__/scripts/static-server.test.ts` — `--centrid-base-url` parse + injection
-     (script contains window key) + needsRuntimeInjection.
-   - `__tests__/api/centri/centri-service.test.ts` — relative base URL cases for
-     `getCentridBaseUrl` via injected window key.
-   - CHECK `__tests__/scripts/dev-with-automation.test.ts` and `dev-static.test.ts` for
-     route-table assertions that now need `/centri` (getLocalServiceRoutes is exported and
-     likely asserted).
-6. Verify on VM worktree: `npm run typecheck`, targeted `npx vitest run __tests__/scripts
-   __tests__/api/centri`, `npm run build`. Full suite needs
-   `OH_CANVAS_SAFE_STATE_DIR=/tmp/...`. Open PR A (respect HUMAN: template section — do
-   not fill/edit it). After owner approval + squash-merge: pull in `~/u1-live/agent-canvas`,
-   `npm run build`, restart `agent-canvas.service`, rerun
-   `scripts/u1_browser_gate.mjs` (5/5 pattern in docs/U1-Status.md), then user retests
-   Settings → Centri / Memory from laptop at http://100.102.101.100:8010.
+Deploy: pull in `~/u1-live/agent-canvas`, `npm run build`, restart
+`agent-canvas.service`, rerun `scripts/u1_browser_gate.mjs` (5/5 pattern in
+docs/U1-Status.md), then user retests Settings → Centri / Memory from laptop at
+http://100.102.101.100:8010.
 
 ## PR B (not started): Centri identity
 

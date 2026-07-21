@@ -403,6 +403,16 @@ async function buildConfig(args, env = process.env) {
   });
   const sessionApiKey = safeConfig.sessionApiKey;
 
+  // Centri panel daemon (`centrid`). When set, the ingress and static
+  // server mount it under CENTRI_ROUTE_PREFIX with the prefix stripped, and
+  // the static server injects the same-origin base URL into index.html so
+  // remote browsers reach centrid without CORS. CENTRID_URL overrides the
+  // loopback default; an empty CENTRID_URL disables the route entirely.
+  const centridUrl =
+    env.CENTRID_URL === undefined
+      ? "http://127.0.0.1:6789"
+      : env.CENTRID_URL.trim() || null;
+
   if (isPublic) {
     logService(
       "auth",
@@ -441,6 +451,9 @@ async function buildConfig(args, env = process.env) {
 
     // Auth — single key for both backends
     sessionApiKey,
+
+    // Centri panel daemon base URL (null disables the /centri route)
+    centridUrl,
 
     // Public mode — the session key should NOT be baked into the frontend
     isPublic,
@@ -638,6 +651,7 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const AUTOMATION_ROUTE_PREFIX = "/api/automation";
+const CENTRI_ROUTE_PREFIX = "/centri";
 const AGENT_SERVER_ROUTE_PREFIXES = [
   "/api",
   "/sockets",
@@ -664,6 +678,14 @@ function getLocalServiceRoutes(config) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       routes.push([prefix, `http://localhost:${config.agentServerPort}`]);
     }
+  }
+
+  // Same-origin mount for the Centri panel daemon. centrid serves absolute
+  // paths (/api/settings, /api/memory/...) that collide with the /api ->
+  // agent-server route, so it is mounted under /centri with the matched
+  // prefix stripped before proxying (see proxy-utils.mjs parseRouteTarget).
+  if (config.centridUrl) {
+    routes.push([CENTRI_ROUTE_PREFIX, `${config.centridUrl};strip-prefix`]);
   }
 
   return routes;
@@ -1391,6 +1413,10 @@ function startStaticFrontend(config, staticDir) {
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
         : []),
+      // Point the frontend's centrid client at the same-origin /centri
+      // mount (proxied with the prefix stripped) instead of the loopback
+      // default, so remote browsers reach centrid without CORS.
+      ...(config.centridUrl ? ["--centrid-base-url", CENTRI_ROUTE_PREFIX] : []),
       // Proxy routes only to services that this launch mode started.
       ...buildRouteArgs(getLocalServiceRoutes(config)),
       // Reject known API prefixes that have no backend — returns 503
