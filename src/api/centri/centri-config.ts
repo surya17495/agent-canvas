@@ -28,6 +28,7 @@ export const DEFAULT_CENTRID_BASE_URL = "http://127.0.0.1:6789";
 
 const CENTRID_BASE_URL_WINDOW_KEY = "__CENTRI_CENTRID_BASE_URL__";
 const PANEL_TOKEN_WINDOW_KEY = "__CENTRI_PANEL_TOKEN__";
+const PANEL_PROXY_AUTH_WINDOW_KEY = "__CENTRI_PANEL_PROXY_AUTH__";
 
 function trimToNull(value?: string | null): string | null {
   return value?.trim() || null;
@@ -86,4 +87,34 @@ export function getCentriPanelToken(): string | null {
  */
 export function hasCentriPanelToken(): boolean {
   return getCentriPanelToken() !== null;
+}
+
+/**
+ * Whether the deployment injects the panel token **server-side** at the
+ * same-origin `/centri` proxy (SPEC §3.12, owner decision 2026-07-21). In
+ * this posture the browser holds no token at all — the static server adds
+ * `Authorization: Bearer …` to proxied mutation requests — so the UI must
+ * offer mutations even though {@link hasCentriPanelToken} is false. Only a
+ * BOOLEAN ever reaches the browser (`window.__CENTRI_PANEL_PROXY_AUTH__`,
+ * injected by `scripts/static-server.mjs`); the token value never does.
+ */
+export function hasCentriProxyAuth(): boolean {
+  if (trimToNull(import.meta.env.VITE_CENTRI_PANEL_PROXY_AUTH) === "true") {
+    return true;
+  }
+  if (typeof window === "undefined") return false;
+  const injected = (window as unknown as Record<string, unknown>)[
+    PANEL_PROXY_AUTH_WINDOW_KEY
+  ];
+  return injected === true;
+}
+
+/**
+ * Whether *some* authorized mutation path exists: a browser-held token
+ * (dev seam) or server-side proxy injection (deployed posture, §3.12).
+ * Screens gate edit affordances on this; the service layer still fails
+ * closed up front when neither is present.
+ */
+export function hasCentriMutationPath(): boolean {
+  return hasCentriPanelToken() || hasCentriProxyAuth();
 }

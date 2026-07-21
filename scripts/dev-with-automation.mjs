@@ -1417,6 +1417,14 @@ function startStaticFrontend(config, staticDir) {
       // mount (proxied with the prefix stripped) instead of the loopback
       // default, so remote browsers reach centrid without CORS.
       ...(config.centridUrl ? ["--centrid-base-url", CENTRI_ROUTE_PREFIX] : []),
+      // Server-side panel-token injection (SPEC §3.12): when the deploy env
+      // carries CENTRI_PANEL_TOKEN, the static server adds it to proxied
+      // /centri MUTATION requests itself. Only the env var NAME goes on the
+      // command line; the child reads the value from its inherited env, and
+      // the browser only ever sees a boolean flag.
+      ...(config.centridUrl && process.env.CENTRI_PANEL_TOKEN?.trim()
+        ? ["--proxy-bearer", `${CENTRI_ROUTE_PREFIX}=CENTRI_PANEL_TOKEN`]
+        : []),
       // Proxy routes only to services that this launch mode started.
       ...buildRouteArgs(getLocalServiceRoutes(config)),
       // Reject known API prefixes that have no backend — returns 503

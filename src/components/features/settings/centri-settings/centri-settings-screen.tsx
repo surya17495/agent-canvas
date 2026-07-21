@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useCentriSettings } from "#/hooks/query/use-centri-settings";
 import { useCentriPump } from "#/hooks/mutation/use-centri-pump";
-import { hasCentriPanelToken } from "#/api/centri/centri-config";
+import { hasCentriMutationPath } from "#/api/centri/centri-config";
 import type {
   CentriPendingSession,
   CentriPumpResponse,
@@ -263,7 +263,7 @@ function SyncSection({
 }) {
   const { t } = useTranslation("openhands");
   const { sync } = settings;
-  const tokenPresent = hasCentriPanelToken();
+  const tokenPresent = hasCentriMutationPath();
   const confirmingAll = confirm !== null && confirm.sessionId === undefined;
 
   return (

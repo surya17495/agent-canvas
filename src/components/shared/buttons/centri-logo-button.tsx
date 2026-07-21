@@ -39,7 +39,9 @@ export function CentriLogoButton({
           aria-hidden
           className="whitespace-nowrap text-[17px] font-semibold tracking-tight text-white"
         >
+          {/* eslint-disable i18next/no-literal-string -- brand wordmark, decorative (aria-hidden) */}
           Centri
+          {/* eslint-enable i18next/no-literal-string */}
         </span>
       )}
     </NavigationLink>

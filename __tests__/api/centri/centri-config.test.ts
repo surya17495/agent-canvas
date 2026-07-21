@@ -4,16 +4,20 @@ import {
   DEFAULT_CENTRID_BASE_URL,
   getCentridBaseUrl,
   getCentriPanelToken,
+  hasCentriMutationPath,
   hasCentriPanelToken,
+  hasCentriProxyAuth,
 } from "#/api/centri/centri-config";
 
 const BASE_URL_WINDOW_KEY = "__CENTRI_CENTRID_BASE_URL__";
 const PANEL_TOKEN_WINDOW_KEY = "__CENTRI_PANEL_TOKEN__";
+const PANEL_PROXY_AUTH_WINDOW_KEY = "__CENTRI_PANEL_PROXY_AUTH__";
 
 type InjectedWindow = Window &
   Record<string, unknown> & {
     [BASE_URL_WINDOW_KEY]?: unknown;
     [PANEL_TOKEN_WINDOW_KEY]?: unknown;
+    [PANEL_PROXY_AUTH_WINDOW_KEY]?: unknown;
   };
 
 const injectedWindow = window as unknown as InjectedWindow;
@@ -22,6 +26,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   delete injectedWindow[BASE_URL_WINDOW_KEY];
   delete injectedWindow[PANEL_TOKEN_WINDOW_KEY];
+  delete injectedWindow[PANEL_PROXY_AUTH_WINDOW_KEY];
 });
 
 describe("getCentridBaseUrl", () => {
@@ -84,5 +89,38 @@ describe("getCentriPanelToken", () => {
     injectedWindow[PANEL_TOKEN_WINDOW_KEY] = "tok-abc";
     expect(getCentriPanelToken()).toBe("tok-abc");
     expect(hasCentriPanelToken()).toBe(true);
+  });
+});
+
+// The server-side injection posture (SPEC §3.12): the static server adds the
+// bearer at the same-origin proxy and only a BOOLEAN reaches the browser.
+describe("hasCentriProxyAuth / hasCentriMutationPath", () => {
+  it("is false when nothing is configured — mutations fail closed", () => {
+    expect(hasCentriProxyAuth()).toBe(false);
+    expect(hasCentriMutationPath()).toBe(false);
+  });
+
+  it("reads the window-injected boolean (deployed posture)", () => {
+    injectedWindow[PANEL_PROXY_AUTH_WINDOW_KEY] = true;
+    expect(hasCentriProxyAuth()).toBe(true);
+    expect(hasCentriMutationPath()).toBe(true);
+    expect(hasCentriPanelToken()).toBe(false); // token still absent
+  });
+
+  it("ignores non-boolean window values (an injected string is not auth)", () => {
+    injectedWindow[PANEL_PROXY_AUTH_WINDOW_KEY] = "true";
+    expect(hasCentriProxyAuth()).toBe(false);
+  });
+
+  it("reads the VITE env seam", () => {
+    vi.stubEnv("VITE_CENTRI_PANEL_PROXY_AUTH", "true");
+    expect(hasCentriProxyAuth()).toBe(true);
+    expect(hasCentriMutationPath()).toBe(true);
+  });
+
+  it("a browser token alone also opens the mutation path (dev seam)", () => {
+    injectedWindow[PANEL_TOKEN_WINDOW_KEY] = "tok-abc";
+    expect(hasCentriProxyAuth()).toBe(false);
+    expect(hasCentriMutationPath()).toBe(true);
   });
 });

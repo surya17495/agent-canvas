@@ -5,7 +5,7 @@ import { useCentriMemoryStores } from "#/hooks/query/use-centri-memory-stores";
 import { useCentriMemoryStore } from "#/hooks/query/use-centri-memory-store";
 import { useCentriMemoryEdit } from "#/hooks/mutation/use-centri-memory-edit";
 import { useCentriMemoryForget } from "#/hooks/mutation/use-centri-memory-forget";
-import { hasCentriPanelToken } from "#/api/centri/centri-config";
+import { hasCentriMutationPath } from "#/api/centri/centri-config";
 import type {
   CentriEngineSection,
   CentriMemoryKind,
@@ -196,7 +196,7 @@ function StoreEditor({
   onClose: () => void;
 }) {
   const { t } = useTranslation("openhands");
-  const tokenPresent = hasCentriPanelToken();
+  const tokenPresent = hasCentriMutationPath();
   const { data, isLoading, isError, error, refetch, isFetching } =
     useCentriMemoryStore(selected.role, selected.kind);
   const { mutate: edit, isPending: isSaving } = useCentriMemoryEdit();
@@ -377,7 +377,7 @@ export function CentriMemoryScreen() {
   const { data, isLoading, isError, error, refetch, isFetching } =
     useCentriMemoryStores();
   const [selected, setSelected] = React.useState<Selected | null>(null);
-  const tokenPresent = hasCentriPanelToken();
+  const tokenPresent = hasCentriMutationPath();
 
   if (isLoading) {
     return (

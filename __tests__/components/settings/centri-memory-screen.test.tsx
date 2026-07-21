@@ -15,7 +15,9 @@ import type {
 
 const hasTokenMock = vi.hoisted(() => vi.fn<() => boolean>());
 vi.mock("#/api/centri/centri-config", () => ({
-  hasCentriPanelToken: hasTokenMock,
+  // The screen gates edit affordances on the combined mutation path
+  // (browser token OR server-side proxy auth, SPEC §3.12).
+  hasCentriMutationPath: hasTokenMock,
 }));
 
 const successToast = vi.hoisted(() => vi.fn());
