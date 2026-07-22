@@ -940,6 +940,23 @@ function startIngress(config) {
   const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
   const frontendBackend = getFrontendBackend(config);
 
+  // Server-side panel-token posture (SPEC §3.12): when a frontend backend is
+  // running and the deploy env carries CENTRI_PANEL_TOKEN, /centri traffic
+  // must flow through the frontend server — it injects the bearer on
+  // mutation requests (static-server.mjs --proxy-bearer) — rather than
+  // straight to centrid. The ingress therefore drops its direct /centri
+  // route and lets those requests fall through to --default. Without a
+  // token (or without a frontend), the direct route stays and mutations
+  // fail closed at centrid with 401.
+  const centriViaFrontend = Boolean(
+    frontendBackend &&
+      config.centridUrl &&
+      process.env.CENTRI_PANEL_TOKEN?.trim(),
+  );
+  const ingressRoutes = getLocalServiceRoutes(config).filter(
+    ([prefix]) => !(centriViaFrontend && prefix === CENTRI_ROUTE_PREFIX),
+  );
+
   spawnService(
     "ingress",
     "node",
@@ -947,7 +964,7 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
-      ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...buildRouteArgs(ingressRoutes),
       ...(frontendBackend ? ["--default", frontendBackend] : []),
     ],
     {
