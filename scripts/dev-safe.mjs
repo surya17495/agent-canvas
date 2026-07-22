@@ -395,11 +395,20 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
+ * - OH_AGENT_SERVER_GIT_REPO: Git repo URL for the git-ref branch, defaulting
+ *   to the upstream OpenHands repo. Point it at a fork (e.g. surya17495's
+ *   software-agent-sdk) to run agent-server from fork source over the network.
  * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.36.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
  * git branch or commit instead.
+ *
+ * The agent-client-protocol `<0.11` pin (AGENT_CLIENT_PROTOCOL_CONSTRAINT) is
+ * applied on EVERY branch, not just the PyPI ones: the SDK (upstream and the
+ * fork) leaves acp unbounded (>=0.10.1), but acp 0.11 reordered the ACP
+ * prompt() args and breaks the SDK's ACP client, so running from local/git
+ * source must hold the same pin or a fresh resolve pulls the broken 0.11.
  *
  * @param {Record<string, string | undefined>} env
  * @returns {{ command: string, args: string[], source: string }}
@@ -407,6 +416,7 @@ export function validateFrontendDependencies(
 export function buildAgentServerCommand(env = process.env) {
   const localPath = env.OH_AGENT_SERVER_LOCAL_PATH;
   const gitRef = env.OH_AGENT_SERVER_GIT_REF;
+  const gitRepo = env.OH_AGENT_SERVER_GIT_REPO || AGENT_SERVER_GIT_REPO;
   const version = env.OH_AGENT_SERVER_VERSION;
 
   const uvxArgs = [];
@@ -428,8 +438,11 @@ export function buildAgentServerCommand(env = process.env) {
       path.join(localPath, "openhands-tools"),
       "--with-editable",
       path.join(localPath, "openhands-workspace"),
-      "agent-server",
     );
+    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
+      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
+    }
+    uvxArgs.push("agent-server");
     source = `local (${localPath})`;
   } else if (gitRef) {
     // Use git ref with subdirectory syntax for uv workspace monorepo.
@@ -441,7 +454,7 @@ export function buildAgentServerCommand(env = process.env) {
     // string as the current PyPI release (e.g. both "1.26.0"). Without it, uv
     // silently reuses the cached PyPI wheels and the git ref is never actually
     // used, even though it was explicitly requested.
-    const baseGitUrl = `git+${AGENT_SERVER_GIT_REPO}@${gitRef}`;
+    const baseGitUrl = `git+${gitRepo}@${gitRef}`;
     uvxArgs.push(
       "--reinstall",
       "--from",
@@ -452,8 +465,11 @@ export function buildAgentServerCommand(env = process.env) {
       `${baseGitUrl}#subdirectory=openhands-tools`,
       "--with",
       `${baseGitUrl}#subdirectory=openhands-workspace`,
-      "agent-server",
     );
+    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
+      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
+    }
+    uvxArgs.push("agent-server");
     source = `git (${gitRef})`;
   } else if (version) {
     // Use specific PyPI version: uvx --from openhands-agent-server==version agent-server

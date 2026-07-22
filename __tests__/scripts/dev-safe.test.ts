@@ -441,9 +441,35 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-tools",
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-workspace",
+      "--with",
+      "agent-client-protocol<0.11",
       "agent-server",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
+  });
+
+  it("uses OH_AGENT_SERVER_GIT_REPO to point the git ref at a fork", () => {
+    const cmd = buildAgentServerCommand({
+      OH_AGENT_SERVER_GIT_REF: "main",
+      OH_AGENT_SERVER_GIT_REPO: "https://github.com/surya17495/software-agent-sdk",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toEqual([
+      "--reinstall",
+      "--from",
+      "git+https://github.com/surya17495/software-agent-sdk@main#subdirectory=openhands-agent-server",
+      "--with",
+      "git+https://github.com/surya17495/software-agent-sdk@main#subdirectory=openhands-sdk",
+      "--with",
+      "git+https://github.com/surya17495/software-agent-sdk@main#subdirectory=openhands-tools",
+      "--with",
+      "git+https://github.com/surya17495/software-agent-sdk@main#subdirectory=openhands-workspace",
+      "--with",
+      "agent-client-protocol<0.11",
+      "agent-server",
+    ]);
+    expect(cmd.source).toBe("git (main)");
   });
 
   it("uses git ref for commit SHA", () => {
@@ -460,6 +486,8 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-tools",
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-workspace",
+      "--with",
+      "agent-client-protocol<0.11",
       "agent-server",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
@@ -494,6 +522,8 @@ describe("buildAgentServerCommand", () => {
       path.join(sdk, "openhands-tools"),
       "--with-editable",
       path.join(sdk, "openhands-workspace"),
+      "--with",
+      "agent-client-protocol<0.11",
       "agent-server",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
