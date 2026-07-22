@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../../test-utils";
 import { MemoryPage } from "#/components/features/memory/memory-page";
 import { toEngineMemoryRows } from "#/components/features/memory/engine-memories-panel";
+import { toGraphDocuments } from "#/components/features/memory/memory-graph-panel";
 import CentriService, {
   CentriEngineUnavailableError,
 } from "#/api/centri/centri-service.api";
@@ -25,16 +26,33 @@ vi.mock("#/api/centri/centri-config", () => ({
 }));
 
 // The graph canvas needs a real browser (ResizeObserver/canvas); it has its
-// own upstream tests. Here we assert the passthrough contract instead.
+// own upstream tests. Here we assert the adapted lib-shape contract instead:
+// every document handed to the lib must carry an iterable `memories` array
+// and a `documentType` (the live engine feed carries `memoryEntries`/`type`,
+// which crashed the page before the `toGraphDocuments` adapter).
 vi.mock("@supermemory/memory-graph", () => ({
   MemoryGraph: ({
     documents,
     children,
   }: {
-    documents: unknown[];
+    documents: Array<{ memories?: unknown; documentType?: unknown }>;
     children?: ReactNode;
   }) => (
-    <div data-testid="mock-memory-graph" data-doc-count={documents.length}>
+    <div
+      data-testid="mock-memory-graph"
+      data-doc-count={documents.length}
+      data-lib-shape={String(
+        documents.every(
+          (d) =>
+            Array.isArray(d.memories) && typeof d.documentType === "string",
+        ),
+      )}
+      data-first-doc-memory-count={
+        Array.isArray(documents[0]?.memories)
+          ? documents[0].memories.length
+          : "missing"
+      }
+    >
       {documents.length === 0 ? children : null}
     </div>
   ),
@@ -119,6 +137,30 @@ afterEach(() => {
   errorToast.mockReset();
 });
 
+describe("toGraphDocuments", () => {
+  it("maps the live engine feed (memoryEntries/type) to the lib shape (memories/documentType)", () => {
+    const docs = toGraphDocuments([
+      makeDoc({ type: "text", createdAt: "2026-07-22T08:25:29.504Z" }),
+    ]);
+    expect(docs).toHaveLength(1);
+    expect(Array.isArray(docs[0].memories)).toBe(true);
+    expect(docs[0].memories).toHaveLength(3);
+    expect(docs[0].memories[0].memory).toBe("Prefers pytest over unittest");
+    expect(docs[0].documentType).toBe("text");
+    expect(docs[0].title).toBe("session doc");
+  });
+
+  it("never hands the lib a document without an iterable memories array", () => {
+    const docs = toGraphDocuments([
+      makeDoc({ memoryEntries: undefined as never, title: undefined }),
+    ]);
+    expect(Array.isArray(docs[0].memories)).toBe(true);
+    expect(docs[0].memories).toHaveLength(0);
+    expect(docs[0].documentType).toBe("text");
+    expect(docs[0].title).toBeNull();
+  });
+});
+
 describe("toEngineMemoryRows", () => {
   it("keeps only latest, non-forgotten entries and maps roles from tags", () => {
     const rows = toEngineMemoryRows([makeDoc()], "alice");
@@ -147,6 +189,16 @@ describe("MemoryPage", () => {
         "data-doc-count",
         "1",
       ),
+    );
+    // The panel must hand the lib adapted documents (memories/documentType),
+    // not the raw engine feed (memoryEntries/type).
+    expect(screen.getByTestId("mock-memory-graph")).toHaveAttribute(
+      "data-lib-shape",
+      "true",
+    );
+    expect(screen.getByTestId("mock-memory-graph")).toHaveAttribute(
+      "data-first-doc-memory-count",
+      "3",
     );
     expect(screen.getByTestId("engine-memory-mem-1")).toBeInTheDocument();
     expect(screen.queryByTestId("engine-memory-mem-0")).toBeNull();
@@ -218,9 +270,7 @@ describe("MemoryPage", () => {
 
     renderWithProviders(<MemoryPage />);
     await user.click(await screen.findByTestId("engine-memory-forget-mem-1"));
-    await user.click(
-      screen.getByTestId("engine-memory-confirm-forget-mem-1"),
-    );
+    await user.click(screen.getByTestId("engine-memory-confirm-forget-mem-1"));
 
     await waitFor(() => expect(forget).toHaveBeenCalledWith("agent", "mem-1"));
     expect(successToast).toHaveBeenCalled();
@@ -276,7 +326,10 @@ describe("MemoryPage", () => {
 
     renderWithProviders(<MemoryPage />);
     await screen.findByTestId("engine-memory-mem-1");
-    await user.selectOptions(screen.getByTestId("memory-role-filter"), "writer");
+    await user.selectOptions(
+      screen.getByTestId("memory-role-filter"),
+      "writer",
+    );
 
     await waitFor(() => expect(getGraph).toHaveBeenCalledWith("writer"));
   });
