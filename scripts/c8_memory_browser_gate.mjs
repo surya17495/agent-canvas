@@ -337,8 +337,16 @@ async function gateLoading(ctx) {
     waitUntil: "domcontentloaded",
     timeout: 30000,
   });
+  // NOTE: the /memory route ships as a lazily-loaded JS chunk (code
+  // splitting) -- on a loaded VM the chunk fetch+parse alone can take
+  // ~2.1s before the graph query even starts, on top of the artificial
+  // 2.5s network delay above. A 2000ms window (measured from
+  // domcontentloaded) was too tight and produced false negatives verified
+  // by direct DOM polling (loading testid confirmed present ~2.3s-5.6s
+  // post-navigation) -- not a functional regression. Widened with margin;
+  // still bounded so a genuinely-broken loading state still fails the gate.
   const sawLoading = await page
-    .waitForSelector('[data-testid="memory-page-loading"]', { timeout: 2000 })
+    .waitForSelector('[data-testid="memory-page-loading"]', { timeout: 6000 })
     .then(() => true)
     .catch(() => false);
   gate("G-loading", sawLoading, `loadingState=${sawLoading}`);
