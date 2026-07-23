@@ -856,6 +856,62 @@ class AgentServerConversationService {
       model,
     );
   }
+
+  /**
+   * Sets one advertised ACP session config option on a running conversation
+   * (POST /set_acp_config_option → protocol ``session/set_config_option``).
+   * The generic sibling of {@link switchAcpModel}: options are discovered
+   * dynamically from ``ConversationInfo.config_options`` rather than a static
+   * registry, so this speaks raw ``config_id``/``value`` pairs.
+   *
+   * ``@openhands/typescript-client`` has no wrapper for this fork-added route
+   * yet, so the local path is a plain ``fetch`` against the agent-server using
+   * the same host + ``X-Session-API-Key`` the generated client would use.
+   * Agent-server errors: 400 (non-ACP conversation or option rejected), 404
+   * (unknown conversation), 504 (ACP server didn't ack) — the FastAPI
+   * ``detail`` string is surfaced as the Error message for the toast.
+   */
+  static async setAcpConfigOption(
+    conversationId: string,
+    configId: string,
+    value: string | boolean,
+  ): Promise<void> {
+    const { backend } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      await callCloudProxy({
+        backend,
+        method: "POST",
+        path: `/api/v1/app-conversations/${conversationId}/set_acp_config_option`,
+        body: { config_id: configId, value },
+      });
+      return;
+    }
+
+    const { host, apiKey } = getAgentServerClientOptions();
+    const response = await fetch(
+      `${host}/api/conversations/${conversationId}/set_acp_config_option`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { "X-Session-API-Key": apiKey } : {}),
+        },
+        body: JSON.stringify({ config_id: configId, value }),
+      },
+    );
+    if (!response.ok) {
+      let detail = "";
+      try {
+        detail = ((await response.json()) as { detail?: string }).detail ?? "";
+      } catch {
+        // Non-JSON error body — fall through to the generic message.
+      }
+      throw new Error(
+        detail ||
+          `Failed to set session option '${configId}' (HTTP ${response.status})`,
+      );
+    }
+  }
 }
 
 export default AgentServerConversationService;

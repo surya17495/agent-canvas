@@ -2,6 +2,7 @@ import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import type { ACPConfigOption } from "#/types/acp-config-option";
 import { AgentKind, Settings, SettingsValue } from "#/types/settings";
 import {
   getAcpPreferredDefaultModel,
@@ -76,6 +77,14 @@ export interface DirectConversationInfo {
   } | null;
   current_model_id?: string | null;
   current_model_name?: string | null;
+  /**
+   * ACP session config options relayed from the live session by the
+   * agent-server (``ConversationInfo.config_options``, G8). Absent on
+   * OpenHands conversations, on ACP servers that advertise none, and on
+   * agent-servers older than the relay (the field simply isn't in the wire
+   * payload — treated the same as an empty list).
+   */
+  config_options?: ACPConfigOption[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -328,6 +337,10 @@ export function toAppConversation(
     pr_number: [],
     agent_kind: isAcp ? "acp" : "openhands",
     acp_server: acpServer,
+    // Same gating rationale as ``acp_server``: config options are a live-ACP-
+    // session concept, so never surface them on OpenHands conversations even
+    // if a stale wire payload carries them.
+    config_options: isAcp ? (info.config_options ?? null) : null,
     launched_agent_profile: info.launched_agent_profile ?? null,
     // Chip path: omit ``providerDefault`` so that when no concrete model
     // resolves, the chip falls back to the provider display name in

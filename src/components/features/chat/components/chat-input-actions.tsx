@@ -5,6 +5,7 @@ import { Cpu } from "lucide-react";
 import { AgentStatus } from "#/components/features/controls/agent-status";
 import { ChangeAgentButton } from "../change-agent-button";
 import { ChatInputModel, ChatInputModelMenuContent } from "./chat-input-model";
+import { ChatInputConfigOptions } from "./chat-input-config-options";
 import {
   ChatInputProfilePicker,
   ChatInputProfileMenuContent,
@@ -477,6 +478,13 @@ export function ChatInputActions({
               <ChatInputLlmProfilePicker />
             )}
           </div>
+
+          {/* Dynamic ACP session-config pickers (G8). Self-gating: renders
+              nothing unless the active conversation is ACP and advertises
+              config options, so it never affects non-ACP layouts. Not part of
+              the overflow width bookkeeping above — pills truncate and the
+              row scrolls before they crowd the send button. */}
+          <ChatInputConfigOptions />
 
           {hasOverflowItems && (
             <div className="relative shrink-0">

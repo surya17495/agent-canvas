@@ -1,4 +1,5 @@
 import { ConversationTrigger } from "../open-hands.types";
+import type { ACPConfigOption } from "#/types/acp-config-option";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
@@ -163,6 +164,15 @@ export interface AppConversation {
    * "ACP" chip when the key is unknown or null.
    */
   acp_server?: string | null;
+  /**
+   * For ACP conversations, the session config options the ACP server
+   * advertises (reasoning effort, modes, …) — relayed by the agent-server
+   * from the live session via ``ConversationInfo.config_options`` (G8).
+   * Empty/absent for OpenHands conversations and for ACP servers that
+   * advertise none. Rendered as dynamic pickers in the chat input; values
+   * are changed via ``setAcpConfigOption``.
+   */
+  config_options?: ACPConfigOption[] | null;
   llm_model: string | null;
   metrics: MetricsSnapshot | null;
   created_at: string;

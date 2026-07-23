@@ -36276,5 +36276,39 @@
     "uk": "Пам'ять",
     "zh-CN": "记忆",
     "zh-TW": "記憶"
+  },
+  "COMMON$ON": {
+    "ar": "مفعّل",
+    "ca": "Activat",
+    "de": "An",
+    "en": "On",
+    "es": "Activado",
+    "fr": "Activé",
+    "it": "Attivo",
+    "ja": "オン",
+    "ko-KR": "켬",
+    "no": "På",
+    "pt": "Ativado",
+    "tr": "Açık",
+    "uk": "Увімкнено",
+    "zh-CN": "开",
+    "zh-TW": "開"
+  },
+  "COMMON$OFF": {
+    "ar": "معطّل",
+    "ca": "Desactivat",
+    "de": "Aus",
+    "en": "Off",
+    "es": "Desactivado",
+    "fr": "Désactivé",
+    "it": "Disattivo",
+    "ja": "オフ",
+    "ko-KR": "끔",
+    "no": "Av",
+    "pt": "Desativado",
+    "tr": "Kapalı",
+    "uk": "Вимкнено",
+    "zh-CN": "关",
+    "zh-TW": "關"
   }
 }
