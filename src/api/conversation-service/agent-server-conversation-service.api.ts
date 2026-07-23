@@ -11,6 +11,10 @@ import {
 } from "@openhands/typescript-client/clients";
 import { v4 as uuidv4 } from "uuid";
 import { AgentKind, Provider } from "#/types/settings";
+import type {
+  ACPConfigOption,
+  ACPConfigOptionChoice,
+} from "#/types/acp-config-option";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import {
@@ -153,6 +157,58 @@ function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
   };
 }
 
+/**
+ * Accept the fork agent-server's ``ConversationInfo.config_options`` (G8)
+ * defensively — the same posture as ``normalizeTags``: a malformed entry
+ * (missing/blank ``id``, unknown ``type``, non-string choice ``value``) is
+ * dropped rather than crashing the parser, and a missing/non-array field is
+ * ``null`` (older agent-servers without the relay simply omit it). Without
+ * this the wire path silently drops the field the adapter's ACP gate —
+ * and the G8 pills — depend on: unit tests build ``DirectConversationInfo``
+ * directly and never caught it.
+ */
+function normalizeConfigOptionChoice(
+  value: unknown,
+): ACPConfigOptionChoice | null {
+  if (!isRecord(value) || typeof value.value !== "string") return null;
+  return {
+    value: value.value,
+    name: stringOrNull(value.name),
+    description: stringOrNull(value.description),
+    group: stringOrNull(value.group),
+  };
+}
+
+function normalizeConfigOptions(value: unknown): ACPConfigOption[] | null {
+  if (!Array.isArray(value)) return null;
+  const options: ACPConfigOption[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || !entry.id.trim()) {
+      continue;
+    }
+    if (entry.type !== "select" && entry.type !== "boolean") continue;
+    const choices = Array.isArray(entry.choices)
+      ? entry.choices
+          .map(normalizeConfigOptionChoice)
+          .filter((choice): choice is ACPConfigOptionChoice => choice !== null)
+      : null;
+    options.push({
+      id: entry.id,
+      name: stringOrNull(entry.name),
+      type: entry.type,
+      description: stringOrNull(entry.description),
+      category: stringOrNull(entry.category),
+      current_value:
+        typeof entry.current_value === "string" ||
+        typeof entry.current_value === "boolean"
+          ? entry.current_value
+          : null,
+      choices,
+    });
+  }
+  return options;
+}
+
 function normalizeWorkspace(
   value: unknown,
 ): DirectConversationInfo["workspace"] {
@@ -251,6 +307,10 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     // omit these — adapter handles ``undefined`` / ``null`` gracefully.
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
+    // G8: ACP session config options — must be carried through the wire
+    // normalizer or the dynamic pickers never see them (adapter reads
+    // ``info.config_options``).
+    config_options: normalizeConfigOptions(item.config_options),
   };
 }
 

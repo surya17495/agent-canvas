@@ -689,6 +689,90 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.llm_model).toBe("Claude Opus 4.7");
     });
 
+    it("preserves config_options through the wire normalizer (G8)", async () => {
+      // The G8 pills read ``AppConversation.config_options`` off the batch
+      // route the UI actually uses. The wire normalizer builds
+      // ``DirectConversationInfo`` field-by-field, so a field it doesn't
+      // copy is silently dropped — exactly what happened on the live stack
+      // (pills mounted, rendered null) while the direct-adapter unit tests
+      // stayed green. Exercises the full HTTP -> AppConversation path,
+      // including the defensive drop of malformed entries.
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-config-options-wire",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: { kind: "ACPAgent" },
+            tags: { acpserver: "opencode" },
+            config_options: [
+              {
+                id: "effort",
+                name: "Effort",
+                type: "select",
+                category: "thought_level",
+                current_value: "high",
+                choices: [
+                  { value: "none", name: "None", group: "Reasoning" },
+                  { value: "high", name: "High", group: "Reasoning" },
+                ],
+              },
+              {
+                id: "plan_mode",
+                name: "Plan",
+                type: "boolean",
+                current_value: false,
+              },
+              // Malformed entries the normalizer must drop, not crash on:
+              { id: "", type: "select" },
+              { id: "bad-type", type: "slider" },
+              "not-an-object",
+            ],
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-config-options-wire",
+        ]);
+
+      expect(conversation?.agent_kind).toBe("acp");
+      expect(conversation?.config_options).toEqual([
+        {
+          id: "effort",
+          name: "Effort",
+          type: "select",
+          description: null,
+          category: "thought_level",
+          current_value: "high",
+          choices: [
+            {
+              value: "none",
+              name: "None",
+              description: null,
+              group: "Reasoning",
+            },
+            {
+              value: "high",
+              name: "High",
+              description: null,
+              group: "Reasoning",
+            },
+          ],
+        },
+        {
+          id: "plan_mode",
+          name: "Plan",
+          type: "boolean",
+          description: null,
+          category: null,
+          current_value: false,
+          choices: null,
+        },
+      ]);
+    });
+
     it("sources acp_server from the agent when the acpserver tag is absent", async () => {
       // Profile launches don't stamp the ``acpserver`` tag client-side, so the
       // provider identity must survive from ``agent.acp_server`` (SDK #3692)
