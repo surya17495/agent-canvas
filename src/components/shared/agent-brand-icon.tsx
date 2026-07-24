@@ -1,4 +1,4 @@
-import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
+import OpenHandsLogo from "#/assets/branding/centri-mark.svg?react";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import {
   CLAUDE_CODE_MARK_PATH,
