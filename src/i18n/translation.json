@@ -561,7 +561,7 @@
     "ca": "Servidor de Forgejo (domini)"
   },
   "MICROAGENT$ADDING_CONTEXT": {
-    "en": "OpenHands is adding this new context to your respository. We'll let you know when the pull request is ready.",
+    "en": "Centri is adding this new context to your respository. We'll let you know when the pull request is ready.",
     "ja": "OpenHandsはこの新しいコンテキストをあなたのリポジトリに追加しています。プルリクエストの準備ができたらお知らせします。",
     "zh-CN": "OpenHands正在将此新上下文添加到您的存储库中。拉取请求准备好后，我们会通知您。",
     "zh-TW": "OpenHands正在將此新上下文添加到您的存儲庫中。拉取請求準備好後，我們會通知您。",
@@ -884,7 +884,7 @@
     "ca": "Llegeix això"
   },
   "AUTH$LOGGING_BACK_IN": {
-    "en": "Logging back into OpenHands...",
+    "en": "Logging back into Centri...",
     "ja": "OpenHandsに再ログインしています...",
     "zh-CN": "正在重新登录OpenHands...",
     "zh-TW": "正在重新登錄OpenHands...",
@@ -1615,7 +1615,7 @@
     "ca": "Cerca integrada (Tavily)"
   },
   "SETTINGS$MCP_SEARCH_DESCRIPTION": {
-    "en": "Configure the Tavily key that OpenHands uses to add its default search MCP server.",
+    "en": "Configure the Tavily key that Centri uses to add its default search MCP server.",
     "ja": "OpenHands がデフォルトの検索 MCP サーバーを追加するために使用する Tavily キーを設定します。",
     "zh-CN": "配置 OpenHands 用于添加其默认搜索 MCP 服务器的 Tavily 密钥。",
     "zh-TW": "設定 OpenHands 用來新增其預設搜尋 MCP 伺服器的 Tavily 金鑰。",
@@ -1887,7 +1887,7 @@
     "ca": "Comencem a construir!"
   },
   "HOME$OPENHANDS_DESCRIPTION": {
-    "en": "OpenHands makes it easy to build and maintain software using AI-driven development.",
+    "en": "Centri makes it easy to build and maintain software using AI-driven development.",
     "ja": "OpenHandsはAI駆動の開発を使用してソフトウェアの開発と維持を容易にします。",
     "zh-CN": "OpenHands使用AI驱动的开发方式，轻松构建和维护软件。",
     "zh-TW": "OpenHands使用AI驅動的開發方式，輕鬆構建和維護軟件。",
@@ -2346,7 +2346,7 @@
     "ca": "Selecciona un perfil LLM per a aquest agent."
   },
   "SETTINGS$AGENT_PROFILE_NO_LLM": {
-    "en": "Create an LLM profile first to define an OpenHands agent.",
+    "en": "Create an LLM profile first to define an Centri agent.",
     "ja": "OpenHandsエージェントを定義するには、まずLLMプロファイルを作成してください。",
     "zh-CN": "请先创建一个LLM配置文件以定义OpenHands代理。",
     "zh-TW": "請先建立一個LLM設定檔以定義OpenHands代理。",
@@ -4981,7 +4981,7 @@
     "ca": "Mode de confirmació"
   },
   "SCHEMA$VERIFICATION$CRITIC_API_KEY$DESCRIPTION": {
-    "en": "If OpenHands is selected as your active LLM provider, leave this empty; the critic reuses that provider's key. Otherwise, provide a critic API key from the link below.",
+    "en": "If Centri is selected as your active LLM provider, leave this empty; the critic reuses that provider's key. Otherwise, provide a critic API key from the link below.",
     "ja": "批評者がLLMを呼び出すために使用する任意のAPIキー。空欄の場合、批評者はLLM APIキーを再利用します。",
     "zh-CN": "批评器调用其 LLM 所使用的可选 API 密钥。留空时，批评器会复用 LLM API 密钥。",
     "zh-TW": "批評器呼叫其 LLM 所使用的選用 API 金鑰。留空時，批評器會重用 LLM API 金鑰。",
@@ -5644,7 +5644,7 @@
     "ca": "LLM"
   },
   "SETTINGS$AGENT_PAGE_DESCRIPTION": {
-    "en": "Choose between the built-in OpenHands agent and an external ACP (Agent Client Protocol) subprocess such as Claude Code, Codex, or Gemini CLI.",
+    "en": "Choose between the built-in Centri agent and an external ACP (Agent Client Protocol) subprocess such as Claude Code, Codex, or Gemini CLI.",
     "ja": "組み込みのOpenHandsエージェントと、Claude Code、Codex、Gemini CLIなどの外部ACP（Agent Client Protocol）サブプロセスのどちらかを選択します。",
     "zh-CN": "在内置的 OpenHands 代理和外部 ACP（Agent Client Protocol）子进程（如 Claude Code、Codex 或 Gemini CLI）之间进行选择。",
     "zh-TW": "在內建的 OpenHands 代理和外部 ACP（Agent Client Protocol）子處理程序（如 Claude Code、Codex 或 Gemini CLI）之間進行選擇。",
@@ -5661,7 +5661,7 @@
     "ca": "Tria entre l'agent OpenHands integrat i un subprocés ACP (Agent Client Protocol) extern com Claude Code, Codex o Gemini CLI."
   },
   "SETTINGS$AGENT_TYPE_OPENHANDS": {
-    "en": "OpenHands",
+    "en": "Centri",
     "ja": "OpenHands",
     "zh-CN": "OpenHands",
     "zh-TW": "OpenHands",
@@ -5899,7 +5899,7 @@
     "ca": "Verificació"
   },
   "SETTINGS$PAGE_AGENT_SUBLINE": {
-    "en": "Choose between the built-in OpenHands agent and an external ACP subprocess.",
+    "en": "Choose between the built-in Centri agent and an external ACP subprocess.",
     "ja": "組み込みのOpenHandsエージェントと外部ACPサブプロセスのどちらかを選択します。",
     "zh-CN": "在内置的 OpenHands 代理和外部 ACP 子进程之间进行选择。",
     "zh-TW": "在內建的 OpenHands 代理和外部 ACP 子處理程序之間進行選擇。",
@@ -6154,7 +6154,7 @@
     "ca": "Navegador"
   },
   "BROWSER$EMPTY_MESSAGE": {
-    "en": "If you tell OpenHands to start a web server, the app will appear here.",
+    "en": "If you tell Centri to start a web server, the app will appear here.",
     "ja": "OpenHandsにWebサーバーの起動を指示すると、ここにアプリが表示されます。",
     "zh-CN": "如果您告诉OpenHands启动Web服务器，应用将在此处显示。",
     "zh-TW": "如果您要求 OpenHands 啟動網頁伺服器，應用程式將會顯示在此處。",
@@ -6647,7 +6647,7 @@
     "ca": "Configuració de Git"
   },
   "SETTINGS$GIT_SETTINGS_DESCRIPTION": {
-    "en": "Configure the username and email that OpenHands uses to commit changes.",
+    "en": "Configure the username and email that Centri uses to commit changes.",
     "ja": "OpenHandsがコミットに使用するユーザー名とメールを設定します。",
     "zh-CN": "配置OpenHands用于提交更改的用户名和电子邮件。",
     "zh-TW": "配置OpenHands用於提交更改的用戶名和電子郵件。",
@@ -7157,7 +7157,7 @@
     "ca": "avatar d'usuari"
   },
   "BRANDING$OPENHANDS": {
-    "en": "OpenHands",
+    "en": "Centri",
     "ja": "OpenHands",
     "zh-CN": "OpenHands",
     "zh-TW": "OpenHands",
@@ -7174,7 +7174,7 @@
     "ca": "OpenHands"
   },
   "BRANDING$OPENHANDS_LOGO": {
-    "en": "OpenHands Logo",
+    "en": "Centri Logo",
     "ja": "OpenHandsロゴ",
     "zh-CN": "OpenHands标志",
     "zh-TW": "OpenHands標誌",
@@ -7531,7 +7531,7 @@
     "ca": "Neteja les dependències"
   },
   "CONFIGURATION$OPENHANDS_WORKSPACE_DIRECTORY_INPUT_LABEL": {
-    "en": "OpenHands Workspace directory",
+    "en": "Centri Workspace directory",
     "zh-CN": "OpenHands工作区目录",
     "de": "OpenHands Arbeitsverzeichnis",
     "ko-KR": "OpenHands 워크스페이스 디렉토리",
@@ -8024,7 +8024,7 @@
     "ca": "Configura els repositoris de GitHub"
   },
   "SLACK$INSTALL_APP": {
-    "en": "Install OpenHands Slack App",
+    "en": "Install Centri Slack App",
     "ja": "OpenHands Slackアプリをインストール",
     "zh-CN": "安装 OpenHands Slack 应用",
     "zh-TW": "安裝 OpenHands Slack 應用程式",
@@ -9180,7 +9180,7 @@
     "ca": "Analitzador Invariant"
   },
   "INVARIANT$INVARIANT_ANALYZER_MESSAGE": {
-    "en": "Invariant Analyzer continuously monitors your OpenHands agent for security issues.",
+    "en": "Invariant Analyzer continuously monitors your Centri agent for security issues.",
     "es": "Analizador de invariantes continuamente monitorea tu agente de OpenHands por problemas de seguridad.",
     "zh-CN": "不变量分析器持续监控您的 OpenHands 代理的安全问题。",
     "zh-TW": "不變量分析器持續監控您的 OpenHands 代理的安全問題。",
@@ -10030,7 +10030,7 @@
     "ca": "Comencem a construir!"
   },
   "LANDING$SUBTITLE": {
-    "en": "OpenHands makes it easy to build and maintain software using a simple prompt.",
+    "en": "Centri makes it easy to build and maintain software using a simple prompt.",
     "ja": "OpenHandsは、シンプルなプロンプトを使用してソフトウェアの開発と保守を簡単にします。",
     "zh-CN": "OpenHands 使用简单的提示来轻松构建和维护软件。",
     "zh-TW": "OpenHands 使用簡單的提示來輕鬆建構和維護軟體。",
@@ -11373,7 +11373,7 @@
     "ca": "Més accions"
   },
   "CHAT_INTERFACE$INITIAL_MESSAGE": {
-    "en": "Hi! I'm OpenHands, an AI Software Engineer. What would you like to build with me today?",
+    "en": "Hi! I'm Centri, an AI Software Engineer. What would you like to build with me today?",
     "zh-CN": "你好！我是 OpenHands，一名 AI 软件工程师。今天想和我一起编写什么程序呢?",
     "de": "Hi! Ich bin OpenHands, ein KI-Softwareingenieur. Was möchten Sie heute mit mir erstellen?",
     "ko-KR": "안녕하세요! 저는 오픈데빈(OpenHands), AI 소프트웨어 엔지니어입니다. 오늘은 저와 함께 무엇을 만들어 볼까요?",
@@ -11560,7 +11560,7 @@
     "ca": "Introduïu la vostra clau d'API."
   },
   "SETTINGS$LLM_API_KEY": {
-    "en": "OpenHands LLM Key",
+    "en": "Centri LLM Key",
     "zh-CN": "OpenHands LLM 密钥",
     "zh-TW": "OpenHands LLM 金鑰",
     "de": "OpenHands LLM Schlüssel",
@@ -11577,7 +11577,7 @@
     "ca": "Clau LLM d'OpenHands"
   },
   "SETTINGS$LLM_API_KEY_DESCRIPTION": {
-    "en": "You can use this API Key as the LLM API Key for OpenHands open-source and CLI. It will incur cost on your OpenHands Cloud account. Do NOT share this key elsewhere.",
+    "en": "You can use this API Key as the LLM API Key for Centri open-source and CLI. It will incur cost on your OpenHands Cloud account. Do NOT share this key elsewhere.",
     "zh-CN": "您可以将此 API 密钥用作 OpenHands 开源和 CLI 的 LLM API 密钥。它将在您的 OpenHands Cloud 账户上产生费用。请勿在其他地方共享此密钥。",
     "zh-TW": "您可以將此 API 金鑰用作 OpenHands 開源和 CLI 的 LLM API 金鑰。它將在您的 OpenHands Cloud 帳戶上產生費用。請勿在其他地方共享此金鑰。",
     "de": "Sie können diesen API-Schlüssel als LLM-API-Schlüssel für OpenHands Open-Source und CLI verwenden. Es fallen Kosten für Ihr OpenHands Cloud-Konto an. Teilen Sie diesen Schlüssel NICHT anderswo.",
@@ -11798,7 +11798,7 @@
     "ca": "Feu clic aquí per obtenir instruccions"
   },
   "SETTINGS$NEED_OPENHANDS_ACCOUNT": {
-    "en": "Need an OpenHands Account?",
+    "en": "Need an Centri Account?",
     "ja": "OpenHandsアカウントが必要ですか？",
     "zh-CN": "需要OpenHands账户？",
     "zh-TW": "需要OpenHands帳戶？",
@@ -11900,7 +11900,7 @@
     "ca": "Claus d'API"
   },
   "SETTINGS$API_KEYS_DESCRIPTION": {
-    "en": "API keys allow you to authenticate with the OpenHands API programmatically. Keep your API keys secure; anyone with your API key can access your account. For more information on how to use the API, see our <a>API documentation</a>.",
+    "en": "API keys allow you to authenticate with the Centri API programmatically. Keep your API keys secure; anyone with your API key can access your account. For more information on how to use the API, see our <a>API documentation</a>.",
     "ja": "APIキーを使用すると、OpenHands APIにプログラムで認証できます。APIキーは安全に保管してください。APIキーを持っている人は誰でもあなたのアカウントにアクセスできます。APIの使用方法の詳細については、<a>APIドキュメント</a>をご覧ください。",
     "zh-CN": "API密钥允许您以编程方式验证OpenHands API。请确保您的API密钥安全；任何拥有您API密钥的人都可以访问您的账户。有关如何使用API的更多信息，请参阅我们的<a>API文档</a>。",
     "zh-TW": "API密鑰允許您以編程方式驗證OpenHands API。請確保您的API密鑰安全；任何擁有您API密鑰的人都可以訪問您的賬戶。有關如何使用API的更多信息，請參閱我們的<a>API文檔</a>。",
@@ -12818,7 +12818,7 @@
     "ca": "i executeu l'ordre:"
   },
   "AUTOMATIONS$EMPTY_INSTALL_PLUGIN": {
-    "en": "Install the OpenHands plugin",
+    "en": "Install the Centri plugin",
     "ja": "OpenHandsプラグインをインストール",
     "zh-CN": "安装 OpenHands 插件",
     "zh-TW": "安裝 OpenHands 外掛",
@@ -12852,7 +12852,7 @@
     "ca": "Ús d'OpenHands Cloud"
   },
   "AUTOMATIONS$EMPTY_OPTION_CONVERSATION_DESC": {
-    "en": "Start a new conversation and tell OpenHands to <example><cmd>Create an automation</cmd><punct>.</punct></example>",
+    "en": "Start a new conversation and tell Centri to <example><cmd>Create an automation</cmd><punct>.</punct></example>",
     "ja": "新しい会話を開始し、OpenHands に <example><cmd>オートメーションを作成してください</cmd></example> と伝えてください。",
     "zh-CN": "开始新对话，告诉 OpenHands <example><cmd>创建一个自动化</cmd><punct>。</punct></example>",
     "zh-TW": "開始新對話，告訴 OpenHands <example><cmd>建立一個自動化</cmd><punct>。</punct></example>",
@@ -14110,7 +14110,7 @@
     "ca": "Mostra els registres"
   },
   "AUTOMATIONS$DETAIL$DEBUG_WITH_OPENHANDS": {
-    "en": "Debug with OpenHands",
+    "en": "Debug with Centri",
     "ja": "OpenHandsでデバッグ",
     "zh-CN": "使用 OpenHands 调试",
     "zh-TW": "使用 OpenHands 偵錯",
@@ -17085,7 +17085,7 @@
     "ca": "No s'ha carregat cap URL"
   },
   "BROWSER$NO_PAGE_LOADED": {
-    "en": "No page loaded yet. Ask OpenHands to open a URL. Example: \"Open https://example.com\"",
+    "en": "No page loaded yet. Ask Centri to open a URL. Example: \"Open https://example.com\"",
     "ja": "まだページは読み込まれていません。OpenHandsにURLを開くよう指示してください。例: \"Open https://example.com\"",
     "zh-CN": "尚未加载页面。请使用OpenHands打开网址。示例：\"Open https://example.com\"",
     "zh-TW": "尚未載入頁面。請指示 OpenHands 開啟網址。範例：\"Open https://example.com\"",
@@ -18785,7 +18785,7 @@
     "ca": "Inicia sessió amb Bitbucket Data Center"
   },
   "AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER": {
-    "en": "Log in to OpenHands",
+    "en": "Log in to Centri",
     "ja": "IDプロバイダーでサインイン",
     "zh-CN": "使用您的身份提供商登录",
     "zh-TW": "使用您的身份提供商登入",
@@ -19057,7 +19057,7 @@
     "ca": "Gestió de Webhooks"
   },
   "GITLAB$WEBHOOK_MANAGER_DESCRIPTION": {
-    "en": "Manage webhooks for your GitLab projects and groups. Webhooks enable OpenHands to receive notifications from GitLab. Note: If a webhook is already installed, you must first delete it through the GitLab UI before reinstalling.",
+    "en": "Manage webhooks for your GitLab projects and groups. Webhooks enable Centri to receive notifications from GitLab. Note: If a webhook is already installed, you must first delete it through the GitLab UI before reinstalling.",
     "ja": "GitLabプロジェクトとグループのWebhookを管理します。WebhookによりOpenHandsはGitLabから通知を受け取ることができます。注：Webhookが既にインストールされている場合は、再インストールする前にGitLab UIから削除する必要があります。",
     "zh-CN": "管理您的GitLab项目和组的Webhook。Webhook使OpenHands能够接收来自GitLab的通知。注意：如果Webhook已安装，您必须先通过GitLab UI删除它，然后才能重新安装。",
     "zh-TW": "管理您的GitLab專案和群組的Webhook。Webhook使OpenHands能夠接收來自GitLab的通知。注意：如果Webhook已安裝，您必須先透過GitLab UI刪除它，然後才能重新安裝。",
@@ -19567,7 +19567,7 @@
     "ca": "L'espai de treball actual no és un repositori git."
   },
   "DIFF_VIEWER$ASK_OH": {
-    "en": "Ask OpenHands to initialize a git repo to activate this UI.",
+    "en": "Ask Centri to initialize a git repo to activate this UI.",
     "ja": "このUIを有効にするために、OpenHandsにgitリポジトリを初期化するよう依頼します。",
     "zh-CN": "请OpenHands初始化git存储库以激活此UI。",
     "zh-TW": "請OpenHands初始化git存儲庫以啟用此UI。",
@@ -19584,7 +19584,7 @@
     "ca": "Demaneu a OpenHands que inicialitzi un repositori git per activar aquesta interfície."
   },
   "DIFF_VIEWER$NO_CHANGES": {
-    "en": "OpenHands hasn't made any changes yet",
+    "en": "Centri hasn't made any changes yet",
     "ja": "OpenHandsはまだ変更を加えていません",
     "zh-CN": "OpenHands尚未进行任何更改",
     "zh-TW": "OpenHands尚未進行任何更改",
@@ -19720,7 +19720,7 @@
     "ca": "Classe de l'agent:"
   },
   "SYSTEM_MESSAGE_MODAL$OPENHANDS_VERSION": {
-    "en": "OpenHands Version:",
+    "en": "Centri Version:",
     "zh-CN": "OpenHands 版本：",
     "zh-TW": "OpenHands 版本：",
     "ko-KR": "OpenHands 버전:",
@@ -19873,7 +19873,7 @@
     "ca": "Error en acceptar les condicions del servei"
   },
   "TIPS$CUSTOMIZE_MICROAGENT": {
-    "en": "You can customize OpenHands for your repo using an available microagent. Ask OpenHands to put a description of the repo, including how to run the code, into .openhands/microagents/repo.md.",
+    "en": "You can customize Centri for your repo using an available microagent. Ask Centri to put a description of the repo, including how to run the code, into .openhands/microagents/repo.md.",
     "ja": "利用可能なマイクロエージェントを使用して、リポジトリ用にOpenHandsをカスタマイズできます。OpenHandsに、コードの実行方法を含むリポジトリの説明を.openhands/microagents/repo.mdに入れるよう依頼してください。",
     "zh-CN": "您可以使用可用微代理为您的仓库自定义OpenHands。请OpenHands将仓库的描述（包括如何运行代码）放入.openhands/microagents/repo.md。",
     "zh-TW": "您可以使用可用微代理為您的倉庫自定義OpenHands。請OpenHands將倉庫的描述（包括如何運行代碼）放入.openhands/microagents/repo.md。",
@@ -20145,7 +20145,7 @@
     "ca": "No s'han pogut obtenir les habilitats. Torneu-ho a intentar més tard."
   },
   "TIPS$SETUP_SCRIPT": {
-    "en": "You can add .openhands/setup.sh to your repository to automatically run a setup script every time you start an OpenHands conversation.",
+    "en": "You can add .openhands/setup.sh to your repository to automatically run a setup script every time you start a Centri conversation.",
     "ja": "OpenHandsの会話を開始するたびに自動的にセットアップスクリプトを実行するために、.openhands/setup.shをリポジトリに追加できます。",
     "zh-CN": "您可以将.openhands/setup.sh添加到您的仓库中，以便在每次启动OpenHands对话时自动运行设置脚本。",
     "zh-TW": "您可以將.openhands/setup.sh添加到您的倉庫中，以便在每次啟動OpenHands對話時自動運行設置腳本。",
@@ -20162,7 +20162,7 @@
     "ca": "Podeu afegir .openhands/setup.sh al vostre repositori per executar automàticament un script de configuració cada vegada que inicieu una conversa d'OpenHands."
   },
   "TIPS$VSCODE_INSTANCE": {
-    "en": "Every OpenHands conversation comes with a VS Code instance, where you can interact with the development environment.",
+    "en": "Every Centri conversation comes with a VS Code instance, where you can interact with the development environment.",
     "ja": "すべてのOpenHands会話には、開発環境と対話できるVS Codeインスタンスが付属しています。",
     "zh-CN": "每个OpenHands对话都配有VS Code实例，您可以在其中与开发环境交互。",
     "zh-TW": "每個OpenHands對話都配有VS Code實例，您可以在其中與開發環境交互。",
@@ -20196,7 +20196,7 @@
     "ca": "Assegureu-vos de desar el treball regularment, ja sigui publicant-lo a GitHub o descarregant els fitxers a través de VS Code."
   },
   "TIPS$SPECIFY_FILES": {
-    "en": "When possible, include the names of files or functions OpenHands should focus on. This can help OpenHands work faster, save money, and improve accuracy.",
+    "en": "When possible, include the names of files or functions Centri should focus on. This can help Centri work faster, save money, and improve accuracy.",
     "ja": "可能な場合は、OpenHandsが集中すべきファイルや関数の名前を含めてください。これにより、OpenHandsの作業が速くなり、コストを節約し、精度を向上させることができます。",
     "zh-CN": "如果可能，请包含OpenHands应该关注的文件或函数的名称。这可以帮助OpenHands更快地工作，节省成本，并提高准确性。",
     "zh-TW": "如果可能，請包含OpenHands應該關注的文件或函數的名稱。這可以幫助OpenHands更快地工作，節省成本，並提高準確性。",
@@ -20213,7 +20213,7 @@
     "ca": "Quan sigui possible, incloeu els noms dels fitxers o funcions en els quals OpenHands s'ha de centrar. Això pot ajudar OpenHands a treballar més ràpid, estalviar diners i millorar la precisió."
   },
   "TIPS$HEADLESS_MODE": {
-    "en": "You can run OpenHands in headless mode to create automations, like responding to 500 errors by automatically creating a fix.",
+    "en": "You can run Centri in headless mode to create automations, like responding to 500 errors by automatically creating a fix.",
     "ja": "OpenHandsをヘッドレスモードで実行して、500エラーに対して自動的に修正を作成するなどの自動化を作成できます。",
     "zh-CN": "您可以在无头模式下运行OpenHands来创建自动化，例如通过自动创建修复来响应500错误。",
     "zh-TW": "您可以在無頭模式下運行OpenHands來創建自動化，例如通過自動創建修復來響應500錯誤。",
@@ -20230,7 +20230,7 @@
     "ca": "Podeu executar OpenHands en mode sense cap per crear automatitzacions, com respondre a errors 500 creant automàticament una solució."
   },
   "TIPS$CLI_MODE": {
-    "en": "You can run OpenHands as a CLI, similar to Claude Code.",
+    "en": "You can run Centri as a CLI, similar to Claude Code.",
     "ja": "Claude Codeと同様に、OpenHandsをCLIとして実行できます。",
     "zh-CN": "您可以将OpenHands作为CLI运行，类似于Claude Code。",
     "zh-TW": "您可以將OpenHands作為CLI運行，類似於Claude Code。",
@@ -20264,7 +20264,7 @@
     "ca": "OpenHands Cloud ofereix un hook de GitHub, de manera que podeu dir \"@openhands corregeix els conflictes de fusió\" o \"@openhands corregeix els comentaris d'aquesta PR\" directament dins de la interfície de GitHub."
   },
   "TIPS$BLOG_SIGNUP": {
-    "en": "Sign up for the OpenHands Blog to hear about new features and the latest releases.",
+    "en": "Sign up for the Centri Blog to hear about new features and the latest releases.",
     "ja": "OpenHandsブログに登録して、新機能や最新リリースについての情報を入手しましょう。",
     "zh-CN": "注册OpenHands博客，了解新功能和最新版本。",
     "zh-TW": "註冊OpenHands博客，了解新功能和最新版本。",
@@ -20281,7 +20281,7 @@
     "ca": "Subscriviu-vos al blog d'OpenHands per assabentar-vos de les noves funcions i les darreres versions."
   },
   "TIPS$API_USAGE": {
-    "en": "OpenHands has an API! Create OpenHands conversations with simple cURL command.",
+    "en": "Centri has an API! Create Centri conversations with simple cURL command.",
     "ja": "OpenHandsにはAPIがあります！簡単なcURLコマンドでOpenHands会話を作成できます。",
     "zh-CN": "OpenHands有API！使用简单的cURL命令创建OpenHands对话。",
     "zh-TW": "OpenHands有API！使用簡單的cURL命令創建OpenHands對話。",
@@ -20791,7 +20791,7 @@
     "ca": "Altre"
   },
   "FEEDBACK$THANK_YOU_FOR_FEEDBACK": {
-    "en": "Thank you for your feedback! This will help us improve OpenHands going forward.",
+    "en": "Thank you for your feedback! This will help us improve Centri going forward.",
     "ja": "フィードバックをありがとうございます！これにより、今後OpenHandsを改善していくことができます。",
     "zh-CN": "感谢您的反馈！这将帮助我们改进OpenHands。",
     "zh-TW": "感謝您的反饋！這將幫助我們改進OpenHands。",
@@ -21658,7 +21658,7 @@
     "ca": "Connecteu un proveïdor de Git per gestionar els secrets"
   },
   "SETTINGS$OPENHANDS_API_KEYS": {
-    "en": "OpenHands API Keys",
+    "en": "Centri API Keys",
     "ja": "OpenHands APIキー",
     "zh-CN": "OpenHands API密钥",
     "zh-TW": "OpenHands API密鑰",
@@ -21794,7 +21794,7 @@
     "ca": "Opcional"
   },
   "BROWSER$SERVER_MESSAGE": {
-    "en": "No web app running. Ask OpenHands to start your project's dev server (for example: npm run dev) to see your web application here.",
+    "en": "No web app running. Ask Centri to start your project's dev server (for example: npm run dev) to see your web application here.",
     "ja": "Webアプリケーションが実行されていません。OpenHands にプロジェクトの開発サーバーを起動するよう指示してください（例: npm run dev）。そうすれば、ここでWebアプリケーションを確認できます。",
     "zh-CN": "未运行任何网页应用。请让 OpenHands 启动您项目的开发服务器（例如：npm run dev），即可在此处查看您的网页应用。",
     "zh-TW": "未執行任何網頁應用程式。請指示 OpenHands 啟動專案的開發伺服器（例如：npm run dev），即可在此處檢視您的網頁應用程式。",
@@ -25160,7 +25160,7 @@
     "ca": "Encara no hi ha sortida de terminal. Les ordres executades per l'agent apareixeran aquí."
   },
   "MICROAGENT$DEFINITION": {
-    "en": "Microagents are specialized prompts that enhance OpenHands with domain-specific knowledge. They provide expert guidance, automate common tasks, and ensure consistent practices across projects.",
+    "en": "Microagents are specialized prompts that enhance Centri with domain-specific knowledge. They provide expert guidance, automate common tasks, and ensure consistent practices across projects.",
     "ja": "マイクロエージェントは、OpenHandsにドメイン固有の知識を追加するための専門的なプロンプトです。専門的なガイダンスを提供し、一般的なタスクを自動化し、プロジェクト全体で一貫した実践を保証します。",
     "zh-CN": "微代理是增强 OpenHands 领域知识的专用提示。它们提供专家指导，自动化常见任务，并确保项目中的一致实践。",
     "zh-TW": "微代理是增強 OpenHands 領域知識的專用提示。它們提供專家指導，自動化常見任務，並確保專案中的一致實踐。",
@@ -27693,7 +27693,7 @@
     "ca": "Seleccioneu-ne un"
   },
   "ONBOARDING$USE_CASE_QUESTION": {
-    "en": "What use cases are you looking to use OpenHands for?",
+    "en": "What use cases are you looking to use Centri for?",
     "ja": "OpenHandsをどのような用途で使用したいですか？",
     "zh-CN": "您希望将 OpenHands 用于哪些场景？",
     "zh-TW": "您希望將 OpenHands 用於哪些場景？",
@@ -28254,7 +28254,7 @@
     "ca": "Només autoritzi aquest dispositiu si vau iniciar aquesta sol·licitud des de la vostra CLI o aplicació."
   },
   "DEVICE$CONFIRM_PROMPT": {
-    "en": "Do you want to authorize this device to access your OpenHands account?",
+    "en": "Do you want to authorize this device to access your Centri account?",
     "ja": "このデバイスにOpenHandsアカウントへのアクセスを許可しますか？",
     "zh-CN": "您想授权此设备访问您的 OpenHands 帐户吗？",
     "zh-TW": "您想授權此設備訪問您的 OpenHands 帳戶嗎？",
@@ -29427,7 +29427,7 @@
     "ca": "Aprèn com obtenir-ne una"
   },
   "TELEMETRY$CONSENT_TITLE": {
-    "en": "Help improve OpenHands",
+    "en": "Help improve Centri",
     "ja": "OpenHandsの改善にご協力ください",
     "zh-CN": "帮助改进 OpenHands",
     "zh-TW": "幫助改進 OpenHands",
@@ -29699,7 +29699,7 @@
     "ca": "Replega les accions"
   },
   "ONBOARDING$TITLE": {
-    "en": "Welcome to OpenHands",
+    "en": "Welcome to Centri",
     "ja": "OpenHands へようこそ",
     "zh-CN": "欢迎使用 OpenHands",
     "zh-TW": "歡迎使用 OpenHands",
@@ -29818,7 +29818,7 @@
     "uk": "Виберіть агента, який вестиме ваші розмови. Це можна змінити пізніше."
   },
   "ONBOARDING$AGENT_OPENHANDS_DESCRIPTION": {
-    "en": "The default OpenHands agent. Best for general-purpose coding and exploration.",
+    "en": "The default Centri agent. Best for general-purpose coding and exploration.",
     "ja": "デフォルトの OpenHands エージェント。汎用的なコーディングや探索に最適です。",
     "zh-CN": "默认的 OpenHands 智能体。最适合通用的编码和探索。",
     "zh-TW": "預設的 OpenHands 代理。最適合通用程式設計與探索。",
@@ -29920,7 +29920,7 @@
     "uk": "Увійти в хмару"
   },
   "ONBOARDING$BACKEND_SUBTITLE": {
-    "en": "OpenHands talks to an agent server. Make sure the default backend is reachable.",
+    "en": "Centri talks to an agent server. Make sure the default backend is reachable.",
     "ja": "OpenHands はエージェントサーバーと通信します。デフォルトのバックエンドに接続できることを確認してください。",
     "zh-CN": "OpenHands 通过智能体服务器进行通信。请确认默认后端可访问。",
     "zh-TW": "OpenHands 透過代理伺服器溝通。請確認預設後端可連線。",
@@ -30158,7 +30158,7 @@
     "uk": "Привітайтеся 👋"
   },
   "ONBOARDING$HELLO_SUBTITLE": {
-    "en": "Send your first message to OpenHands. We'll start a fresh conversation with no workspace.",
+    "en": "Send your first message to Centri. We'll start a fresh conversation with no workspace.",
     "ja": "OpenHands に最初のメッセージを送信しましょう。ワークスペースなしの新しい会話を開始します。",
     "zh-CN": "向 OpenHands 发送你的第一条消息。我们将启动一个无工作区的新对话。",
     "zh-TW": "向 OpenHands 傳送第一則訊息。我們會開始一個沒有工作區的新對話。",
@@ -30175,7 +30175,7 @@
     "uk": "Надішліть перше повідомлення до OpenHands. Почнемо нову розмову без робочого простору."
   },
   "ONBOARDING$HELLO_DEFAULT_MESSAGE": {
-    "en": "Create a basic webpage explaining what OpenHands can do.",
+    "en": "Create a basic webpage explaining what Centri can do.",
     "ja": "OpenHands でできることを説明する簡単な Web ページを作成して。",
     "zh-CN": "创建一个简单的网页，说明 OpenHands 能做什么。",
     "zh-TW": "建立一個簡單的網頁，說明 OpenHands 能做什麼。",
@@ -32011,7 +32011,7 @@
     "ca": "Afegir una habilitat"
   },
   "SETTINGS$SKILLS_ADD_MODAL_INTRO": {
-    "en": "Extend what your agent can do by installing skills from the OpenHands registry, community repositories, or your own GitHub repos.",
+    "en": "Extend what your agent can do by installing skills from the Centri registry, community repositories, or your own GitHub repos.",
     "ja": "OpenHands レジストリ、コミュニティリポジトリ、または独自の GitHub リポジトリからスキルをインストールして、エージェントの機能を拡張します。",
     "zh-CN": "从 OpenHands 注册表、社区仓库或您自己的 GitHub 仓库安装技能，扩展代理的能力。",
     "zh-TW": "從 OpenHands 註冊表、社群儲存庫或您自己的 GitHub 儲存庫安裝技能，擴展代理的能力。",
@@ -32045,7 +32045,7 @@
     "ca": "Afegir des d'una conversa"
   },
   "SETTINGS$SKILLS_ADD_MODAL_CHAT_BODY": {
-    "en": "In any chat, send the <cmd>/add-skill</cmd> command with a GitHub URL that points to the skill. OpenHands downloads the files into your workspace and makes the skill available immediately.",
+    "en": "In any chat, send the <cmd>/add-skill</cmd> command with a GitHub URL that points to the skill. Centri downloads the files into your workspace and makes the skill available immediately.",
     "ja": "任意のチャットで、スキルを指す GitHub URL を付けて <cmd>/add-skill</cmd> コマンドを送信します。OpenHands がファイルをワークスペースにダウンロードし、すぐに利用できるようにします。",
     "zh-CN": "在任何对话中，发送带有指向技能的 GitHub URL 的 <cmd>/add-skill</cmd> 命令。OpenHands 会将文件下载到您的工作区并立即可用。",
     "zh-TW": "在任何對話中，傳送带有指向技能的 GitHub URL 的 <cmd>/add-skill</cmd> 指令。OpenHands 會將檔案下載到您的工作區並立即可用。",
@@ -32436,7 +32436,7 @@
     "uk": "Обов’язкові MCP"
   },
   "RECOMMENDED_AUTOMATIONS$MODAL_REQUIRED_MCPS_DESCRIPTION": {
-    "en": "Connect every MCP below, then OpenHands will launch a conversation with the prompt on the left.",
+    "en": "Connect every MCP below, then Centri will launch a conversation with the prompt on the left.",
     "ja": "下のすべての MCP を接続すると、OpenHands が左側のプロンプトで会話を開始します。",
     "zh-CN": "连接下面的每个 MCP 后，OpenHands 将使用左侧的提示启动对话。",
     "zh-TW": "連接下方每個 MCP 後，OpenHands 會使用左側的提示啟動對話。",
@@ -33340,7 +33340,7 @@
     "ar": "Start a fresh OpenHands conversation.",
     "ca": "Start a fresh OpenHands conversation.",
     "de": "Start a fresh OpenHands conversation.",
-    "en": "Start a fresh OpenHands conversation.",
+    "en": "Start a fresh Centri conversation.",
     "es": "Start a fresh OpenHands conversation.",
     "fr": "Start a fresh OpenHands conversation.",
     "it": "Start a fresh OpenHands conversation.",

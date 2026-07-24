@@ -9,7 +9,7 @@ import { shouldRenderEvent } from "#/components/conversation-events/chat/event-c
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
+import OpenHandsLogo from "#/assets/branding/centri-mark.svg?react";
 import { useInfiniteScroll } from "#/hooks/use-infinite-scroll";
 
 export default function SharedConversation() {
